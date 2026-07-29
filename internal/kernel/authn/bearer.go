@@ -29,10 +29,13 @@ type Authenticator struct {
 	RootClientID    string
 	RootAccessToken string
 	Tokens          TokenLookup
+	JWT             JWTVerifier
 	Now             func() time.Time
 }
 
 var oauthTokenPath = regexp.MustCompile(`(?i)^/[^/]+/oauth2/v2\.0/token$`)
+var oidcDiscoveryPath = regexp.MustCompile(`(?i)^/[^/]+/v2\.0/\.well-known/openid-configuration$`)
+var jwksPath = regexp.MustCompile(`(?i)^/[^/]+/discovery/v2\.0/keys$`)
 
 // AuthenticateRequest extracts and validates the Bearer token from r.
 func (a *Authenticator) AuthenticateRequest(r *http.Request) (Principal, error) {
@@ -48,32 +51,6 @@ func (a *Authenticator) AuthenticateRequest(r *http.Request) (Principal, error) 
 	return a.AuthenticateToken(token)
 }
 
-// AuthenticateToken validates a raw bearer token string.
-func (a *Authenticator) AuthenticateToken(token string) (Principal, error) {
-	if a.RootAccessToken != "" && token == a.RootAccessToken {
-		id := a.RootClientID
-		if id == "" {
-			id = "root"
-		}
-		return Principal{ID: id, IsRoot: true}, nil
-	}
-	if a.Tokens == nil {
-		return Principal{}, ErrUnauthenticated
-	}
-	now := time.Now().UTC()
-	if a.Now != nil {
-		now = a.Now()
-	}
-	id, ok, err := a.Tokens.LookupAccessToken(HashToken(token), now)
-	if err != nil {
-		return Principal{}, err
-	}
-	if !ok || id == "" {
-		return Principal{}, ErrUnauthenticated
-	}
-	return Principal{ID: id, IsRoot: false}, nil
-}
-
 // HashToken returns the hex-encoded SHA-256 digest of token.
 func HashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
@@ -83,9 +60,12 @@ func HashToken(token string) string {
 // IsPublicPath reports whether path skips authentication.
 func IsPublicPath(path string) bool {
 	switch path {
-	case "/_noctaxris-az/health", "/_noctaxris-az/ready", "/_noctaxris-az/version":
+	case "/_noctaxris-az/health", "/_noctaxris-az/ready", "/_noctaxris-az/version",
+		"/metadata/identity/oauth2/token":
 		return true
 	default:
-		return oauthTokenPath.MatchString(path)
+		return oauthTokenPath.MatchString(path) ||
+			oidcDiscoveryPath.MatchString(path) ||
+			jwksPath.MatchString(path)
 	}
 }

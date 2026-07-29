@@ -35,7 +35,7 @@ func openStore(t *testing.T) *store.Store {
 
 func TestTokenMintClientCredentials(t *testing.T) {
 	st := openStore(t)
-	svc := &entra.Service{Store: st, TenantID: config.DefaultTenantID}
+	svc := &entra.Service{Store: st, TenantID: config.DefaultTenantID, PublicBase: "http://127.0.0.1:4599"}
 	mux := http.NewServeMux()
 	svc.Mount(mux)
 
@@ -55,12 +55,12 @@ func TestTokenMintClientCredentials(t *testing.T) {
 	if token == "" || resp["token_type"] != "Bearer" {
 		t.Fatalf("token resp = %#v", resp)
 	}
+	if strings.Count(token, ".") != 2 {
+		t.Fatalf("expected JWT, got %q", token)
+	}
 	expires, ok := resp["expires_in"].(float64)
 	if !ok || int(expires) != 3600 {
 		t.Fatalf("expires_in = %#v", resp["expires_in"])
-	}
-	if _, ok := resp["ext_expires_in"]; !ok {
-		t.Fatalf("missing ext_expires_in: %#v", resp)
 	}
 
 	id, found, err := st.LookupAccessToken(authn.HashToken(token), time.Now().UTC())
@@ -69,6 +69,42 @@ func TestTokenMintClientCredentials(t *testing.T) {
 	}
 	if !found || id != "sp-lab-1" {
 		t.Fatalf("lookup principal=%q found=%v", id, found)
+	}
+
+	auth := &authn.Authenticator{Tokens: st, JWT: svc}
+	p, err := auth.AuthenticateToken(token)
+	if err != nil || p.ID != "sp-lab-1" {
+		t.Fatalf("jwt auth: %#v %v", p, err)
+	}
+}
+
+func TestOIDCDiscoveryAndJWKS(t *testing.T) {
+	st := openStore(t)
+	svc := &entra.Service{Store: st, TenantID: config.DefaultTenantID, PublicBase: "http://127.0.0.1:4599"}
+	mux := http.NewServeMux()
+	svc.Mount(mux)
+
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/"+config.DefaultTenantID+"/v2.0/.well-known/openid-configuration", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("discovery status=%d", rec.Code)
+	}
+	var disc map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &disc)
+	if disc["jwks_uri"] == nil || disc["token_endpoint"] == nil {
+		t.Fatalf("discovery=%#v", disc)
+	}
+
+	rec2 := httptest.NewRecorder()
+	mux.ServeHTTP(rec2, httptest.NewRequest(http.MethodGet, "/"+config.DefaultTenantID+"/discovery/v2.0/keys", nil))
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("jwks status=%d body=%s", rec2.Code, rec2.Body.String())
+	}
+	var jwks map[string]any
+	_ = json.Unmarshal(rec2.Body.Bytes(), &jwks)
+	keys, _ := jwks["keys"].([]any)
+	if len(keys) != 1 {
+		t.Fatalf("jwks=%#v", jwks)
 	}
 }
 

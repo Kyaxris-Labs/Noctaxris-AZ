@@ -32,6 +32,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 
 	mux.HandleFunc("PUT /keyvault/{vault}/secrets/{name}", h.putSecret)
 	mux.HandleFunc("GET /keyvault/{vault}/secrets/{name}", h.getSecret)
+	mux.HandleFunc("DELETE /keyvault/{vault}/secrets/{name}", h.deleteSecret)
+	mux.HandleFunc("POST /keyvault/{vault}/deletedsecrets/{name}/recover", h.recoverSecret)
 
 	mux.HandleFunc("PUT /keyvault/{vault}/keys/{name}", h.putKey)
 	mux.HandleFunc("GET /keyvault/{vault}/keys/{name}", h.getKey)
@@ -143,6 +145,57 @@ func (h *Handler) getSecret(w http.ResponseWriter, r *http.Request) {
 		azerrors.NotFound(w, "secret not found")
 		return
 	}
+	writeJSON(w, http.StatusOK, secretResponse(vault, name, version, value))
+}
+
+func (h *Handler) deleteSecret(w http.ResponseWriter, r *http.Request) {
+	if !h.requireDataPlaneBearer(w, r) {
+		return
+	}
+	vault := r.PathValue("vault")
+	name := r.PathValue("name")
+	ok, err := h.Store.SoftDeleteSecret(vault, name)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	}
+	if !ok {
+		azerrors.NotFound(w, "secret not found")
+		return
+	}
+	// Lab soft-delete is immediate (no retention timer).
+	writeJSON(w, http.StatusOK, map[string]any{
+		"recoveryId": "/keyvault/" + vault + "/deletedsecrets/" + name,
+		"deletedDate": time.Now().UTC().Format(time.RFC3339),
+		"scheduledPurgeDate": time.Now().UTC().Format(time.RFC3339),
+	})
+}
+
+func (h *Handler) recoverSecret(w http.ResponseWriter, r *http.Request) {
+	if !h.requireDataPlaneBearer(w, r) {
+		return
+	}
+	vault := r.PathValue("vault")
+	name := r.PathValue("name")
+	version, ok, err := h.Store.RecoverSecret(vault, name)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	}
+	if !ok {
+		azerrors.NotFound(w, "deleted secret not found")
+		return
+	}
+	value, _, found, err := h.Store.GetSecret(vault, name)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	}
+	if !found {
+		azerrors.NotFound(w, "secret not found after recover")
+		return
+	}
+	_ = version
 	writeJSON(w, http.StatusOK, secretResponse(vault, name, version, value))
 }
 

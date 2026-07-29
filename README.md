@@ -37,7 +37,7 @@ Go module: [`github.com/Kyaxris-Labs/Noctaxris-AZ`](https://github.com/Kyaxris-L
 
 | | |
 |---|---|
-| Lab fidelity | Entra token theatre, ARM subscriptions/RGs/RBAC, Key Vault, Storage, Service Bus, App Configuration, Functions mock, Activity Log |
+| Lab fidelity | Entra OIDC/JWKS/JWT, Managed Identity/IMDS, ARM subscriptions/RGs/RBAC, Key Vault, Storage blob/queue/table, Service Bus, App Configuration, Functions mock, Activity Log |
 | Secure defaults | Loopback publish only. No host `docker.sock`. Master key outside the data root |
 | Dual listeners | HTTP `:4599` plus AMQP lite `:5672` for Service Bus clients |
 | Nested compute | DinD via Compose engine over TLS is opt-in when present. Default Functions invoke stays mock |
@@ -74,9 +74,9 @@ When Compose files are present, copy `docker/.env.example` to `docker/.env`, rep
 
 | Area | Services |
 |------|----------|
-| Identity | Microsoft Entra ID, Subscriptions / resource groups, Authorization (RBAC) |
+| Identity | Microsoft Entra ID, Managed Identity, Subscriptions / resource groups, Authorization (RBAC) |
 | Crypto | Key Vault |
-| Data | Storage (blob, queue) |
+| Data | Storage (blob, queue, table) |
 | Messaging | Service Bus |
 | App | App Configuration, Azure Functions |
 | Observe | Monitor / Activity Log |
@@ -97,32 +97,37 @@ Open the service matrix for detailed actions and gaps. Full notes and CLI smoke:
   </thead>
   <tbody>
     <tr>
-      <td rowspan="3" align="center" valign="middle">Identity</td>
+      <td rowspan="4" align="center" valign="middle">Identity</td>
       <td>Microsoft Entra ID</td>
-      <td>Client credentials token theatre at <code>/{tenant}/oauth2/v2.0/token</code>.</td>
-      <td>Real Microsoft-signed JWTs; Graph; auth code / device code.</td>
+      <td>OIDC discovery + JWKS; client credentials RS256 lab JWTs at <code>/{tenant}/oauth2/v2.0/token</code>.</td>
+      <td>Microsoft-signed JWTs; Graph; auth code / device code.</td>
+    </tr>
+    <tr>
+      <td>Managed Identity</td>
+      <td>User-assigned identity ARM; IMDS token theatre at <code>/metadata/identity/oauth2/token</code>.</td>
+      <td>System-assigned; real <code>169.254.169.254</code> bind; workload identity federation.</td>
     </tr>
     <tr>
       <td>Subscriptions / RGs</td>
-      <td>Seeded subscription get; resource group create/get/list.</td>
+      <td>Seeded subscription get; resource group create/get/list; resources/providers list lite.</td>
       <td>Subscription create/delete; management groups.</td>
     </tr>
     <tr>
       <td>Authorization</td>
-      <td>Role assignments CRUD lite; Owner/Contributor/Reader evaluation; root bypass.</td>
+      <td>Role assignments CRUD + list-by-scope; Owner/Contributor/Reader evaluation; root bypass.</td>
       <td>Custom roles; deny assignments; PIM.</td>
     </tr>
     <tr>
       <td align="center" valign="middle">Crypto</td>
       <td>Key Vault</td>
-      <td>Vault ARM lite; sealed secrets/keys on data plane Bearer paths.</td>
-      <td>Certificates; managed HSM; soft-delete timers.</td>
+      <td>Vault ARM lite; sealed secrets/keys; soft-delete/recover theatre (immediate).</td>
+      <td>Certificates; managed HSM; retention timers.</td>
     </tr>
     <tr>
       <td align="center" valign="middle">Data</td>
       <td>Storage</td>
-      <td>Account ARM lite; blob put/get; queue send/receive; Shared Key + SAS.</td>
-      <td>Tables/Files/HNS depth; Azurite multi-port drop-in default.</td>
+      <td>Account ARM lite; blob list/put/get/delete; queue send/peek/receive; Table REST lite; Shared Key + SAS.</td>
+      <td>Files/HNS depth; Azurite multi-port drop-in default; OData batch.</td>
     </tr>
     <tr>
       <td align="center" valign="middle">Messaging</td>

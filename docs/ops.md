@@ -50,6 +50,35 @@ Schema changes are additive (`CREATE TABLE IF NOT EXISTS`). There is no down-mig
 | Readiness | `GET /_noctaxris-az/ready` | SQLite reachable |
 | Version | `GET /_noctaxris-az/version` | Product version string |
 
+## Nested engine (opt-in)
+
+From `docker/`:
+
+```bash
+docker compose -f compose.yaml -f compose.engine.yaml --env-file .env up --build
+```
+
+Sets `NOCTAXRIS_AZ_DOCKER_HOST=tcp://noctaxris-az-engine:2376` and mounts engine TLS
+certs into the API. Engine ports stay on the Compose network (no host `2375`/`2376`).
+Never mount host `docker.sock`. If restricted DinD cannot start nested containers on
+your host, add `-f compose.engine-privileged.yaml`.
+
+Optional lab HTTPS for Terraform `azurerm` metadata discovery:
+
+```bash
+export NOCTAXRIS_AZ_TLS_CERT=/path/to/cert.pem
+export NOCTAXRIS_AZ_TLS_KEY=/path/to/key.pem
+```
+
 ## CI matrix
 
 When GitHub Actions are present, expect unit tests, image build, and vulnerability scan jobs on PRs. Nested DinD remains opt-in and is not required for default green CI.
+
+## Compose overlays (lab opt-in)
+
+Default `docker/compose.yaml` stays loopback-published and nested engine off. Use overlays only when nested compute is needed.
+
+| Overlay | When |
+|---------|------|
+| `docker/compose.engine.yaml` | Opt-in restricted DinD (`noctaxris-az-engine`). Sets `NOCTAXRIS_AZ_DOCKER_HOST` / `NOCTAXRIS_AZ_DOCKER_CERT_PATH`. No host publish of 2375/2376. Never mounts host `docker.sock` |
+| `docker/compose.engine-privileged.yaml` | Restricted DinD cannot start nested containers (Desktop/WSL edge cases). Privileged DinD is a host workaround, not the secure default. Keep publish on `127.0.0.1:4599` |

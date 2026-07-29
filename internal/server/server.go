@@ -139,7 +139,7 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 		}
 
 		path := r.URL.Path
-		if strings.HasPrefix(path, "/blob/") || strings.HasPrefix(path, "/queue/") {
+		if strings.HasPrefix(path, "/blob/") || strings.HasPrefix(path, "/queue/") || strings.HasPrefix(path, "/table/") {
 			authzHeader := r.Header.Get("Authorization")
 			if strings.HasPrefix(authzHeader, "SharedKey") || authn.HasSAS(r) {
 				next.ServeHTTP(w, r.WithContext(ctx))

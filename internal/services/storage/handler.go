@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
@@ -25,9 +26,13 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Storage/storageAccounts/{name}", h.putAccount)
 	mux.HandleFunc("GET /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Storage/storageAccounts/{name}", h.getAccount)
 
+	mux.HandleFunc("GET /blob/{account}", h.listContainers)
 	mux.HandleFunc("PUT /blob/{account}/{container}", h.putContainer)
+	mux.HandleFunc("GET /blob/{account}/{container}", h.listBlobs)
+	mux.HandleFunc("DELETE /blob/{account}/{container}", h.deleteContainer)
 	mux.HandleFunc("PUT /blob/{account}/{container}/{blob}", h.putBlob)
 	mux.HandleFunc("GET /blob/{account}/{container}/{blob}", h.getBlob)
+	mux.HandleFunc("DELETE /blob/{account}/{container}/{blob}", h.deleteBlob)
 
 	mux.HandleFunc("PUT /queue/{account}/{queue}", h.putQueue)
 	mux.HandleFunc("POST /queue/{account}/{queue}", h.postQueueMessage)
@@ -67,6 +72,7 @@ func (h *Handler) putAccount(w http.ResponseWriter, r *http.Request) {
 			"primaryEndpoints": map[string]string{
 				"blob":  "/blob/" + name,
 				"queue": "/queue/" + name,
+				"table": "/table/" + name,
 			},
 		},
 	})
@@ -96,8 +102,26 @@ func (h *Handler) getAccount(w http.ResponseWriter, r *http.Request) {
 		"location": location,
 		"properties": map[string]any{
 			"provisioningState": "Succeeded",
+			"primaryEndpoints": map[string]string{
+				"blob":  "/blob/" + name,
+				"queue": "/queue/" + name,
+				"table": "/table/" + name,
+			},
 		},
 	})
+}
+
+func (h *Handler) listContainers(w http.ResponseWriter, r *http.Request) {
+	account := r.PathValue("account")
+	if !h.authorizeDataPlane(w, r, account) {
+		return
+	}
+	names, err := h.Store.ListContainers(account)
+	if err != nil {
+		azerrors.StorageError(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"containers": names})
 }
 
 func (h *Handler) putContainer(w http.ResponseWriter, r *http.Request) {
@@ -111,6 +135,35 @@ func (h *Handler) putContainer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
+}
+
+func (h *Handler) listBlobs(w http.ResponseWriter, r *http.Request) {
+	account := r.PathValue("account")
+	container := r.PathValue("container")
+	if !h.authorizeDataPlane(w, r, account) {
+		return
+	}
+	// Azure-style comp=list is accepted; path GET is the list action.
+	_ = r.URL.Query().Get("comp")
+	names, err := h.Store.ListBlobs(account, container)
+	if err != nil {
+		azerrors.StorageError(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"blobs": names})
+}
+
+func (h *Handler) deleteContainer(w http.ResponseWriter, r *http.Request) {
+	account := r.PathValue("account")
+	container := r.PathValue("container")
+	if !h.authorizeDataPlane(w, r, account) {
+		return
+	}
+	if err := h.Store.DeleteContainer(account, container); err != nil {
+		azerrors.StorageError(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
 }
 
 func (h *Handler) putBlob(w http.ResponseWriter, r *http.Request) {
@@ -157,6 +210,25 @@ func (h *Handler) getBlob(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(content)
 }
 
+func (h *Handler) deleteBlob(w http.ResponseWriter, r *http.Request) {
+	account := r.PathValue("account")
+	container := r.PathValue("container")
+	blob := r.PathValue("blob")
+	if !h.authorizeDataPlane(w, r, account) {
+		return
+	}
+	ok, err := h.Store.DeleteBlob(account, container, blob)
+	if err != nil {
+		azerrors.StorageError(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	}
+	if !ok {
+		azerrors.StorageError(w, http.StatusNotFound, "BlobNotFound", "The specified blob does not exist.")
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
+}
+
 func (h *Handler) putQueue(w http.ResponseWriter, r *http.Request) {
 	account := r.PathValue("account")
 	queue := r.PathValue("queue")
@@ -201,7 +273,31 @@ func (h *Handler) getQueueMessage(w http.ResponseWriter, r *http.Request) {
 	if !h.authorizeDataPlane(w, r, account) {
 		return
 	}
-	body, ok, err := h.Store.Dequeue(account, queue)
+	q := r.URL.Query()
+	peek := strings.EqualFold(q.Get("peekonly"), "true") || q.Get("comp") == "peek"
+	if peek {
+		body, ok, err := h.Store.Peek(account, queue)
+		if err != nil {
+			azerrors.StorageError(w, http.StatusInternalServerError, "InternalError", err.Error())
+			return
+		}
+		if !ok {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"MessageText": body})
+		return
+	}
+	vis := 0
+	if v := q.Get("visibilitytimeout"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			azerrors.StorageError(w, http.StatusBadRequest, "InvalidInput", "invalid visibilitytimeout")
+			return
+		}
+		vis = n
+	}
+	body, ok, err := h.Store.Dequeue(account, queue, vis)
 	if err != nil {
 		azerrors.StorageError(w, http.StatusInternalServerError, "InternalError", err.Error())
 		return

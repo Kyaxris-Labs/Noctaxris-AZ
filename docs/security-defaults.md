@@ -9,7 +9,7 @@ Noctaxris-AZ fails closed. Defaults favor a loopback lab on a single laptop.
 | HTTP listen | `127.0.0.1:4599` | Non-loopback without TLS requires `NOCTAXRIS_AZ_ALLOW_NONLOOPBACK_LISTEN=1` |
 | AMQP listen | `127.0.0.1:5672` | Non-loopback requires the same allow opt-in |
 | Compose publish | `127.0.0.1:4599` (and optional AMQP) | Container bind may be `0.0.0.0` with the opt-in above |
-| Host Docker socket | never mounted | Nested DinD is opt-in only via `docker/compose.engine.yaml` when present |
+| Host Docker socket | never mounted | Nested DinD is opt-in only via `docker/compose.engine.yaml` |
 
 ## Nested engine (opt-in)
 
@@ -17,23 +17,34 @@ Noctaxris-AZ fails closed. Defaults favor a loopback lab on a single laptop.
   Compose stay green without Docker / DinD.
 - Never mount host `/var/run/docker.sock` on the API service. Runtime rejects
   `unix://`, `npipe://`, and any host string containing `docker.sock`.
-- Opt-in overlay (when shipped) starts a restricted DinD engine over TLS and sets
-  `NOCTAXRIS_AZ_DOCKER_HOST` plus `NOCTAXRIS_AZ_DOCKER_CERT_PATH`. The engine API
-  is not published to the host.
+- Opt-in overlay `docker/compose.engine.yaml` starts `noctaxris-az-engine`
+  (digest-pinned `docker:27-dind`) as restricted DinD (`privileged: false` +
+  caps / devices / `cgroup: host` / writable `/sys/fs/cgroup`) and sets
+  `NOCTAXRIS_AZ_DOCKER_HOST=tcp://noctaxris-az-engine:2376` plus
+  `NOCTAXRIS_AZ_DOCKER_CERT_PATH=/certs/client`. The engine API is not published
+  to the host.
+- Non-default engine URLs require `NOCTAXRIS_AZ_DOCKER_HOST_ALLOWLIST`. TLS
+  client PEMs are required whenever Docker host is set.
+- Image pulls fail closed: pinned lab bases (`alpine:3.20`, `docker:27-dind…`)
+  only, unless extended with `NOCTAXRIS_AZ_IMAGE_PULL_ALLOWLIST` (exact refs, or
+  prefixes ending in `/` with digest required for registry hosts).
+- If nested containers fail on Desktop/WSL2, add `compose.engine-privileged.yaml`
+  (`privileged: true`). Keep host publish on `127.0.0.1:4599`.
 
 ## Authentication
 
 | Surface | Credential |
 |---------|------------|
 | ARM / RBAC / Key Vault / Monitor / App Configuration / Functions | `Authorization: Bearer <token>` |
-| Storage blob / queue | Shared Key (`SharedKey <account>:<sig>`), SAS query, or connection string |
+| Storage blob / queue / table | Shared Key (`SharedKey <account>:<sig>`), SAS query, or connection string |
 | Service Bus AMQP lite | Connection string / SAS |
 
 - Root token comes from `NOCTAXRIS_AZ_ROOT_ACCESS_TOKEN` and maps to `NOCTAXRIS_AZ_ROOT_CLIENT_ID`.
 - Other tokens are SHA-256 hashed and looked up in `access_tokens`.
 - Missing or invalid credentials return Azure ARM `AuthenticationFailed` (HTTP 401).
 - Public paths: `/_noctaxris-az/health`, `/_noctaxris-az/ready`, `/_noctaxris-az/version`,
-  and Entra `POST /{tenant}/oauth2/v2.0/token` (client credentials theatre).
+  Entra token/OIDC discovery/JWKS, and IMDS `/metadata/identity/oauth2/token`.
+- Nested image pulls fail closed unless allowlisted (`NOCTAXRIS_AZ_IMAGE_PULL_ALLOWLIST`).
 
 ## Example root refusal
 

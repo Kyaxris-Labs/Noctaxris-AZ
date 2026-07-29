@@ -64,3 +64,66 @@ test("health ready and subscription GET smoke", async (t) => {
   const body = await res.text();
   assert.equal(res.status, 200, `subscription status=${res.status} body=${body}`);
 });
+
+test("IMDS token smoke", async (t) => {
+  const ep = await requireReady(t);
+  if (!ep) return;
+  const res = await fetch(
+    `${ep}/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/`,
+    {
+      headers: { Metadata: "true" },
+      signal: AbortSignal.timeout(5000),
+    },
+  );
+  const body = await res.text();
+  assert.equal(res.status, 200, `imds status=${res.status} body=${body}`);
+  assert.match(body, /access_token/);
+});
+
+test("table put get smoke", async (t) => {
+  const ep = await requireReady(t);
+  if (!ep) return;
+  const token = requireToken(t);
+  if (!token) return;
+  const sub = subscriptionID();
+  const acct = "sdktableacctn";
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  };
+  const rg = await fetch(
+    `${ep}/subscriptions/${sub}/resourceGroups/sdk-rg-n?api-version=2022-12-01`,
+    { method: "PUT", headers, body: JSON.stringify({ location: "eastus" }), signal: AbortSignal.timeout(5000) },
+  );
+  if (!rg.ok) {
+    t.skip(`RG create status=${rg.status}`);
+    return;
+  }
+  const sa = await fetch(
+    `${ep}/subscriptions/${sub}/resourceGroups/sdk-rg-n/providers/Microsoft.Storage/storageAccounts/${acct}?api-version=2023-01-01`,
+    { method: "PUT", headers, body: JSON.stringify({ location: "eastus" }), signal: AbortSignal.timeout(5000) },
+  );
+  if (!sa.ok) {
+    t.skip(`storage account create status=${sa.status}`);
+    return;
+  }
+  const auth = { Authorization: `Bearer ${token}` };
+  const putTable = await fetch(`${ep}/table/${acct}/sdkpeople`, {
+    method: "PUT",
+    headers: auth,
+    signal: AbortSignal.timeout(5000),
+  });
+  assert.ok(putTable.status === 201 || putTable.status === 200, `create table ${putTable.status}`);
+  const ins = await fetch(`${ep}/table/${acct}/sdkpeople`, {
+    method: "POST",
+    headers: { ...auth, "Content-Type": "application/json" },
+    body: JSON.stringify({ PartitionKey: "p", RowKey: "r", Name: "sdk" }),
+    signal: AbortSignal.timeout(5000),
+  });
+  assert.ok(ins.status === 201 || ins.status === 409, `insert ${ins.status}`);
+  const get = await fetch(`${ep}/table/${acct}/sdkpeople/p/r`, {
+    headers: auth,
+    signal: AbortSignal.timeout(5000),
+  });
+  assert.equal(get.status, 200, await get.text());
+});

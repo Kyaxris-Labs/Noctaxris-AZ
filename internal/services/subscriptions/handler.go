@@ -24,6 +24,8 @@ type Service struct {
 // Mount registers ARM subscription and resource group routes.
 func (s *Service) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /subscriptions/{subscriptionId}", s.getSubscription)
+	mux.HandleFunc("GET /subscriptions/{subscriptionId}/resources", s.listResources)
+	mux.HandleFunc("GET /subscriptions/{subscriptionId}/providers", s.listProviders)
 	mux.HandleFunc("GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}", s.getResourceGroup)
 	mux.HandleFunc("PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}", s.putResourceGroup)
 	mux.HandleFunc("GET /subscriptions/{subscriptionId}/resourcegroups", s.listResourceGroups)
@@ -168,6 +170,49 @@ func (s *Service) listResourceGroups(w http.ResponseWriter, r *http.Request) {
 		value = append(value, resourceGroupJSON(subID, rg.Name, rg.Location))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"value": value})
+}
+
+func (s *Service) listResources(w http.ResponseWriter, r *http.Request) {
+	if !requireAPIVersion(w, r) {
+		return
+	}
+	subID := r.PathValue("subscriptionId")
+	scope := "/subscriptions/" + subID
+	if _, ok := s.require(w, r, "Microsoft.Resources/resources/read", scope); !ok {
+		return
+	}
+	rgs, err := s.Store.ListResourceGroups(subID)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+		return
+	}
+	value := make([]map[string]any, 0, len(rgs))
+	for _, rg := range rgs {
+		value = append(value, resourceGroupJSON(subID, rg.Name, rg.Location))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"value": value})
+}
+
+func (s *Service) listProviders(w http.ResponseWriter, r *http.Request) {
+	if !requireAPIVersion(w, r) {
+		return
+	}
+	subID := r.PathValue("subscriptionId")
+	scope := "/subscriptions/" + subID
+	if _, ok := s.require(w, r, "Microsoft.Resources/providers/read", scope); !ok {
+		return
+	}
+	providers := []map[string]any{
+		{"namespace": "Microsoft.Storage", "registrationState": "Registered"},
+		{"namespace": "Microsoft.KeyVault", "registrationState": "Registered"},
+		{"namespace": "Microsoft.Authorization", "registrationState": "Registered"},
+		{"namespace": "Microsoft.ManagedIdentity", "registrationState": "Registered"},
+		{"namespace": "Microsoft.ServiceBus", "registrationState": "Registered"},
+		{"namespace": "Microsoft.Web", "registrationState": "Registered"},
+		{"namespace": "Microsoft.AppConfiguration", "registrationState": "Registered"},
+		{"namespace": "Microsoft.Insights", "registrationState": "Registered"},
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"value": providers})
 }
 
 func resourceGroupJSON(subID, name, location string) map[string]any {

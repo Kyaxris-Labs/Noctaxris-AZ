@@ -89,6 +89,40 @@ func (s *Store) CreateContainer(account, name string) error {
 	return err
 }
 
+// ListContainers returns container names for an account.
+func (s *Store) ListContainers(account string) ([]string, error) {
+	rows, err := s.db.Query(`SELECT name FROM blob_containers WHERE account = ? ORDER BY name`, account)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		out = append(out, name)
+	}
+	return out, rows.Err()
+}
+
+// DeleteContainer removes a container and its blobs.
+func (s *Store) DeleteContainer(account, name string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(`DELETE FROM blobs WHERE account = ? AND container = ?`, account, name); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM blob_containers WHERE account = ? AND name = ?`, account, name); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // PutBlob stores blob content.
 func (s *Store) PutBlob(account, container, name string, content []byte, contentType string) error {
 	if contentType == "" {
@@ -102,6 +136,25 @@ ON CONFLICT(account, container, name) DO UPDATE SET
   content_type=excluded.content_type`,
 		account, container, name, content, contentType)
 	return err
+}
+
+// ListBlobs returns blob names in a container.
+func (s *Store) ListBlobs(account, container string) ([]string, error) {
+	rows, err := s.db.Query(`
+SELECT name FROM blobs WHERE account = ? AND container = ? ORDER BY name`, account, container)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		out = append(out, name)
+	}
+	return out, rows.Err()
 }
 
 // GetBlob loads blob content.
@@ -119,6 +172,20 @@ WHERE account = ? AND container = ? AND name = ?`, account, container, name).
 	return content, contentType, true, nil
 }
 
+// DeleteBlob removes one blob; ok is false when missing.
+func (s *Store) DeleteBlob(account, container, name string) (ok bool, err error) {
+	res, err := s.db.Exec(`
+DELETE FROM blobs WHERE account = ? AND container = ? AND name = ?`, account, container, name)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
 // CreateQueue creates a storage queue.
 func (s *Store) CreateQueue(account, name string) error {
 	_, err := s.db.Exec(`INSERT OR IGNORE INTO storage_queues (account, name) VALUES (?, ?)`, account, name)
@@ -128,31 +195,59 @@ func (s *Store) CreateQueue(account, name string) error {
 // Enqueue appends a storage queue message.
 func (s *Store) Enqueue(account, queue, body string) error {
 	_, err := s.db.Exec(`
-INSERT INTO storage_queue_messages (account, queue, body, inserted_at)
-VALUES (?, ?, ?, ?)`, account, queue, body, time.Now().UTC().Format(time.RFC3339))
+INSERT INTO storage_queue_messages (account, queue, body, inserted_at, visible_after)
+VALUES (?, ?, ?, ?, '')`, account, queue, body, time.Now().UTC().Format(time.RFC3339))
 	return err
 }
 
-// Dequeue removes and returns the oldest storage queue message.
-func (s *Store) Dequeue(account, queue string) (body string, ok bool, err error) {
-	tx, err := s.db.Begin()
-	if err != nil {
-		return "", false, err
-	}
-	defer func() { _ = tx.Rollback() }()
-	var id int64
-	err = tx.QueryRow(`
-SELECT id, body FROM storage_queue_messages
+// Peek returns the oldest visible queue message without removing it.
+func (s *Store) Peek(account, queue string) (body string, ok bool, err error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	err = s.db.QueryRow(`
+SELECT body FROM storage_queue_messages
 WHERE account = ? AND queue = ?
-ORDER BY id ASC LIMIT 1`, account, queue).Scan(&id, &body)
+  AND (visible_after = '' OR visible_after <= ?)
+ORDER BY id ASC LIMIT 1`, account, queue, now).Scan(&body)
 	if err == sql.ErrNoRows {
 		return "", false, nil
 	}
 	if err != nil {
 		return "", false, err
 	}
-	if _, err := tx.Exec(`DELETE FROM storage_queue_messages WHERE id = ?`, id); err != nil {
+	return body, true, nil
+}
+
+// Dequeue returns the oldest visible queue message.
+// When visibilityTimeoutSec > 0, the message is hidden until now+timeout instead of deleted.
+func (s *Store) Dequeue(account, queue string, visibilityTimeoutSec int) (body string, ok bool, err error) {
+	tx, err := s.db.Begin()
+	if err != nil {
 		return "", false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	now := time.Now().UTC()
+	nowStr := now.Format(time.RFC3339)
+	var id int64
+	err = tx.QueryRow(`
+SELECT id, body FROM storage_queue_messages
+WHERE account = ? AND queue = ?
+  AND (visible_after = '' OR visible_after <= ?)
+ORDER BY id ASC LIMIT 1`, account, queue, nowStr).Scan(&id, &body)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	if visibilityTimeoutSec > 0 {
+		vis := now.Add(time.Duration(visibilityTimeoutSec) * time.Second).Format(time.RFC3339)
+		if _, err := tx.Exec(`UPDATE storage_queue_messages SET visible_after = ? WHERE id = ?`, vis, id); err != nil {
+			return "", false, err
+		}
+	} else {
+		if _, err := tx.Exec(`DELETE FROM storage_queue_messages WHERE id = ?`, id); err != nil {
+			return "", false, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return "", false, err

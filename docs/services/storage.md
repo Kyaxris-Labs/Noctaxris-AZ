@@ -1,10 +1,10 @@
 # Storage
 
-Blob and queue data plane with Shared Key / SAS on the shared HTTP listener.
+Blob, queue, and table endpoints with Shared Key / SAS on the shared HTTP listener.
 
 ## Status
 
-**lab** — Storage account ARM lite; blob put/get; queue create/send/receive; Shared Key and SAS.
+**lab** — Storage account ARM lite; blob put/get/list/delete; queue create/send/peek/receive (visibility timeout lite); table endpoint advertised; Shared Key and SAS.
 
 ## Wire protocol
 
@@ -13,6 +13,7 @@ Blob and queue data plane with Shared Key / SAS on the shared HTTP listener.
 | ARM account | `/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Storage/storageAccounts/{name}` |
 | Blob | `/blob/{account}/...` |
 | Queue | `/queue/{account}/...` |
+| Table | `/table/{account}/...` (see [table.md](table.md)) |
 
 Auth: `Authorization: SharedKey ...` or SAS query. Well-known Azurite `devstoreaccount1` key refused on non-loopback listen.
 
@@ -24,16 +25,16 @@ Auth: `Authorization: SharedKey ...` or SAS query. Well-known Azurite `devstorea
 
 ## Detailed actions
 
-- Create storage account (sealed account key)
-- Create container; put/get blob bytes
-- Create queue; enqueue/dequeue messages
+- Create storage account (sealed account key; `primaryEndpoints` for blob/queue/table)
+- List containers; create/delete container; put/get/list/delete blobs
+- Create queue; enqueue; peek (`peekonly=true`); dequeue with optional `visibilitytimeout`
 
 ## Not implemented
 
-- Tables, Files, Data Lake Gen2 hierarchical namespace depth
+- Files, Data Lake Gen2 hierarchical namespace depth
 - Azurite multi-port drop-in (`10000`/`10001`/`10002`) as default
 - Soft delete / immutability policies
-- Object replication
+- Object replication / block blob commit stages beyond put-as-block theatre
 
 ## Emulator limits
 

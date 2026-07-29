@@ -34,7 +34,7 @@ func TestStorageQueueAndSBRoundtrip(t *testing.T) {
 	if err := st.Enqueue("a1", "q", "m1"); err != nil {
 		t.Fatal(err)
 	}
-	body, ok, err := st.Dequeue("a1", "q")
+	body, ok, err := st.Dequeue("a1", "q", 0)
 	if err != nil || !ok || body != "m1" {
 		t.Fatalf("dequeue: %v %q %v", ok, body, err)
 	}

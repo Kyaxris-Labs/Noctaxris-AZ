@@ -25,6 +25,7 @@ Azure RBAC role assignments lite on ARM scopes.
 ## Detailed actions
 
 - Upsert role assignment with `roleDefinitionId` + `principalId`
+- List role assignments by subscription or resource group scope prefix
 - Exact scope match plus parent subscription scope for evaluation
 - Deny by default for non-root principals without a grant
 

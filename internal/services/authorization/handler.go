@@ -25,8 +25,10 @@ type Service struct {
 func (s *Service) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/roleAssignments/{roleAssignmentName}", s.putAtSubscription)
 	mux.HandleFunc("GET /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/roleAssignments/{roleAssignmentName}", s.getAtSubscription)
+	mux.HandleFunc("GET /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/roleAssignments", s.listAtSubscription)
 	mux.HandleFunc("PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Authorization/roleAssignments/{roleAssignmentName}", s.putAtResourceGroup)
 	mux.HandleFunc("GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Authorization/roleAssignments/{roleAssignmentName}", s.getAtResourceGroup)
+	mux.HandleFunc("GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Authorization/roleAssignments", s.listAtResourceGroup)
 }
 
 func (s *Service) principal(ctx context.Context) (authn.Principal, bool) {
@@ -94,6 +96,42 @@ func (s *Service) getAtResourceGroup(w http.ResponseWriter, r *http.Request) {
 	scope := "/subscriptions/" + subID + "/resourceGroups/" + rg
 	id := scope + "/providers/Microsoft.Authorization/roleAssignments/" + name
 	s.getRoleAssignment(w, r, scope, id, name)
+}
+
+func (s *Service) listAtSubscription(w http.ResponseWriter, r *http.Request) {
+	subID := r.PathValue("subscriptionId")
+	scope := "/subscriptions/" + subID
+	s.listRoleAssignments(w, r, scope)
+}
+
+func (s *Service) listAtResourceGroup(w http.ResponseWriter, r *http.Request) {
+	subID := r.PathValue("subscriptionId")
+	rg := r.PathValue("resourceGroupName")
+	scope := "/subscriptions/" + subID + "/resourceGroups/" + rg
+	s.listRoleAssignments(w, r, scope)
+}
+
+func (s *Service) listRoleAssignments(w http.ResponseWriter, r *http.Request, scope string) {
+	if !requireAPIVersion(w, r) {
+		return
+	}
+	if _, ok := s.require(w, r, "Microsoft.Authorization/roleAssignments/read", scope); !ok {
+		return
+	}
+	list, err := s.Store.ListRoleAssignmentsByScopePrefix(scope)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+		return
+	}
+	value := make([]map[string]any, 0, len(list))
+	for _, a := range list {
+		name := a.ID
+		if i := strings.LastIndex(a.ID, "/"); i >= 0 {
+			name = a.ID[i+1:]
+		}
+		value = append(value, roleAssignmentJSON(a, name))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"value": value})
 }
 
 func (s *Service) putRoleAssignment(w http.ResponseWriter, r *http.Request, scope, id, name string) {

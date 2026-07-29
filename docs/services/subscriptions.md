@@ -11,6 +11,8 @@ ARM subscription get and resource group CRUD lite.
 | Method | Path |
 |--------|------|
 | `GET` | `/subscriptions/{subscriptionId}` |
+| `GET` | `/subscriptions/{subscriptionId}/resources` |
+| `GET` | `/subscriptions/{subscriptionId}/providers` |
 | `GET` | `/subscriptions/{subscriptionId}/resourcegroups` |
 | `PUT` | `/subscriptions/{subscriptionId}/resourcegroups/{rg}` |
 | `GET` | `/subscriptions/{subscriptionId}/resourcegroups/{rg}` |
@@ -28,13 +30,14 @@ Query `api-version` is accepted and ignored for routing.
 - Get subscription display name / state / tenant
 - Upsert and get resource group location
 - List resource groups in a subscription
+- List resources lite (resource groups as rows) and seeded provider namespaces
 
 ## Not implemented
 
 - Subscription create/delete / move
 - Management groups
 - Tags beyond stored JSON theatre when present
-- Provider registration catalogue
+- Full provider registration / feature registration catalogue
 
 ## Emulator limits
 

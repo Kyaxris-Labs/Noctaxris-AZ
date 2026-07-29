@@ -4,6 +4,7 @@ import (
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/services/keyvault"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/services/servicebus"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/services/storage"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/services/table"
 )
 
 func (s *Server) registerData() {
@@ -18,6 +19,11 @@ func (s *Server) registerData() {
 		Auth:       s.authn,
 		Authz:      s.authz,
 		ListenAddr: s.cfg.ListenAddr,
+	}).Register(s.mux)
+
+	(&table.Handler{
+		Store: s.store,
+		Auth:  s.authn,
 	}).Register(s.mux)
 
 	(&servicebus.Handler{

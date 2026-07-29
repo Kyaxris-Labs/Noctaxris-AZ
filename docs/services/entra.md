@@ -1,49 +1,57 @@
 # Microsoft Entra ID
 
-Lab Entra token theatre for client credentials against the shared HTTP listener.
+Lab Entra OIDC / OAuth2 theatre against the shared HTTP listener.
 
 ## Status
 
-**lab** — `POST /{tenant}/oauth2/v2.0/token` returns an access token for known lab clients; no real Microsoft identity platform.
+**lab** — Client credentials mint RS256 lab JWTs; OIDC discovery + JWKS; tokens accepted as ARM Bearer.
 
 ## Wire protocol
 
 | Method | Path |
 |--------|------|
+| `GET` | `/{tenantId}/v2.0/.well-known/openid-configuration` |
+| `GET` | `/{tenantId}/discovery/v2.0/keys` |
 | `POST` | `/{tenantId}/oauth2/v2.0/token` |
 
-Form body: `grant_type=client_credentials`, `client_id`, `client_secret`, `scope` (optional).
+Form body: `grant_type=client_credentials`, `client_id`, optional `client_secret`, `scope` or `resource`.
 
 ## Authz
 
-Public (no Bearer). Issued tokens authenticate subsequent ARM calls when registered.
+Public discovery / JWKS / token. Issued JWTs authenticate subsequent ARM calls (also hashed for opaque lookup).
 
 ## Detailed actions
 
-- Client credentials grant theatre
-- Token hash stored for non-root principals when minted by lab flows
+- Client credentials grant with RS256 access_token (`aud`/`iss`/`sub`/`oid`/`tid`/`azp`/`exp`)
+- OIDC discovery document (`token_endpoint`, `jwks_uri`, `issuer`, auth methods) and JWKS (`n`/`e`/`kid`/`issuer`)
+- Authenticator verifies lab JWTs after root / opaque hash lookup
+
+Paths mirror the Microsoft identity platform v2 layout under the lab base URL
+(`/{tenant}/v2.0/.well-known/openid-configuration`, `/{tenant}/discovery/v2.0/keys`,
+`/{tenant}/oauth2/v2.0/token`).
 
 ## Not implemented
 
 - Authorization code / device code / ROPC / on-behalf-of
-- Real JWT signature verify against Microsoft JWKS
+- Microsoft-signed JWTs / real Microsoft identity platform
 - Microsoft Graph beyond token minting
 - Conditional Access, MFA, PIM
 
 ## Emulator limits
 
-- Tokens are lab opaque / theatre strings, not Microsoft-signed JWTs
+- Lab-signed JWTs only (not Microsoft-signed)
 - Tenant id defaults to `NOCTAXRIS_AZ_TENANT_ID`
 
 ## Deferred depth
 
-- Full OpenID Connect discovery and JWKS
 - App registration CRUD beyond env root client
+- ROPC lite when needed for interactive lab packs
 
 ## Verification / CLI smoke
 
 ```bash
-TENANT=$NOCTAXRIS_AZ_TENANT_ID
+TENANT=${NOCTAXRIS_AZ_TENANT_ID:-00000000-0000-0000-0000-000000000001}
+curl -fsS "http://127.0.0.1:4599/$TENANT/v2.0/.well-known/openid-configuration"
 curl -s -X POST "http://127.0.0.1:4599/$TENANT/oauth2/v2.0/token" \
-  -d "grant_type=client_credentials&client_id=$NOCTAXRIS_AZ_ROOT_CLIENT_ID&client_secret=$NOCTAXRIS_AZ_ROOT_ACCESS_TOKEN"
+  -d "grant_type=client_credentials&client_id=sp-lab-1&scope=https://management.azure.com/.default"
 ```

@@ -7,16 +7,43 @@ import (
 )
 
 func TestComposeFileHasNoDockerSock(t *testing.T) {
-	b, err := os.ReadFile("compose.yaml")
+	for _, name := range []string{
+		"compose.yaml",
+		"compose.engine.yaml",
+		"compose.engine-privileged.yaml",
+	} {
+		b, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		content := string(b)
+		if strings.Contains(content, "/var/run/docker.sock") {
+			t.Fatalf("%s must not mount /var/run/docker.sock", name)
+		}
+		if hasDockerSockVolumeEntry(content) {
+			t.Fatalf("%s must not bind or volume-mount docker.sock", name)
+		}
+	}
+}
+
+func TestComposeEngineWiresNestedTLS(t *testing.T) {
+	b, err := os.ReadFile("compose.engine.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
 	content := string(b)
-	if strings.Contains(content, "/var/run/docker.sock") {
-		t.Fatal("compose.yaml must not mount /var/run/docker.sock")
+	for _, want := range []string{
+		"noctaxris-az-engine",
+		"NOCTAXRIS_AZ_DOCKER_HOST",
+		"tcp://noctaxris-az-engine:2376",
+		"docker:27-dind@",
+	} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("compose.engine.yaml missing %q", want)
+		}
 	}
-	if hasDockerSockVolumeEntry(content) {
-		t.Fatal("compose.yaml must not bind or volume-mount docker.sock")
+	if strings.Contains(content, "2375:2375") || strings.Contains(content, "2376:2376") {
+		t.Fatal("compose.engine.yaml must not publish engine ports to the host")
 	}
 }
 

@@ -1,6 +1,6 @@
 package store
 
-const schemaVersion = 1
+const schemaVersion = 2
 
 const schema = `
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -72,7 +72,24 @@ CREATE TABLE IF NOT EXISTS storage_queue_messages (
   account TEXT NOT NULL,
   queue TEXT NOT NULL,
   body TEXT NOT NULL,
-  inserted_at TEXT NOT NULL
+  inserted_at TEXT NOT NULL,
+  visible_after TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS tables (
+  account TEXT NOT NULL,
+  table_name TEXT NOT NULL,
+  PRIMARY KEY (account, table_name)
+);
+
+CREATE TABLE IF NOT EXISTS table_entities (
+  account TEXT NOT NULL,
+  table_name TEXT NOT NULL,
+  partition_key TEXT NOT NULL,
+  row_key TEXT NOT NULL,
+  etag TEXT NOT NULL,
+  properties_json TEXT NOT NULL,
+  PRIMARY KEY (account, table_name, partition_key, row_key)
 );
 
 CREATE TABLE IF NOT EXISTS keyvaults (
@@ -164,5 +181,30 @@ CREATE TABLE IF NOT EXISTS metrics (
   value REAL NOT NULL,
   timestamp TEXT NOT NULL,
   resource_id TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS entra_signing_keys (
+  kid TEXT PRIMARY KEY,
+  private_key_sealed BLOB NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS managed_identities (
+  subscription_id TEXT NOT NULL,
+  resource_group TEXT NOT NULL,
+  name TEXT NOT NULL,
+  location TEXT NOT NULL DEFAULT 'eastus',
+  principal_id TEXT NOT NULL,
+  client_id TEXT NOT NULL,
+  PRIMARY KEY (subscription_id, resource_group, name)
+);
+
+CREATE TABLE IF NOT EXISTS keyvault_deleted_secrets (
+  vault TEXT NOT NULL,
+  name TEXT NOT NULL,
+  value_sealed BLOB NOT NULL,
+  version TEXT NOT NULL,
+  deleted_at TEXT NOT NULL,
+  PRIMARY KEY (vault, name, version)
 );
 `

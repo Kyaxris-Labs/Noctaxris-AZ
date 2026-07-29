@@ -4,7 +4,7 @@ ARM vault CRUD lite plus data-plane secrets and keys with sealed storage.
 
 ## Status
 
-**lab** — Vault create/get; secret set/get; key create/get; values sealed with master key.
+**lab** — Vault create/get; secret set/get/soft-delete/recover (immediate lab theatre); key create/get; values sealed with master key.
 
 ## Wire protocol
 
@@ -12,6 +12,7 @@ ARM vault CRUD lite plus data-plane secrets and keys with sealed storage.
 |--------|------|
 | `PUT`/`GET` | `/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.KeyVault/vaults/{name}` |
 | Data plane | `/keyvault/{name}/secrets/{secret}` , `/keyvault/{name}/keys/{key}` |
+| Soft-delete | `DELETE /keyvault/{name}/secrets/{secret}` ; `POST /keyvault/{name}/deletedsecrets/{secret}/recover` |
 
 Bearer required on data plane (WWW-Authenticate on 401).
 
@@ -24,12 +25,13 @@ Bearer required on data plane (WWW-Authenticate on 401).
 
 - Create vault metadata
 - Set/get secret versions (sealed)
+- Soft-delete and recover secrets (timers are immediate in lab)
 - Create/get key material (sealed)
 
 ## Not implemented
 
 - Certificates, HSM, managed HSM
-- Soft-delete / purge protection timers
+- Soft-delete retention timers / purge protection delays
 - Access policies vs RBAC dual mode beyond lab Bearer
 - Full Key Vault REST version matrix
 
