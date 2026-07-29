@@ -1,0 +1,16 @@
+.git
+.local
+.cursor
+.superpowers
+.worktrees
+bin
+*.exe
+*.test
+.gocache
+.build
+**/node_modules/
+**/.pytest_cache/
+**/.terraform/
+**/*.tfstate*
+.env
+docker/.env

@@ -1,0 +1,48 @@
+services:
+  noctaxris-az-init:
+    image: busybox:1.36
+    user: "0:0"
+    volumes:
+      - noctaxris-az-data:/data
+      - noctaxris-az-secrets:/secrets
+    # Named volumes are root-owned on first create; API runs as UID 65532 (distroless nonroot).
+    command: ["sh", "-c", "chown -R 65532:65532 /data /secrets && chmod 700 /data /secrets"]
+  noctaxris-az:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "127.0.0.1:4599:4599"
+      - "127.0.0.1:5672:5672"
+    environment:
+      NOCTAXRIS_AZ_LISTEN: "0.0.0.0:4599"
+      NOCTAXRIS_AZ_AMQP_LISTEN: "0.0.0.0:5672"
+      # Required for the container bind above. Default host publish is 127.0.0.1:4599.
+      NOCTAXRIS_AZ_ALLOW_NONLOOPBACK_LISTEN: "1"
+      NOCTAXRIS_AZ_DATA_ROOT: "/var/lib/noctaxris-az"
+      # Sibling secrets volume (outside data root; required under read_only rootfs).
+      NOCTAXRIS_AZ_MASTER_KEY_FILE: "/var/lib/noctaxris-az-secrets/master.key"
+      NOCTAXRIS_AZ_ROOT_CLIENT_ID: "${NOCTAXRIS_AZ_ROOT_CLIENT_ID}"
+      NOCTAXRIS_AZ_ROOT_ACCESS_TOKEN: "${NOCTAXRIS_AZ_ROOT_ACCESS_TOKEN}"
+      NOCTAXRIS_AZ_TENANT_ID: "${NOCTAXRIS_AZ_TENANT_ID:-00000000-0000-0000-0000-000000000001}"
+      NOCTAXRIS_AZ_SUBSCRIPTION_ID: "${NOCTAXRIS_AZ_SUBSCRIPTION_ID:-00000000-0000-0000-0000-000000000002}"
+    volumes:
+      - noctaxris-az-data:/var/lib/noctaxris-az
+      - noctaxris-az-secrets:/var/lib/noctaxris-az-secrets
+    # DO NOT add docker.sock
+    read_only: true
+    tmpfs:
+      - /tmp
+    depends_on:
+      noctaxris-az-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "/noctaxris-az", "healthcheck"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+volumes:
+  noctaxris-az-data:
+  noctaxris-az-secrets:

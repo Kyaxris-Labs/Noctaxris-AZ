@@ -1,0 +1,9 @@
+# Opt-in nested DinD engine for Noctaxris-AZ (not wired yet).
+# Default compose.yaml does NOT start an engine and leaves
+# NOCTAXRIS_AZ_DOCKER_HOST unset (unit tests need no Docker).
+#
+# Later enable from docker/:
+#   docker compose -f compose.yaml -f compose.engine.yaml --env-file .env up --build
+#
+# Never mount host docker.sock. Engine TLS must stay on the Compose network only.
+services: {}
