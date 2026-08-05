@@ -3,11 +3,7 @@
 # only when there is no module-path fix and the residual is documented in
 # docs/security-defaults.md.
 #
-# Daemon-side Docker Engine issues reported against github.com/docker/docker with
-# Fixed in: N/A (no client-module fix). Verified via local govulncheck after
-# adding github.com/docker/docker v28.5.2 (same module pin as Noctaxris /
-# Noctaxris-GCP). Re-run go run ./scripts/govulncheck-ci after bumps; remove
-# stale IDs and add only new Fixed N/A IDs that appear locally.
-GO-2026-4883
-GO-2026-4887
-GO-2026-5668
+# Nested compute uses github.com/moby/moby/client + github.com/moby/moby/api
+# (not github.com/docker/docker). Fixed-N/A Docker Engine IDs that govulncheck
+# attributed to the legacy client module path no longer apply. Keep empty
+# unless a new residual with no module-path fix appears.

@@ -14,10 +14,10 @@
   lite; Key Vault secret soft-delete/recover (immediate lab timers).
 - Soft-skip SDK/Terraform coverage for table and IMDS when
   `NOCTAXRIS_AZ_ENDPOINT` is set.
-- Bump lab deps (`modernc.org/sqlite` v1.55.0, Docker Engine client
-  `github.com/docker/docker` v28.5.2). Govulncheck allowlists Docker Engine
-  Fixed N/A IDs (`GO-2026-4883`, `GO-2026-4887`, `GO-2026-5668`) matching the
-  Noctaxris / Noctaxris-GCP pattern. CI adds Syft SBOM for the API image.
+- Bump lab deps (`modernc.org/sqlite` v1.55.0). Nested compute client migrates
+  from `github.com/docker/docker` to `github.com/moby/moby/client` v0.5.1
+  (`client.New`); govulncheck allowlist drops Fixed-N/A Engine IDs that tracked
+  the legacy module. CI adds Syft SBOM for the API image.
 
 ## 0.1.0
 

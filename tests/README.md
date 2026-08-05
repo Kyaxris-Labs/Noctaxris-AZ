@@ -31,6 +31,8 @@ export NOCTAXRIS_AZ_SUBSCRIPTION_ID="${NOCTAXRIS_AZ_SUBSCRIPTION_ID:-00000000-00
 
 ## Soft-skip vs hard-fail
 
+Nested compute (when the engine overlay is wired) uses `github.com/moby/moby/client` + `github.com/moby/moby/api` (not `github.com/docker/docker`). Soft-skip without a healthy engine is unchanged.
+
 | Case | Behavior |
 |------|----------|
 | `NOCTAXRIS_AZ_ENDPOINT` unset inside an SDK/TF test | Soft-skip that test |

@@ -85,17 +85,20 @@ non-loopback listen.
   whose OSV ID is not listed in `scripts/govulncheck-allowlist.txt`.
 - Prefer toolchain and dependency upgrades over allowlisting. The allowlist is
   only for residuals with no module-path fix (documented when an ID is added).
-- Adding `github.com/docker/docker` (Engine client SDK) surfaces Docker Engine
-  CVEs with Fixed in: N/A on that module path (`GO-2026-4883`, `GO-2026-4887`,
-  `GO-2026-5668`; siblings may still list `GO-2026-5617` when that ID is
-  reachable). CI allowlists those IDs in
-  `scripts/govulncheck-allowlist.txt` so new app vulns still fail the job.
-  Noctaxris-AZ does not call `CopyToContainer` / `CopyFromContainer`; nested
-  one-shots (when the engine overlay is wired) use create/start/wait/logs only.
-  AuthZ-plugin bypass findings do not apply to the packaged engine path (no
-  AuthZ plugins). Residual is still the nested engine binary version and who
-  can talk to it over TLS on the Compose network. Re-run
-  `go run ./scripts/govulncheck-ci` after bumps; add only new Fixed N/A IDs
-  that appear locally.
+- Nested compute uses `github.com/moby/moby/client` + `github.com/moby/moby/api`
+  (via `client.New` with `WithHost` / `WithAPIVersionNegotiation` /
+  `WithTLSClientConfig`). That replaces the frozen `github.com/docker/docker`
+  module and clears Scout / Hub Security Insights Highs that pinned Fixed-N/A
+  Engine CVEs on the old client module path. `scripts/govulncheck-allowlist.txt`
+  is empty for those IDs; new app vulns still fail the job. Distroless OS
+  (`gcr.io/distroless/static-debian12:nonroot`) remains a separate scan surface
+  from nested `docker:*-dind`. Noctaxris-AZ does not call `CopyToContainer` /
+  `CopyFromContainer`; nested one-shots (when the engine overlay is wired) use
+  create/start/wait/logs only. AuthZ-plugin bypass findings do not apply to the
+  packaged engine path (no AuthZ plugins). Residual is still the nested engine
+  binary version and who can talk to it over TLS on the Compose network.
+  Re-run `go run ./scripts/govulncheck-ci` after bumps; allowlist only residuals
+  with no module-path fix.
+
 - Go toolchain tracks a current patch (see `go.mod`); API image build stage uses
   a digest-pinned `golang` bookworm base matching that version.

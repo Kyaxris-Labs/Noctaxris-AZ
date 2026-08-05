@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/docker/docker/client"
+	"github.com/moby/moby/client"
 )
 
 // NewEngineClient builds a Docker API client for the nested DinD engine URL.
@@ -30,7 +30,7 @@ func NewEngineClient(dockerHost, certPath string) (*client.Client, error) {
 			filepath.Join(certDir, "key.pem"),
 		))
 	}
-	cli, err := client.NewClientWithOpts(opts...)
+	cli, err := client.New(opts...)
 	if err != nil {
 		return nil, fmt.Errorf("compute: docker client: %w", err)
 	}

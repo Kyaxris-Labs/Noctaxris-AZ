@@ -72,7 +72,10 @@ export NOCTAXRIS_AZ_TLS_KEY=/path/to/key.pem
 
 ## CI matrix
 
-When GitHub Actions are present, expect unit tests, image build, and vulnerability scan jobs on PRs. Nested DinD remains opt-in and is not required for default green CI.
+When GitHub Actions are present, expect unit tests, image build, and `govulncheck`
+(`go run ./scripts/govulncheck-ci`; allowlist empty by default after moby client
+migration; see [security-defaults.md](security-defaults.md)) on PRs. Nested DinD
+remains opt-in and is not required for default green CI.
 
 ## Compose overlays (lab opt-in)
 
