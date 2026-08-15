@@ -193,3 +193,70 @@ func TestNewRegistersMux(t *testing.T) {
 		t.Fatalf("ready %d", res.StatusCode)
 	}
 }
+
+func TestSmokeCoreARMPaths(t *testing.T) {
+	dir := t.TempDir()
+	key, err := store.LoadOrCreateMasterKey(dir + "/master.key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := store.Open(dir+"/data", key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	sub := config.DefaultSubscriptionID
+	if err := st.EnsureRoot(config.DefaultTenantID, sub, "root"); err != nil {
+		t.Fatal(err)
+	}
+	aud, err := audit.NewWriter(dir + "/audit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer aud.Close()
+
+	srv := New(config.Config{
+		ListenAddr: "127.0.0.1:0", AMQPListenAddr: "127.0.0.1:0",
+		RootClientID: "root", RootAccessToken: "tok",
+		TenantID: config.DefaultTenantID, SubscriptionID: sub,
+	}, st, aud)
+	hs := httptest.NewServer(srv.Handler())
+	defer hs.Close()
+
+	do := func(method, path, body, want string) {
+		t.Helper()
+		var rdr io.Reader
+		if body != "" {
+			rdr = strings.NewReader(body)
+		}
+		req, err := http.NewRequest(method, hs.URL+path, rdr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Authorization", "Bearer tok")
+		if body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("%s %s status %d body %s", method, path, res.StatusCode, got)
+		}
+		if !strings.Contains(string(got), want) {
+			t.Fatalf("%s %s body %s want substring %q", method, path, got, want)
+		}
+	}
+
+	do(http.MethodGet, "/subscriptions/"+sub+"?api-version=2022-12-01", "", sub)
+	do(http.MethodPut, "/subscriptions/"+sub+"/resourcegroups/rg-ci?api-version=2022-09-01",
+		`{"location":"eastus"}`, "rg-ci")
+	do(http.MethodPut, "/subscriptions/"+sub+"/resourcegroups/rg-ci/providers/Microsoft.Storage/storageAccounts/stci?api-version=2023-01-01",
+		`{"location":"eastus","kind":"StorageV2","sku":{"name":"Standard_LRS"}}`, "stci")
+	do(http.MethodPut, "/subscriptions/"+sub+"/resourcegroups/rg-ci/providers/Microsoft.KeyVault/vaults/kv-ci?api-version=2022-07-01",
+		`{"location":"eastus","properties":{}}`, "kv-ci")
+	do(http.MethodPut, "/keyvault/kv-ci/secrets/demo", `{"value":"smoke-core"}`, "demo")
+}

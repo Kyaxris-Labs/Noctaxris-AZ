@@ -134,6 +134,14 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 		}
 		w.Header().Set(requestIDHeader, reqID)
 		ctx := context.WithValue(r.Context(), ctxRequestID, reqID)
+		r = r.WithContext(ctx)
+		if p := canonicalizeARMPath(r.URL.Path); p != r.URL.Path {
+			u := *r.URL
+			u.Path = p
+			u.RawPath = ""
+			r = r.Clone(ctx)
+			r.URL = &u
+		}
 
 		if authn.IsPublicPath(r.URL.Path) {
 			next.ServeHTTP(w, r.WithContext(ctx))

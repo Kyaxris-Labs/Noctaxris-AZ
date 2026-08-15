@@ -26,9 +26,14 @@ func (s *Service) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /subscriptions/{subscriptionId}", s.getSubscription)
 	mux.HandleFunc("GET /subscriptions/{subscriptionId}/resources", s.listResources)
 	mux.HandleFunc("GET /subscriptions/{subscriptionId}/providers", s.listProviders)
-	mux.HandleFunc("GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}", s.getResourceGroup)
-	mux.HandleFunc("PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}", s.putResourceGroup)
-	mux.HandleFunc("GET /subscriptions/{subscriptionId}/resourcegroups", s.listResourceGroups)
+	// Resource Groups REST uses `resourcegroups`; resource IDs and nested
+	// provider routes use `resourceGroups`. Register both; HTTP middleware
+	// also canonicalizes the segment before ServeMux match.
+	for _, seg := range []string{"resourcegroups", "resourceGroups"} {
+		mux.HandleFunc("GET /subscriptions/{subscriptionId}/"+seg+"/{resourceGroupName}", s.getResourceGroup)
+		mux.HandleFunc("PUT /subscriptions/{subscriptionId}/"+seg+"/{resourceGroupName}", s.putResourceGroup)
+		mux.HandleFunc("GET /subscriptions/{subscriptionId}/"+seg, s.listResourceGroups)
+	}
 }
 
 func (s *Service) principal(ctx context.Context) (authn.Principal, bool) {

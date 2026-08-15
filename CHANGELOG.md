@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.0.2
+
+Patch after 1.0.1: ARM accepts Resource Groups REST `resourcegroups` on nested provider routes. Docker Hub: `kyaxris/noctaxris-az` (`1.0.2`, `1.0`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
+
+- ARM: canonicalize `resourcegroups` to `resourceGroups` so Go ServeMux matches Storage, Key Vault, and other provider paths (Resource Groups PUT uses lowercase; resource IDs use camelCase)
+
 ## 1.0.1
 
 Patch after 1.0.0: Go 1.26.6 for stdlib govulncheck findings. Docker Hub: `kyaxris/noctaxris-az` (`1.0.1`, `1.0`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).

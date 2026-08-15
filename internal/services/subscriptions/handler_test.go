@@ -98,14 +98,18 @@ func TestResourceGroupPutGet(t *testing.T) {
 	h := withAuth(st, mux)
 
 	sub := config.DefaultSubscriptionID
+	var rec *httptest.ResponseRecorder
 	putPath := "/subscriptions/" + sub + "/resourcegroups/rg-lab?api-version=2022-12-01"
-	putReq := httptest.NewRequest(http.MethodPut, putPath, strings.NewReader(`{"location":"eastus"}`))
-	putReq.Header.Set("Authorization", "Bearer "+rootToken)
-	putReq.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, putReq)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("put status=%d body=%s", rec.Code, rec.Body.String())
+	for _, seg := range []string{"resourcegroups", "resourceGroups"} {
+		p := "/subscriptions/" + sub + "/" + seg + "/rg-lab?api-version=2022-12-01"
+		putReq := httptest.NewRequest(http.MethodPut, p, strings.NewReader(`{"location":"eastus"}`))
+		putReq.Header.Set("Authorization", "Bearer "+rootToken)
+		putReq.Header.Set("Content-Type", "application/json")
+		rec = httptest.NewRecorder()
+		h.ServeHTTP(rec, putReq)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("put %s status=%d body=%s", seg, rec.Code, rec.Body.String())
+		}
 	}
 	var rg map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &rg); err != nil {
