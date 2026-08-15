@@ -28,16 +28,17 @@ Docker Hub image: **`kyaxris/noctaxris-az`** (canonical GitHub repo `Kyaxris-Lab
 
 | Tags | Source |
 |------|--------|
-| `0.x.y`, `0.x`, `0`, `latest`, `sha-<short>` | Tag push `v*` when release workflow secrets are configured (see [release.md](release.md)) |
-| Local / CI | `docker build -f docker/Dockerfile .` when Dockerfile is present |
+| `1.x.y`, `1.x`, `1`, `latest`, `sha-<short>` | Tag push `v*` → [`.github/workflows/release.yml`](../.github/workflows/release.yml) (after `ci-required.yml` gates) |
+| `nightly`, `nightly-YYYYMMDD`, `sha-<short>` | Nightly cron / dispatch → [`.github/workflows/docker-nightly.yml`](../.github/workflows/docker-nightly.yml) |
+| Local / CI | `docker build -f docker/Dockerfile .` on every PR |
 
-Repository secrets for Hub publish (never commit): `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`. Product version: file `VERSION`, OCI label when set at build, and open probe `GET /_noctaxris-az/version`.
+Repository secrets for Hub publish (never commit): `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`. Product version: file `VERSION`, OCI label when set at build, and open probe `GET /_noctaxris-az/version`. See [release.md](release.md).
 
 ## Image upgrades
 
 1. Stop the API / Compose.
 2. Take a backup (above).
-3. Pull a Hub tag (`docker pull kyaxris/noctaxris-az:0.1.0`) or rebuild.
+3. Pull a Hub tag (`docker pull kyaxris/noctaxris-az:1.0.0`) or rebuild.
 4. Start and confirm `/_noctaxris-az/ready` returns ready (optional: `/_noctaxris-az/version`).
 
 Schema changes are additive (`CREATE TABLE IF NOT EXISTS`). There is no down-migration.
@@ -72,10 +73,18 @@ export NOCTAXRIS_AZ_TLS_KEY=/path/to/key.pem
 
 ## CI matrix
 
-When GitHub Actions are present, expect unit tests, image build, and `govulncheck`
-(`go run ./scripts/govulncheck-ci`; allowlist empty by default after moby client
-migration; see [security-defaults.md](security-defaults.md)) on PRs. Nested DinD
-remains opt-in and is not required for default green CI.
+GitHub Actions (`.github/workflows/ci.yml`):
+
+| Job | When |
+|-----|------|
+| unit | Every push and PR (`go test ./...`) |
+| compose-static | `go test ./docker/` |
+| race | Scoped `./internal/kernel/... ./internal/store/... -race` |
+| image | `docker build -f docker/Dockerfile .` |
+| sbom | After image: Syft SPDX SBOM artifact |
+| govulncheck | `go run ./scripts/govulncheck-ci` (allowlist empty by default after moby client migration; see [security-defaults.md](security-defaults.md)) |
+
+Release tag push runs [`.github/workflows/ci-required.yml`](../.github/workflows/ci-required.yml) (unit, compose-static, govulncheck, scoped race, image, smoke-core) before Hub publish. Nested DinD remains opt-in and is not required for default green CI.
 
 ## Compose overlays (lab opt-in)
 

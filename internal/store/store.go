@@ -46,6 +46,8 @@ func (s *Store) migrate() error {
 	}
 	// Best-effort upgrade for DBs created before visible_after existed.
 	_, _ = s.db.Exec(`ALTER TABLE storage_queue_messages ADD COLUMN visible_after TEXT NOT NULL DEFAULT ''`)
+	_, _ = s.db.Exec(`ALTER TABLE servicebus_messages ADD COLUMN session_id TEXT NOT NULL DEFAULT ''`)
+	_, _ = s.db.Exec(`ALTER TABLE servicebus_messages ADD COLUMN dead_letter INTEGER NOT NULL DEFAULT 0`)
 	var n int
 	if err := s.db.QueryRow(`SELECT COUNT(1) FROM schema_version`).Scan(&n); err != nil {
 		return err

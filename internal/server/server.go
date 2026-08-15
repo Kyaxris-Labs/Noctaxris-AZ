@@ -62,7 +62,9 @@ func New(cfg config.Config, st *store.Store, aud *audit.Writer) *Server {
 	s.registerREST()
 	s.registerIdentity()
 	s.registerData()
+	s.registerNetwork()
 	s.registerApp()
+	s.registerEdge()
 	s.registerObserve()
 	return s
 }

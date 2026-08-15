@@ -1,6 +1,6 @@
 package store
 
-const schemaVersion = 2
+const schemaVersion = 3
 
 const schema = `
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -206,5 +206,185 @@ CREATE TABLE IF NOT EXISTS keyvault_deleted_secrets (
   version TEXT NOT NULL,
   deleted_at TEXT NOT NULL,
   PRIMARY KEY (vault, name, version)
+);
+
+CREATE TABLE IF NOT EXISTS entra_apps (
+  tenant_id TEXT NOT NULL,
+  app_id TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (tenant_id, app_id)
+);
+
+CREATE TABLE IF NOT EXISTS system_assigned_identities (
+  subscription_id TEXT NOT NULL,
+  resource_group TEXT NOT NULL,
+  name TEXT NOT NULL,
+  location TEXT NOT NULL DEFAULT 'eastus',
+  principal_id TEXT NOT NULL,
+  client_id TEXT NOT NULL,
+  PRIMARY KEY (subscription_id, resource_group, name)
+);
+
+CREATE TABLE IF NOT EXISTS keyvault_certificates (
+  vault TEXT NOT NULL,
+  name TEXT NOT NULL,
+  version TEXT NOT NULL,
+  cert_pem_sealed BLOB NOT NULL,
+  policy_json TEXT NOT NULL DEFAULT '{}',
+  PRIMARY KEY (vault, name, version)
+);
+
+CREATE TABLE IF NOT EXISTS appconfig_feature_flags (
+  store TEXT NOT NULL,
+  name TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 0,
+  conditions_json TEXT NOT NULL DEFAULT '{}',
+  PRIMARY KEY (store, name)
+);
+
+CREATE TABLE IF NOT EXISTS appconfig_snapshots (
+  store TEXT NOT NULL,
+  name TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'ready',
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (store, name)
+);
+
+CREATE TABLE IF NOT EXISTS servicebus_topics (
+  namespace TEXT NOT NULL,
+  name TEXT NOT NULL,
+  PRIMARY KEY (namespace, name)
+);
+
+CREATE TABLE IF NOT EXISTS servicebus_subscriptions (
+  namespace TEXT NOT NULL,
+  topic TEXT NOT NULL,
+  name TEXT NOT NULL,
+  filter_sql TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (namespace, topic, name)
+);
+
+CREATE TABLE IF NOT EXISTS servicebus_topic_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  namespace TEXT NOT NULL,
+  topic TEXT NOT NULL,
+  subscription TEXT NOT NULL,
+  body BLOB NOT NULL,
+  inserted_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS eventhubs_namespaces (
+  subscription_id TEXT NOT NULL,
+  resource_group TEXT NOT NULL,
+  name TEXT NOT NULL,
+  location TEXT NOT NULL DEFAULT 'eastus',
+  PRIMARY KEY (subscription_id, resource_group, name)
+);
+
+CREATE TABLE IF NOT EXISTS eventhubs_hubs (
+  namespace TEXT NOT NULL,
+  name TEXT NOT NULL,
+  partition_count INTEGER NOT NULL DEFAULT 2,
+  PRIMARY KEY (namespace, name)
+);
+
+CREATE TABLE IF NOT EXISTS eventhubs_consumer_groups (
+  namespace TEXT NOT NULL,
+  hub TEXT NOT NULL,
+  name TEXT NOT NULL,
+  PRIMARY KEY (namespace, hub, name)
+);
+
+CREATE TABLE IF NOT EXISTS eventhubs_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  namespace TEXT NOT NULL,
+  hub TEXT NOT NULL,
+  partition_id TEXT NOT NULL,
+  body BLOB NOT NULL,
+  inserted_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS eventgrid_topics (
+  subscription_id TEXT NOT NULL,
+  resource_group TEXT NOT NULL,
+  name TEXT NOT NULL,
+  location TEXT NOT NULL DEFAULT 'eastus',
+  PRIMARY KEY (subscription_id, resource_group, name)
+);
+
+CREATE TABLE IF NOT EXISTS eventgrid_subscriptions (
+  topic TEXT NOT NULL,
+  name TEXT NOT NULL,
+  destination_url TEXT NOT NULL DEFAULT '',
+  filter_json TEXT NOT NULL DEFAULT '{}',
+  PRIMARY KEY (topic, name)
+);
+
+CREATE TABLE IF NOT EXISTS eventgrid_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  topic TEXT NOT NULL,
+  body_json TEXT NOT NULL,
+  delivered INTEGER NOT NULL DEFAULT 0,
+  inserted_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS cosmos_accounts (
+  subscription_id TEXT NOT NULL,
+  resource_group TEXT NOT NULL,
+  name TEXT NOT NULL,
+  location TEXT NOT NULL DEFAULT 'eastus',
+  key_sealed BLOB NOT NULL,
+  PRIMARY KEY (subscription_id, resource_group, name)
+);
+
+CREATE TABLE IF NOT EXISTS cosmos_databases (
+  account TEXT NOT NULL,
+  name TEXT NOT NULL,
+  PRIMARY KEY (account, name)
+);
+
+CREATE TABLE IF NOT EXISTS cosmos_containers (
+  account TEXT NOT NULL,
+  database_name TEXT NOT NULL,
+  name TEXT NOT NULL,
+  partition_key TEXT NOT NULL DEFAULT '/id',
+  PRIMARY KEY (account, database_name, name)
+);
+
+CREATE TABLE IF NOT EXISTS cosmos_items (
+  account TEXT NOT NULL,
+  database_name TEXT NOT NULL,
+  container TEXT NOT NULL,
+  id TEXT NOT NULL,
+  partition_key_value TEXT NOT NULL,
+  body_json TEXT NOT NULL,
+  PRIMARY KEY (account, database_name, container, id, partition_key_value)
+);
+
+CREATE TABLE IF NOT EXISTS arm_lab_resources (
+  provider TEXT NOT NULL,
+  subscription_id TEXT NOT NULL,
+  resource_group TEXT NOT NULL,
+  name TEXT NOT NULL,
+  location TEXT NOT NULL DEFAULT 'eastus',
+  properties_json TEXT NOT NULL DEFAULT '{}',
+  PRIMARY KEY (provider, subscription_id, resource_group, name)
+);
+
+CREATE TABLE IF NOT EXISTS log_analytics_rows (
+  workspace TEXT NOT NULL,
+  table_name TEXT NOT NULL,
+  row_json TEXT NOT NULL,
+  id INTEGER PRIMARY KEY AUTOINCREMENT
+);
+
+CREATE TABLE IF NOT EXISTS email_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  service_name TEXT NOT NULL,
+  to_addr TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  body TEXT NOT NULL,
+  inserted_at TEXT NOT NULL
 );
 `

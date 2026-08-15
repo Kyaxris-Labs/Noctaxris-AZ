@@ -39,6 +39,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /keyvault/{vault}/keys/{name}", h.getKey)
 	mux.HandleFunc("POST /keyvault/{vault}/keys/{name}/encrypt", h.encrypt)
 	mux.HandleFunc("POST /keyvault/{vault}/keys/{name}/decrypt", h.decrypt)
+
+	mux.HandleFunc("PUT /keyvault/{vault}/certificates/{name}", h.putCertificate)
+	mux.HandleFunc("GET /keyvault/{vault}/certificates/{name}", h.getCertificate)
 }
 
 func (h *Handler) putVault(w http.ResponseWriter, r *http.Request) {

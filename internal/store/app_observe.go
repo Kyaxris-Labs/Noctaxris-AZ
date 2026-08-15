@@ -323,3 +323,110 @@ WHERE (? = '' OR name = ?) ORDER BY id DESC LIMIT ?`, name, name, limit)
 	}
 	return out, rows.Err()
 }
+
+// SetAppConfigFeatureFlag upserts a feature flag.
+func (s *Store) SetAppConfigFeatureFlag(storeName, name string, enabled bool, conditionsJSON string) error {
+	if conditionsJSON == "" {
+		conditionsJSON = "{}"
+	}
+	en := 0
+	if enabled {
+		en = 1
+	}
+	_, err := s.db.Exec(`
+INSERT INTO appconfig_feature_flags (store, name, enabled, conditions_json)
+VALUES (?, ?, ?, ?)
+ON CONFLICT(store, name) DO UPDATE SET enabled=excluded.enabled, conditions_json=excluded.conditions_json`,
+		storeName, name, en, conditionsJSON)
+	return err
+}
+
+// GetAppConfigFeatureFlag loads a feature flag.
+func (s *Store) GetAppConfigFeatureFlag(storeName, name string) (enabled bool, conditionsJSON string, ok bool, err error) {
+	var en int
+	err = s.db.QueryRow(`
+SELECT enabled, conditions_json FROM appconfig_feature_flags WHERE store = ? AND name = ?`,
+		storeName, name).Scan(&en, &conditionsJSON)
+	if err == sql.ErrNoRows {
+		return false, "", false, nil
+	}
+	if err != nil {
+		return false, "", false, err
+	}
+	return en == 1, conditionsJSON, true, nil
+}
+
+// ListAppConfigFeatureFlags lists feature flags for a store.
+func (s *Store) ListAppConfigFeatureFlags(storeName string) ([]struct {
+	Name           string
+	Enabled        bool
+	ConditionsJSON string
+}, error) {
+	rows, err := s.db.Query(`
+SELECT name, enabled, conditions_json FROM appconfig_feature_flags WHERE store = ? ORDER BY name`, storeName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []struct {
+		Name           string
+		Enabled        bool
+		ConditionsJSON string
+	}
+	for rows.Next() {
+		var name, cond string
+		var en int
+		if err := rows.Scan(&name, &en, &cond); err != nil {
+			return nil, err
+		}
+		out = append(out, struct {
+			Name           string
+			Enabled        bool
+			ConditionsJSON string
+		}{name, en == 1, cond})
+	}
+	return out, rows.Err()
+}
+
+// UpsertAppConfigSnapshot stores a snapshot theatre row.
+func (s *Store) UpsertAppConfigSnapshot(storeName, name, status string) error {
+	if status == "" {
+		status = "ready"
+	}
+	_, err := s.db.Exec(`
+INSERT INTO appconfig_snapshots (store, name, status, created_at)
+VALUES (?, ?, ?, ?)
+ON CONFLICT(store, name) DO UPDATE SET status=excluded.status`,
+		storeName, name, status, time.Now().UTC().Format(time.RFC3339))
+	return err
+}
+
+// GetAppConfigSnapshot loads a snapshot.
+func (s *Store) GetAppConfigSnapshot(storeName, name string) (status, createdAt string, ok bool, err error) {
+	err = s.db.QueryRow(`
+SELECT status, created_at FROM appconfig_snapshots WHERE store = ? AND name = ?`, storeName, name).
+		Scan(&status, &createdAt)
+	if err == sql.ErrNoRows {
+		return "", "", false, nil
+	}
+	if err != nil {
+		return "", "", false, err
+	}
+	return status, createdAt, true, nil
+}
+
+// IngestLogAnalyticsRow stores a Log Analytics row.
+func (s *Store) IngestLogAnalyticsRow(workspace, tableName, rowJSON string) error {
+	_, err := s.db.Exec(`
+INSERT INTO log_analytics_rows (workspace, table_name, row_json) VALUES (?, ?, ?)`,
+		workspace, tableName, rowJSON)
+	return err
+}
+
+// CaptureEmail stores a captured email message.
+func (s *Store) CaptureEmail(service, to, subject, body string) error {
+	_, err := s.db.Exec(`
+INSERT INTO email_messages (service_name, to_addr, subject, body, inserted_at)
+VALUES (?, ?, ?, ?, datetime('now'))`, service, to, subject, body)
+	return err
+}

@@ -13,29 +13,32 @@ Lab Entra OIDC / OAuth2 theatre against the shared HTTP listener.
 | `GET` | `/{tenantId}/v2.0/.well-known/openid-configuration` |
 | `GET` | `/{tenantId}/discovery/v2.0/keys` |
 | `POST` | `/{tenantId}/oauth2/v2.0/token` |
+| `GET`/`POST` | `/v1.0/applications` |
+| `GET`/`PATCH`/`DELETE` | `/v1.0/applications/{appId}` |
 
-Form body: `grant_type=client_credentials`, `client_id`, optional `client_secret`, `scope` or `resource`.
+Form body: `grant_type=client_credentials` or `password` (ROPC lite), `client_id` / `username`+`password`, optional `client_secret`, `scope` or `resource`.
 
 ## Authz
 
-Public discovery / JWKS / token. Issued JWTs authenticate subsequent ARM calls (also hashed for opaque lookup).
+Public discovery / JWKS / token. Issued JWTs authenticate subsequent ARM calls (also hashed for opaque lookup). Graph app registration routes require a Bearer principal.
 
 ## Detailed actions
 
-- Client credentials grant with RS256 access_token (`aud`/`iss`/`sub`/`oid`/`tid`/`azp`/`exp`)
+- Client credentials and ROPC lite grants with RS256 access_token (`aud`/`iss`/`sub`/`oid`/`tid`/`azp`/`exp`)
 - OIDC discovery document (`token_endpoint`, `jwks_uri`, `issuer`, auth methods) and JWKS (`n`/`e`/`kid`/`issuer`)
 - Authenticator verifies lab JWTs after root / opaque hash lookup
+- Graph-shaped app registration CRUD lite under `/v1.0/applications` (tenant from config, not path)
 
-Paths mirror the Microsoft identity platform v2 layout under the lab base URL
-(`/{tenant}/v2.0/.well-known/openid-configuration`, `/{tenant}/discovery/v2.0/keys`,
-`/{tenant}/oauth2/v2.0/token`).
+OIDC paths mirror the Microsoft identity platform v2 layout under the configured
+tenant id (literal path segment, not a wildcard). App registration uses Graph-shaped
+`/v1.0/applications`. Literal tenant + Graph paths avoid Go ServeMux conflicts with
+ARM `/subscriptions/...` and storage `/blob/...`.
 
 ## Not implemented
 
-- Authorization code / device code / ROPC / on-behalf-of
+- Authorization code / device code / on-behalf-of
 - Microsoft-signed JWTs / real Microsoft identity platform
-- Microsoft Graph beyond token minting
-- Conditional Access, MFA, PIM
+- Full Microsoft Graph (directory objects, groups, PIM, Conditional Access, MFA)
 
 ## Emulator limits
 
@@ -44,8 +47,7 @@ Paths mirror the Microsoft identity platform v2 layout under the lab base URL
 
 ## Deferred depth
 
-- App registration CRUD beyond env root client
-- ROPC lite when needed for interactive lab packs
+- Broader Graph directory CRUD beyond app registration lite
 
 ## Verification / CLI smoke
 

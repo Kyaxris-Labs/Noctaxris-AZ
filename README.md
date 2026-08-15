@@ -31,13 +31,13 @@ curl http://127.0.0.1:4599/_noctaxris-az/health
 
 Point Azure clients at `http://127.0.0.1:4599` with `Authorization: Bearer <token>` (Storage Shared Key / SAS; Service Bus AMQP on `:5672`).
 
-Go module: [`github.com/Kyaxris-Labs/Noctaxris-AZ`](https://github.com/Kyaxris-Labs/Noctaxris-AZ). Image tags: `latest`, semver releases, and Hub `kyaxris/noctaxris-az`.
+Go module: [`github.com/Kyaxris-Labs/Noctaxris-AZ`](https://github.com/Kyaxris-Labs/Noctaxris-AZ). Image tags: `latest`, semver releases, and `nightly` from CI.
 
 ## Why this exists
 
 | | |
 |---|---|
-| Lab fidelity | Entra OIDC/JWKS/JWT, Managed Identity/IMDS, ARM subscriptions/RGs/RBAC, Key Vault, Storage blob/queue/table, Service Bus, App Configuration, Functions mock, Activity Log |
+| Lab fidelity | Entra (ROPC + apps lite), Managed Identity (user + system), ARM/RBAC, Key Vault (+ certs), Storage, Cosmos, Service Bus/Event Hubs/Event Grid, nested SQL/Postgres/Redis/ACR theatre, Network/VM/AKS, App/edge/AI labs, Monitor/Log Analytics |
 | Secure defaults | Loopback publish only. No host `docker.sock`. Master key outside the data root |
 | Dual listeners | HTTP `:4599` plus AMQP lite `:5672` for Service Bus clients |
 | Nested compute | DinD via Compose engine over TLS is opt-in when present. Default Functions invoke stays mock |
@@ -76,10 +76,13 @@ When Compose files are present, copy `docker/.env.example` to `docker/.env`, rep
 |------|----------|
 | Identity | Microsoft Entra ID, Managed Identity, Subscriptions / resource groups, Authorization (RBAC) |
 | Crypto | Key Vault |
-| Data | Storage (blob, queue, table) |
-| Messaging | Service Bus |
-| App | App Configuration, Azure Functions |
-| Observe | Monitor / Activity Log |
+| Data | Storage (blob, queue, table), Cosmos DB, Azure SQL, PostgreSQL, Redis, ACR |
+| Messaging | Service Bus, Event Hubs, Event Grid |
+| Network | Virtual Network, NSG, NIC, DNS, Load Balancer, Application Gateway |
+| Compute | Virtual Machines, AKS, Azure Functions |
+| App | App Configuration, App Service (staticSites lite), Container Apps, Logic Apps, API Management |
+| Observe | Monitor / Activity Log, Log Analytics |
+| Edge / AI | Front Door / CDN profiles, ACS Email, Cognitive / Azure OpenAI, SignalR |
 
 Open the service matrix for detailed actions and gaps. Full notes and CLI smoke: [docs/services/](docs/services/index.md).
 
@@ -99,87 +102,166 @@ Open the service matrix for detailed actions and gaps. Full notes and CLI smoke:
     <tr>
       <td rowspan="4" align="center" valign="middle">Identity</td>
       <td>Microsoft Entra ID</td>
-      <td>OIDC discovery + JWKS; client credentials RS256 lab JWTs at <code>/{tenant}/oauth2/v2.0/token</code>.</td>
+      <td>OIDC/JWKS; client credentials + ROPC lite; app registration CRUD lite.</td>
       <td>Microsoft-signed JWTs; Graph; auth code / device code.</td>
     </tr>
     <tr>
       <td>Managed Identity</td>
-      <td>User-assigned identity ARM; IMDS token theatre at <code>/metadata/identity/oauth2/token</code>.</td>
-      <td>System-assigned; real <code>169.254.169.254</code> bind; workload identity federation.</td>
+      <td>User-assigned + system-assigned ARM; IMDS token theatre.</td>
+      <td>Real <code>169.254.169.254</code>; workload identity federation.</td>
     </tr>
     <tr>
       <td>Subscriptions / RGs</td>
-      <td>Seeded subscription get; resource group create/get/list; resources/providers list lite.</td>
+      <td>Seeded subscription get; RG CRUD; resources/providers lite.</td>
       <td>Subscription create/delete; management groups.</td>
     </tr>
     <tr>
       <td>Authorization</td>
-      <td>Role assignments CRUD + list-by-scope; Owner/Contributor/Reader evaluation; root bypass.</td>
+      <td>Role assignments CRUD + list-by-scope; Owner/Contributor/Reader; root bypass.</td>
       <td>Custom roles; deny assignments; PIM.</td>
     </tr>
     <tr>
       <td align="center" valign="middle">Crypto</td>
       <td>Key Vault</td>
-      <td>Vault ARM lite; sealed secrets/keys; soft-delete/recover theatre (immediate).</td>
-      <td>Certificates; managed HSM; retention timers.</td>
+      <td>Vault ARM; secrets/keys; certificates lite; soft-delete theatre.</td>
+      <td>Managed HSM; retention timers.</td>
     </tr>
     <tr>
-      <td align="center" valign="middle">Data</td>
+      <td rowspan="6" align="center" valign="middle">Data</td>
       <td>Storage</td>
-      <td>Account ARM lite; blob list/put/get/delete; queue send/peek/receive; Table REST lite; Shared Key + SAS.</td>
-      <td>Files/HNS depth; Azurite multi-port drop-in default; OData batch.</td>
+      <td>Blob/queue/table Shared Key + SAS.</td>
+      <td>Files/HNS depth; Azurite multi-port default.</td>
     </tr>
     <tr>
-      <td align="center" valign="middle">Messaging</td>
+      <td>Cosmos DB</td>
+      <td>Account ARM; in-process NoSQL point read/query lite.</td>
+      <td>Multi-API engines; RU/s fidelity.</td>
+    </tr>
+    <tr>
+      <td>Azure SQL</td>
+      <td>Server ARM + connection theatre (DinD-on-Create when engine set).</td>
+      <td>Full T-SQL without nested engine.</td>
+    </tr>
+    <tr>
+      <td>PostgreSQL</td>
+      <td>Flexible server ARM + connection theatre.</td>
+      <td>Full Postgres without nested engine.</td>
+    </tr>
+    <tr>
+      <td>Redis</td>
+      <td>Cache ARM + connection theatre.</td>
+      <td>Redis wire protocol without nested engine.</td>
+    </tr>
+    <tr>
+      <td>ACR</td>
+      <td>Registry ARM + connection theatre.</td>
+      <td>Registry V2 without nested engine.</td>
+    </tr>
+    <tr>
+      <td rowspan="3" align="center" valign="middle">Messaging</td>
       <td>Service Bus</td>
-      <td>Namespace/queue ARM; AMQP lite send/receive on <code>:5672</code>.</td>
-      <td>Topics/sessions premium depth; Event Hubs.</td>
+      <td>Queues + topics/subscriptions; AMQP lite; session/dead-letter theatre.</td>
+      <td>Premium sessions depth; JMS.</td>
     </tr>
     <tr>
-      <td rowspan="2" align="center" valign="middle">App</td>
+      <td>Event Hubs</td>
+      <td>Namespaces/hubs/consumer groups; HTTP message lab.</td>
+      <td>Kafka capture; Schema Registry.</td>
+    </tr>
+    <tr>
+      <td>Event Grid</td>
+      <td>Topics/subscriptions; publish; allowlisted HTTP egress delivery.</td>
+      <td>Advanced filters; dead-letter destinations.</td>
+    </tr>
+    <tr>
+      <td rowspan="3" align="center" valign="middle">Network / compute</td>
+      <td>VNet / NSG / NIC / DNS / LB / AppGW</td>
+      <td>ARM CRUD lite.</td>
+      <td>Dataplane probes; peering depth.</td>
+    </tr>
+    <tr>
+      <td>Virtual Machines</td>
+      <td>ARM lifecycle theatre.</td>
+      <td>Nested guest OS; SSH; runCommand.</td>
+    </tr>
+    <tr>
+      <td>AKS</td>
+      <td>Cluster ARM + kubeconfig theatre (opt-in nested k3s when engine set).</td>
+      <td>Production CNI; host sock.</td>
+    </tr>
+    <tr>
+      <td rowspan="4" align="center" valign="middle">App</td>
       <td>App Configuration</td>
-      <td>Store CRUD; data plane <code>/appconfig/{store}/kv</code> GET/PUT.</td>
-      <td>Feature flags depth; snapshots; geo-replication.</td>
+      <td>KV + feature flags + snapshots lite.</td>
+      <td>Geo-replication; Sync-Token depth.</td>
     </tr>
     <tr>
-      <td>Azure Functions</td>
-      <td>Function App CRUD lite; <code>POST /functions/{name}/invoke</code> mock response.</td>
-      <td>Real workers; Kudu; nested runtime default.</td>
+      <td>Functions</td>
+      <td>ARM + mock invoke (nested opt-in when engine set).</td>
+      <td>Kudu; Durable Functions.</td>
+    </tr>
+    <tr>
+      <td>App Service / Container Apps / Logic / APIM</td>
+      <td>Control-plane lite (staticSites path for App Service to avoid Functions mux clash).</td>
+      <td>Full runtimes / policy engines.</td>
+    </tr>
+    <tr>
+      <td>Front Door / Email / OpenAI / SignalR</td>
+      <td>Fake-edge / capture / allowlisted canned chat / negotiate theatre.</td>
+      <td>Real POP; SMTP; real model inference.</td>
     </tr>
     <tr>
       <td align="center" valign="middle">Observe</td>
-      <td>Monitor / Activity Log</td>
-      <td>Activity Log list; metrics POST/GET theatre.</td>
-      <td>Log Analytics KQL; alert evaluation; App Insights ingest.</td>
+      <td>Monitor / Log Analytics</td>
+      <td>Activity Log; metrics theatre; workspace + KQL subset + ingest.</td>
+      <td>Full KQL; alert evaluation; App Insights ingest.</td>
     </tr>
   </tbody>
 </table>
 
 </details>
 
-## Security posture
+## Defaults
 
-| Control | Default |
-|---------|---------|
+| Setting | Value |
+|---------|--------|
 | Listen | `127.0.0.1:4599` and `127.0.0.1:5672` |
-| Host `docker.sock` | Never |
-| Master key | Outside data root |
-| Auth | Bearer (ARM) / Shared Key+SAS (Storage) / connection string (Service Bus) |
-| AuthZ | Azure RBAC; deny by default; root bypass documented |
+| Docker | No host `docker.sock` (nested DinD opt-in via Compose engine overlay) |
+| Nested compute | Opt-in (`compose.engine.yaml`). Default Functions invoke stays mock |
+| Data ports | Compose publishes `127.0.0.1:4599` and `127.0.0.1:5672` |
+| API replicas | **One process per data root.** Multi-replica against the same SQLite volume is unsupported and can corrupt state |
+| Credentials | Root client id + Bearer token via env injection |
+| At rest | Master key on sibling secrets volume; sensitive columns sealed |
+| Authn | Bearer on ARM / Key Vault / Monitor; Storage Shared Key + SAS; Service Bus connection string / SAS |
 
-Details: [docs/security-defaults.md](docs/security-defaults.md). Configuration: [docs/configuration.md](docs/configuration.md).
+## Architecture
 
-## Docs and tests
+Loopback API only. Nested DinD over TLS is opt-in. No host `docker.sock`.
+
+```mermaid
+flowchart LR
+  Client["Azure CLI / SDK"] --> Port["127.0.0.1:4599"]
+  Client --> AMQP["127.0.0.1:5672"]
+  Port --> API["noctaxris-az API"]
+  AMQP --> API
+  API -.->|"TLS DinD"| Engine["noctaxris-az-engine DinD"]
+```
+
+Full graph and request path: [docs/architecture.md](docs/architecture.md). Security posture: [docs/security-defaults.md](docs/security-defaults.md).
+
+## Docs
 
 | | |
 |---|---|
-| Docs index | [docs/index.md](docs/index.md) |
-| Services | [docs/services/index.md](docs/services/index.md) |
-| Integration suites | [tests/README.md](tests/README.md) (soft-skip when `NOCTAXRIS_AZ_ENDPOINT` unset) |
+| [docs/index.md](docs/index.md) | Architecture, configuration, ops, security posture |
+| [docs/services/](docs/services/index.md) | Per-service APIs, authz notes, CLI smoke |
+| [docs/ops.md](docs/ops.md) | Backup, restore, upgrade, graceful shutdown, CI matrix |
+| [docs/release.md](docs/release.md) | Cutting a release (`v0.2.0`, Hub `latest` / semver) |
+| [tests/README.md](tests/README.md) | SDK and Terraform suites (soft-skip when `NOCTAXRIS_AZ_ENDPOINT` unset) |
 
 ## Contributors
 
-Thanks to everyone contributing on [GitHub](https://github.com/Kyaxris-Labs/Noctaxris-AZ/graphs/contributors).
+[![Contributors](https://contrib.rocks/image?repo=Kyaxris-Labs/Noctaxris-AZ)](https://github.com/Kyaxris-Labs/Noctaxris-AZ/graphs/contributors)
 
 ## License
 

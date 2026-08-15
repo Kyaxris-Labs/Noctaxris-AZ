@@ -31,6 +31,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{name}", h.getIdentity)
 	mux.HandleFunc("DELETE /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{name}", h.deleteIdentity)
 	mux.HandleFunc("GET /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.ManagedIdentity/userAssignedIdentities", h.listIdentities)
+	mux.HandleFunc("PUT /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.ManagedIdentity/systemAssignedIdentities/{name}", h.putSystem)
+	mux.HandleFunc("GET /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.ManagedIdentity/systemAssignedIdentities/{name}", h.getSystem)
+	mux.HandleFunc("DELETE /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.ManagedIdentity/systemAssignedIdentities/{name}", h.deleteSystem)
 	mux.HandleFunc("GET /metadata/identity/oauth2/token", h.imdsToken)
 }
 
@@ -165,6 +168,14 @@ func (h *Handler) imdsToken(w http.ResponseWriter, r *http.Request) {
 		}
 		principalID = objectID
 		resolvedClientID = c
+	default:
+		n, err := h.Store.CountSystemAssignedIdentities()
+		if err == nil && n == 1 {
+			p, c, ok, _ := h.Store.FirstSystemAssignedIdentity()
+			if ok {
+				principalID, resolvedClientID = p, c
+			}
+		}
 	}
 
 	if h.Entra == nil {
@@ -190,6 +201,71 @@ func (h *Handler) imdsToken(w http.ResponseWriter, r *http.Request) {
 		"resource":       resource,
 		"token_type":     "Bearer",
 	})
+}
+
+func (h *Handler) putSystem(w http.ResponseWriter, r *http.Request) {
+	if !h.requireARM(w, r, "Microsoft.ManagedIdentity/systemAssignedIdentities/write") {
+		return
+	}
+	sub, rg, name := r.PathValue("sub"), r.PathValue("rg"), r.PathValue("name")
+	location := "eastus"
+	var body struct {
+		Location string `json:"location"`
+	}
+	_ = json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body)
+	if body.Location != "" {
+		location = body.Location
+	}
+	principalID, clientID := uuid.NewString(), uuid.NewString()
+	if loc, p, c, ok, err := h.Store.GetSystemAssignedIdentity(sub, rg, name); err == nil && ok {
+		location, principalID, clientID = loc, p, c
+	}
+	if err := h.Store.UpsertSystemAssignedIdentity(sub, rg, name, location, principalID, clientID); err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	}
+	id := "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.ManagedIdentity/systemAssignedIdentities/" + name
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id": id, "name": name, "type": "Microsoft.ManagedIdentity/systemAssignedIdentities", "location": location,
+		"properties": map[string]any{"principalId": principalID, "clientId": clientID, "tenantId": h.TenantID, "provisioningState": "Succeeded"},
+	})
+}
+
+func (h *Handler) getSystem(w http.ResponseWriter, r *http.Request) {
+	if !h.requireARM(w, r, "Microsoft.ManagedIdentity/systemAssignedIdentities/read") {
+		return
+	}
+	sub, rg, name := r.PathValue("sub"), r.PathValue("rg"), r.PathValue("name")
+	location, principalID, clientID, ok, err := h.Store.GetSystemAssignedIdentity(sub, rg, name)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	}
+	if !ok {
+		azerrors.NotFound(w, "identity not found")
+		return
+	}
+	id := "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.ManagedIdentity/systemAssignedIdentities/" + name
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id": id, "name": name, "type": "Microsoft.ManagedIdentity/systemAssignedIdentities", "location": location,
+		"properties": map[string]any{"principalId": principalID, "clientId": clientID, "tenantId": h.TenantID, "provisioningState": "Succeeded"},
+	})
+}
+
+func (h *Handler) deleteSystem(w http.ResponseWriter, r *http.Request) {
+	if !h.requireARM(w, r, "Microsoft.ManagedIdentity/systemAssignedIdentities/delete") {
+		return
+	}
+	ok, err := h.Store.DeleteSystemAssignedIdentity(r.PathValue("sub"), r.PathValue("rg"), r.PathValue("name"))
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	}
+	if !ok {
+		azerrors.NotFound(w, "identity not found")
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func writeIMDSError(w http.ResponseWriter, code int, errCode, desc string) {

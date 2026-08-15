@@ -254,3 +254,88 @@ VALUES (?, ?, ?, ?)`, vault, name, sealed, version); err != nil {
 	_ = plain
 	return version, true, nil
 }
+
+// UpsertSystemAssignedIdentity stores a system-assigned identity theatre row.
+func (s *Store) UpsertSystemAssignedIdentity(sub, rg, name, location, principalID, clientID string) error {
+	if location == "" {
+		location = "eastus"
+	}
+	_, err := s.db.Exec(`
+INSERT INTO system_assigned_identities (subscription_id, resource_group, name, location, principal_id, client_id)
+VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT(subscription_id, resource_group, name) DO UPDATE SET location=excluded.location`,
+		sub, rg, name, location, principalID, clientID)
+	return err
+}
+
+// GetSystemAssignedIdentity loads one system-assigned identity.
+func (s *Store) GetSystemAssignedIdentity(sub, rg, name string) (location, principalID, clientID string, ok bool, err error) {
+	err = s.db.QueryRow(`
+SELECT location, principal_id, client_id FROM system_assigned_identities
+WHERE subscription_id = ? AND resource_group = ? AND name = ?`, sub, rg, name).
+		Scan(&location, &principalID, &clientID)
+	if err == sql.ErrNoRows {
+		return "", "", "", false, nil
+	}
+	if err != nil {
+		return "", "", "", false, err
+	}
+	return location, principalID, clientID, true, nil
+}
+
+// DeleteSystemAssignedIdentity deletes a system-assigned identity.
+func (s *Store) DeleteSystemAssignedIdentity(sub, rg, name string) (bool, error) {
+	res, err := s.db.Exec(`DELETE FROM system_assigned_identities WHERE subscription_id = ? AND resource_group = ? AND name = ?`,
+		sub, rg, name)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// ListSystemAssignedIdentities lists system-assigned identities in an RG.
+func (s *Store) ListSystemAssignedIdentities(sub, rg string) ([]struct {
+	Name, Location, PrincipalID, ClientID string
+}, error) {
+	rows, err := s.db.Query(`
+SELECT name, location, principal_id, client_id FROM system_assigned_identities
+WHERE subscription_id = ? AND resource_group = ? ORDER BY name`, sub, rg)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []struct {
+		Name, Location, PrincipalID, ClientID string
+	}
+	for rows.Next() {
+		var row struct {
+			Name, Location, PrincipalID, ClientID string
+		}
+		if err := rows.Scan(&row.Name, &row.Location, &row.PrincipalID, &row.ClientID); err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
+// CountSystemAssignedIdentities returns total system-assigned rows.
+func (s *Store) CountSystemAssignedIdentities() (int, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(1) FROM system_assigned_identities`).Scan(&n)
+	return n, err
+}
+
+// FirstSystemAssignedIdentity returns one system-assigned identity when present.
+func (s *Store) FirstSystemAssignedIdentity() (principalID, clientID string, ok bool, err error) {
+	err = s.db.QueryRow(`SELECT principal_id, client_id FROM system_assigned_identities LIMIT 1`).
+		Scan(&principalID, &clientID)
+	if err == sql.ErrNoRows {
+		return "", "", false, nil
+	}
+	if err != nil {
+		return "", "", false, err
+	}
+	return principalID, clientID, true, nil
+}

@@ -111,14 +111,22 @@ func (s *Service) MintAccessToken(principalID, audience string) (token string, e
 }
 
 // Mount registers Entra routes on mux.
+// OIDC paths use the configured tenant as a literal segment (not /{tenant}/...) so
+// Go ServeMux does not conflict with ARM /subscriptions/... or /blob/.../{blob}.
 func (s *Service) Mount(mux *http.ServeMux) {
-	mux.HandleFunc("GET /{tenant}/v2.0/.well-known/openid-configuration", s.handleOIDCDiscovery)
-	mux.HandleFunc("GET /{tenant}/discovery/v2.0/keys", s.handleJWKS)
-	mux.HandleFunc("POST /{tenant}/oauth2/v2.0/token", s.handleToken)
+	tenant := s.appTenant()
+	mux.HandleFunc("GET /"+tenant+"/v2.0/.well-known/openid-configuration", s.handleOIDCDiscovery)
+	mux.HandleFunc("GET /"+tenant+"/discovery/v2.0/keys", s.handleJWKS)
+	mux.HandleFunc("POST /"+tenant+"/oauth2/v2.0/token", s.handleToken)
+	mux.HandleFunc("GET /v1.0/applications", s.handleListApps)
+	mux.HandleFunc("POST /v1.0/applications", s.handleCreateApp)
+	mux.HandleFunc("GET /v1.0/applications/{appId}", s.handleGetApp)
+	mux.HandleFunc("PATCH /v1.0/applications/{appId}", s.handlePatchApp)
+	mux.HandleFunc("DELETE /v1.0/applications/{appId}", s.handleDeleteApp)
 }
 
 func (s *Service) handleOIDCDiscovery(w http.ResponseWriter, r *http.Request) {
-	tenant := r.PathValue("tenant")
+	tenant := s.appTenant()
 	base := s.base()
 	issuer := base + "/" + tenant + "/v2.0"
 	// Shape mirrors Microsoft identity platform OIDC discovery (lab issuer/base).
@@ -142,10 +150,7 @@ func (s *Service) handleJWKS(w http.ResponseWriter, r *http.Request) {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
 		return
 	}
-	tenant := r.PathValue("tenant")
-	if tenant == "" {
-		tenant = s.TenantID
-	}
+	tenant := s.appTenant()
 	pub := priv.PublicKey
 	n := base64.RawURLEncoding.EncodeToString(pub.N.Bytes())
 	eBytes := make([]byte, 8)
@@ -180,31 +185,55 @@ func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	grant := strings.TrimSpace(r.Form.Get("grant_type"))
-	if grant != "client_credentials" {
-		azerrors.BadRequest(w, "grant_type must be client_credentials")
-		return
+	switch grant {
+	case "client_credentials":
+		clientID := strings.TrimSpace(r.Form.Get("client_id"))
+		if clientID == "" {
+			azerrors.BadRequest(w, "client_id is required")
+			return
+		}
+		audience := strings.TrimSpace(r.Form.Get("scope"))
+		if audience == "" {
+			audience = strings.TrimSpace(r.Form.Get("resource"))
+		}
+		audience = strings.TrimSuffix(audience, "/.default")
+		token, expiresIn, err := s.MintAccessToken(clientID, audience)
+		if err != nil {
+			azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"token_type":     "Bearer",
+			"expires_in":     expiresIn,
+			"ext_expires_in": expiresIn,
+			"access_token":   token,
+		})
+	case "password":
+		username := strings.TrimSpace(r.Form.Get("username"))
+		password := strings.TrimSpace(r.Form.Get("password"))
+		if username == "" || password == "" {
+			azerrors.BadRequest(w, "username and password are required")
+			return
+		}
+		audience := strings.TrimSpace(r.Form.Get("scope"))
+		if audience == "" {
+			audience = strings.TrimSpace(r.Form.Get("resource"))
+		}
+		audience = strings.TrimSuffix(audience, "/.default")
+		token, expiresIn, err := s.MintAccessToken(username, audience)
+		if err != nil {
+			azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"token_type":     "Bearer",
+			"expires_in":     expiresIn,
+			"ext_expires_in": expiresIn,
+			"access_token":   token,
+		})
+	default:
+		azerrors.BadRequest(w, "grant_type must be client_credentials or password")
 	}
-	clientID := strings.TrimSpace(r.Form.Get("client_id"))
-	if clientID == "" {
-		azerrors.BadRequest(w, "client_id is required")
-		return
-	}
-	audience := strings.TrimSpace(r.Form.Get("scope"))
-	if audience == "" {
-		audience = strings.TrimSpace(r.Form.Get("resource"))
-	}
-	audience = strings.TrimSuffix(audience, "/.default")
-	token, expiresIn, err := s.MintAccessToken(clientID, audience)
-	if err != nil {
-		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"token_type":     "Bearer",
-		"expires_in":     expiresIn,
-		"ext_expires_in": expiresIn,
-		"access_token":   token,
-	})
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

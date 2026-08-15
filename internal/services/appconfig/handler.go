@@ -33,6 +33,12 @@ func (h *Handler) Mount(mux *http.ServeMux, principalFrom principalFunc) {
 	mux.HandleFunc("GET /appconfig/{store}/kv/{key}", h.wrap(principalFrom, h.getKV))
 	mux.HandleFunc("PUT /appconfig/{store}/kv/{key}", h.wrap(principalFrom, h.putKV))
 	mux.HandleFunc("GET /appconfig/{store}/kv", h.wrap(principalFrom, h.listKV))
+
+	mux.HandleFunc("PUT /appconfig/{store}/featureflags/{name}", h.wrap(principalFrom, h.putFeatureFlag))
+	mux.HandleFunc("GET /appconfig/{store}/featureflags/{name}", h.wrap(principalFrom, h.getFeatureFlag))
+	mux.HandleFunc("GET /appconfig/{store}/featureflags", h.wrap(principalFrom, h.listFeatureFlags))
+	mux.HandleFunc("PUT /appconfig/{store}/snapshots/{name}", h.wrap(principalFrom, h.putSnapshot))
+	mux.HandleFunc("GET /appconfig/{store}/snapshots/{name}", h.wrap(principalFrom, h.getSnapshot))
 }
 
 type handlerFunc func(w http.ResponseWriter, r *http.Request, p authn.Principal)

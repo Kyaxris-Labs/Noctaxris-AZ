@@ -30,6 +30,11 @@ func (h *Handler) Register(mux *http.ServeMux) {
 
 	mux.HandleFunc("POST /servicebus/{ns}/queues/{q}/messages", h.postMessage)
 	mux.HandleFunc("GET /servicebus/{ns}/queues/{q}/messages", h.getMessage)
+
+	mux.HandleFunc("PUT /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.ServiceBus/namespaces/{ns}/topics/{topic}", h.putTopic)
+	mux.HandleFunc("PUT /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.ServiceBus/namespaces/{ns}/topics/{topic}/subscriptions/{subName}", h.putSubscription)
+	mux.HandleFunc("POST /servicebus/{ns}/topics/{t}/subscriptions/{s}/messages", h.postTopicMessage)
+	mux.HandleFunc("GET /servicebus/{ns}/topics/{t}/subscriptions/{s}/messages", h.getTopicMessage)
 }
 
 func (h *Handler) putNamespace(w http.ResponseWriter, r *http.Request) {
@@ -180,7 +185,9 @@ func (h *Handler) postMessage(w http.ResponseWriter, r *http.Request) {
 		azerrors.BadRequest(w, err.Error())
 		return
 	}
-	if err := h.Store.EnqueueSB(ns, q, body); err != nil {
+	sessionID := r.URL.Query().Get("sessionId")
+	deadLetter := r.URL.Query().Get("deadLetter") == "1"
+	if err := h.Store.EnqueueSBWithMeta(ns, q, body, sessionID, deadLetter); err != nil {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
 		return
 	}
@@ -193,7 +200,9 @@ func (h *Handler) getMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	ns := r.PathValue("ns")
 	q := r.PathValue("q")
-	body, ok, err := h.Store.DequeueSB(ns, q)
+	sessionID := r.URL.Query().Get("sessionId")
+	deadLetter := r.URL.Query().Get("deadLetter") == "1"
+	body, ok, err := h.Store.DequeueSBWithMeta(ns, q, sessionID, deadLetter)
 	if err != nil {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
 		return

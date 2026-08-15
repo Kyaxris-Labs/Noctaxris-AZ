@@ -28,6 +28,11 @@ func (h *Handler) Mount(mux *http.ServeMux, principalFrom principalFunc) {
 		h.wrap(principalFrom, h.writeMetric))
 	mux.HandleFunc("GET /subscriptions/{sub}/providers/Microsoft.Insights/metrics",
 		h.wrap(principalFrom, h.listMetrics))
+	base := "/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.OperationalInsights/workspaces"
+	mux.HandleFunc("PUT "+base+"/{name}", h.wrap(principalFrom, h.putWorkspace))
+	mux.HandleFunc("GET "+base+"/{name}", h.wrap(principalFrom, h.getWorkspace))
+	mux.HandleFunc("POST /loganalytics/{workspace}/query", h.wrap(principalFrom, h.queryKQL))
+	mux.HandleFunc("POST /loganalytics/{workspace}/ingest/{table}", h.wrap(principalFrom, h.ingestRows))
 }
 
 type handlerFunc func(w http.ResponseWriter, r *http.Request, p authn.Principal)
