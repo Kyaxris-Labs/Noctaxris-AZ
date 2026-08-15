@@ -38,7 +38,7 @@ Repository secrets for Hub publish (never commit): `DOCKERHUB_USERNAME`, `DOCKER
 
 1. Stop the API / Compose.
 2. Take a backup (above).
-3. Pull a Hub tag (`docker pull kyaxris/noctaxris-az:1.0.0`) or rebuild.
+3. Pull a Hub tag (`docker pull kyaxris/noctaxris-az:1.0.1`) or rebuild.
 4. Start and confirm `/_noctaxris-az/ready` returns ready (optional: `/_noctaxris-az/version`).
 
 Schema changes are additive (`CREATE TABLE IF NOT EXISTS`). There is no down-migration.
