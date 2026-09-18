@@ -21,6 +21,7 @@ func (s *Server) registerIdentity() {
 		Store:          s.store,
 		Authz:          s.authz,
 		SubscriptionID: s.cfg.SubscriptionID,
+		TenantID:       s.cfg.TenantID,
 		PrincipalFrom:  PrincipalFromContext,
 		Now:            s.effectiveNow,
 	}).Mount(s.mux)

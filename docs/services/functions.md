@@ -18,8 +18,9 @@ Set `properties.labMockResponse` on create (JSON string or plain text). Invoke r
 
 ## Authz
 
+- ARM Function App CRUD: token `aud` must be `https://management.azure.com` or `https://management.core.windows.net` (Graph `aud` is HTTP 403 `InvalidAuthenticationTokenAudience`). Root Bearer skips audience.
 - `Microsoft.Web/sites/read|write|delete`
-- `Microsoft.Web/sites/functions/write` for invoke
+- `Microsoft.Web/sites/functions/write` for invoke (Bearer; ARM `aud` is not required)
 
 ## Detailed actions
 

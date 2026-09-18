@@ -18,11 +18,11 @@ import (
 
 // Handler serves Key Vault ARM and data-plane routes.
 type Handler struct {
-	Store           *store.Store
-	Auth            *authn.Authenticator
-	Authz           *authz.Evaluator
+	Store            *store.Store
+	Auth             *authn.Authenticator
+	Authz            *authz.Evaluator
 	AuthorizationURL string
-	Resource        string
+	Resource         string
 }
 
 // Register mounts Key Vault routes on mux.
@@ -168,8 +168,8 @@ func (h *Handler) deleteSecret(w http.ResponseWriter, r *http.Request) {
 	}
 	// Lab soft-delete is immediate (no retention timer).
 	writeJSON(w, http.StatusOK, map[string]any{
-		"recoveryId": "/keyvault/" + vault + "/deletedsecrets/" + name,
-		"deletedDate": time.Now().UTC().Format(time.RFC3339),
+		"recoveryId":         "/keyvault/" + vault + "/deletedsecrets/" + name,
+		"deletedDate":        time.Now().UTC().Format(time.RFC3339),
 		"scheduledPurgeDate": time.Now().UTC().Format(time.RFC3339),
 	})
 }
@@ -403,6 +403,10 @@ func (h *Handler) requireBearerARM(w http.ResponseWriter, r *http.Request, actio
 	p, err := h.Auth.AuthenticateRequest(r)
 	if err != nil {
 		azerrors.Unauthenticated(w, "")
+		return false
+	}
+	if !p.AllowsARM() {
+		azerrors.InvalidAuthenticationTokenAudience(w, "")
 		return false
 	}
 	if h.Authz == nil {

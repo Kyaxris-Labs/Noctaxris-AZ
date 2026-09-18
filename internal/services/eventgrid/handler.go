@@ -48,7 +48,7 @@ func (h *Handler) putTopic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"id": "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.EventGrid/topics/" + name,
+		"id":   "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.EventGrid/topics/" + name,
 		"name": name, "type": "Microsoft.EventGrid/topics", "location": location,
 		"properties": map[string]any{"provisioningState": "Succeeded"},
 	})
@@ -69,7 +69,7 @@ func (h *Handler) getTopic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"id": "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.EventGrid/topics/" + name,
+		"id":   "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.EventGrid/topics/" + name,
 		"name": name, "type": "Microsoft.EventGrid/topics", "location": location,
 		"properties": map[string]any{"provisioningState": "Succeeded"},
 	})
@@ -158,6 +158,10 @@ func (h *Handler) require(w http.ResponseWriter, r *http.Request, action string)
 	p, err := h.Auth.AuthenticateRequest(r)
 	if err != nil {
 		azerrors.Unauthenticated(w, "")
+		return false
+	}
+	if !p.AllowsARM() {
+		azerrors.InvalidAuthenticationTokenAudience(w, "")
 		return false
 	}
 	scope := "/subscriptions/" + r.PathValue("sub") + "/resourceGroups/" + r.PathValue("rg")

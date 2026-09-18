@@ -14,12 +14,13 @@ ARM vault CRUD lite plus data-plane secrets and keys with sealed storage.
 | Data plane | `/keyvault/{name}/secrets/{secret}` , `/keyvault/{name}/keys/{key}` |
 | Soft-delete | `DELETE /keyvault/{name}/secrets/{secret}` ; `POST /keyvault/{name}/deletedsecrets/{secret}/recover` |
 
-Bearer required on data plane (WWW-Authenticate on 401).
+Bearer required on data plane (WWW-Authenticate on 401). Data plane resource is `https://vault.azure.net` (not ARM `aud`).
 
 ## Authz
 
+- ARM vault CRUD: token `aud` must be `https://management.azure.com` or `https://management.core.windows.net` (Graph `aud` is HTTP 403 `InvalidAuthenticationTokenAudience`). Root Bearer skips audience.
 - `Microsoft.KeyVault/vaults/read|write`
-- Data plane secret/key access under vault scope for root or granted principals
+- Data plane secret/key access under vault scope for a valid Bearer (ARM `aud` is not required)
 
 ## Detailed actions
 

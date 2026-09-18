@@ -19,8 +19,9 @@ Optional `?label=` on KV get/put. Response fields: `key`, `label`, `value`, `eta
 
 ## Authz
 
+- ARM store CRUD: token `aud` must be `https://management.azure.com` or `https://management.core.windows.net` (Graph `aud` is HTTP 403 `InvalidAuthenticationTokenAudience`). Root Bearer skips audience.
 - `Microsoft.AppConfiguration/configurationStores/read|write|delete`
-- `Microsoft.AppConfiguration/configurationStores/keyValues/read|write`
+- Data plane KV / feature flags / snapshots: `Microsoft.AppConfiguration/configurationStores/keyValues/read|write` (Bearer; ARM `aud` is not required)
 
 ## Detailed actions
 

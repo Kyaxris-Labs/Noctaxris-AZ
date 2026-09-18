@@ -20,6 +20,7 @@ func TestWriteHelpers(t *testing.T) {
 		{"unauth msg", func(w http.ResponseWriter) { azerrors.Unauthenticated(w, "nope") }, 401, "AuthenticationFailed"},
 		{"forbidden default", func(w http.ResponseWriter) { azerrors.Forbidden(w, "") }, 403, "AuthorizationFailed"},
 		{"forbidden msg", func(w http.ResponseWriter) { azerrors.Forbidden(w, "no") }, 403, "AuthorizationFailed"},
+		{"wrong audience", func(w http.ResponseWriter) { azerrors.InvalidAuthenticationTokenAudience(w, "") }, 403, "InvalidAuthenticationTokenAudience"},
 		{"notfound", func(w http.ResponseWriter) { azerrors.NotFound(w, "gone") }, 404, "ResourceNotFound"},
 		{"bad", func(w http.ResponseWriter) { azerrors.BadRequest(w, "bad") }, 400, "BadRequest"},
 		{"conflict", func(w http.ResponseWriter) { azerrors.Conflict(w, "c") }, 409, "Conflict"},

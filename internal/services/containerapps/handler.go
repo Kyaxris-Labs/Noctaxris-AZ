@@ -193,6 +193,10 @@ func (h *Handler) require(w http.ResponseWriter, r *http.Request, action string)
 		azerrors.Unauthenticated(w, "")
 		return false
 	}
+	if !p.AllowsARM() {
+		azerrors.InvalidAuthenticationTokenAudience(w, "")
+		return false
+	}
 	scope := "/subscriptions/" + r.PathValue("sub") + "/resourceGroups/" + r.PathValue("rg")
 	if h.Authz == nil {
 		return p.IsRoot

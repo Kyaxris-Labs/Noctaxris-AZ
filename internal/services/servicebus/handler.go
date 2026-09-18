@@ -65,7 +65,7 @@ func (h *Handler) putNamespace(w http.ResponseWriter, r *http.Request) {
 		"type":     "Microsoft.ServiceBus/namespaces",
 		"location": location,
 		"properties": map[string]any{
-			"provisioningState": "Succeeded",
+			"provisioningState":  "Succeeded",
 			"serviceBusEndpoint": amqpEndpoint(h.AMQPListenAddr),
 		},
 	})
@@ -243,6 +243,10 @@ func (h *Handler) requireBearerARM(w http.ResponseWriter, r *http.Request, actio
 	p, err := h.Auth.AuthenticateRequest(r)
 	if err != nil {
 		azerrors.Unauthenticated(w, "")
+		return false
+	}
+	if !p.AllowsARM() {
+		azerrors.InvalidAuthenticationTokenAudience(w, "")
 		return false
 	}
 	if h.Authz == nil {

@@ -16,7 +16,7 @@ func (h *Handler) putFeatureFlag(w http.ResponseWriter, r *http.Request, p authn
 		return
 	}
 	scope := storeResourceID(st.SubscriptionID, st.ResourceGroup, st.Name)
-	if err := h.require(p, "Microsoft.AppConfiguration/configurationStores/keyValues/write", scope); err != nil {
+	if err := h.requireAction(p, "Microsoft.AppConfiguration/configurationStores/keyValues/write", scope); err != nil {
 		writeAuthz(w, err)
 		return
 	}
@@ -45,7 +45,7 @@ func (h *Handler) getFeatureFlag(w http.ResponseWriter, r *http.Request, p authn
 		return
 	}
 	scope := storeResourceID(st.SubscriptionID, st.ResourceGroup, st.Name)
-	if err := h.require(p, "Microsoft.AppConfiguration/configurationStores/keyValues/read", scope); err != nil {
+	if err := h.requireAction(p, "Microsoft.AppConfiguration/configurationStores/keyValues/read", scope); err != nil {
 		writeAuthz(w, err)
 		return
 	}
@@ -71,7 +71,7 @@ func (h *Handler) listFeatureFlags(w http.ResponseWriter, r *http.Request, p aut
 		return
 	}
 	scope := storeResourceID(st.SubscriptionID, st.ResourceGroup, st.Name)
-	if err := h.require(p, "Microsoft.AppConfiguration/configurationStores/keyValues/read", scope); err != nil {
+	if err := h.requireAction(p, "Microsoft.AppConfiguration/configurationStores/keyValues/read", scope); err != nil {
 		writeAuthz(w, err)
 		return
 	}
@@ -97,7 +97,7 @@ func (h *Handler) putSnapshot(w http.ResponseWriter, r *http.Request, p authn.Pr
 		return
 	}
 	scope := storeResourceID(st.SubscriptionID, st.ResourceGroup, st.Name)
-	if err := h.require(p, "Microsoft.AppConfiguration/configurationStores/keyValues/write", scope); err != nil {
+	if err := h.requireAction(p, "Microsoft.AppConfiguration/configurationStores/keyValues/write", scope); err != nil {
 		writeAuthz(w, err)
 		return
 	}
@@ -116,7 +116,7 @@ func (h *Handler) getSnapshot(w http.ResponseWriter, r *http.Request, p authn.Pr
 		return
 	}
 	scope := storeResourceID(st.SubscriptionID, st.ResourceGroup, st.Name)
-	if err := h.require(p, "Microsoft.AppConfiguration/configurationStores/keyValues/read", scope); err != nil {
+	if err := h.requireAction(p, "Microsoft.AppConfiguration/configurationStores/keyValues/read", scope); err != nil {
 		writeAuthz(w, err)
 		return
 	}

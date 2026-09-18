@@ -46,6 +46,13 @@ func (h *Handler) wrap(principalFrom principalFunc, fn handlerFunc) http.Handler
 }
 
 func (h *Handler) require(p authn.Principal, action, scope string) error {
+	if !p.AllowsARM() {
+		return errAudience
+	}
+	return h.requireAction(p, action, scope)
+}
+
+func (h *Handler) requireAction(p authn.Principal, action, scope string) error {
 	ok, err := h.Authz.Evaluate(p.ID, p.IsRoot, action, scope)
 	if err != nil {
 		return err
@@ -57,6 +64,7 @@ func (h *Handler) require(p authn.Principal, action, scope string) error {
 }
 
 var errDenied = fmt.Errorf("permission denied")
+var errAudience = fmt.Errorf("invalid authentication token audience")
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -65,6 +73,10 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 }
 
 func writeAuthz(w http.ResponseWriter, err error) {
+	if err == errAudience {
+		azerrors.InvalidAuthenticationTokenAudience(w, "")
+		return
+	}
 	if err == errDenied {
 		azerrors.Forbidden(w, "")
 		return
@@ -192,7 +204,7 @@ func (h *Handler) invoke(w http.ResponseWriter, r *http.Request, p authn.Princip
 		return
 	}
 	scope := siteResourceID(row.SubscriptionID, row.ResourceGroup, row.Name)
-	if err := h.require(p, "Microsoft.Web/sites/functions/write", scope); err != nil {
+	if err := h.requireAction(p, "Microsoft.Web/sites/functions/write", scope); err != nil {
 		writeAuthz(w, err)
 		return
 	}

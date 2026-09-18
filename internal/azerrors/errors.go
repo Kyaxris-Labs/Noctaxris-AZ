@@ -51,6 +51,14 @@ func Forbidden(w http.ResponseWriter, message string) {
 	WriteARM(w, http.StatusForbidden, "AuthorizationFailed", message)
 }
 
+// InvalidAuthenticationTokenAudience writes ARM 403 for a token minted for another API.
+func InvalidAuthenticationTokenAudience(w http.ResponseWriter, message string) {
+	if message == "" {
+		message = "The access token has been obtained from wrong audience or resource. It should match https://management.azure.com or https://management.core.windows.net."
+	}
+	WriteARM(w, http.StatusForbidden, "InvalidAuthenticationTokenAudience", message)
+}
+
 // NotFound writes HTTP 404.
 func NotFound(w http.ResponseWriter, message string) {
 	WriteARM(w, http.StatusNotFound, "ResourceNotFound", message)

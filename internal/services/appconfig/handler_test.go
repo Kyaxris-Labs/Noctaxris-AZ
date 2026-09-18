@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	testSub = "00000000-0000-0000-0000-000000000002"
-	testRG  = "rg1"
+	testSub    = "00000000-0000-0000-0000-000000000002"
+	testRG     = "rg1"
 	testTenant = "00000000-0000-0000-0000-000000000001"
 )
 
@@ -100,7 +100,7 @@ func TestAppConfigStoreAndKV(t *testing.T) {
 
 func TestAppConfigAuthzDeny(t *testing.T) {
 	mux := mountAppConfig(t, func(*http.Request) (authn.Principal, bool) {
-		return authn.Principal{ID: "nobody", IsRoot: false}, true
+		return authn.Principal{ID: "nobody", IsRoot: false, Audiences: []string{authn.AudienceARM}}, true
 	})
 	base := "/subscriptions/" + testSub + "/resourceGroups/" + testRG +
 		"/providers/Microsoft.AppConfiguration/configurationStores/cfg1"

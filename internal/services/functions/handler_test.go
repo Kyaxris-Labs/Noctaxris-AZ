@@ -92,7 +92,7 @@ func TestFunctionAppCRUDAndInvoke(t *testing.T) {
 
 func TestFunctionAppAuthzDeny(t *testing.T) {
 	mux := mountFunctions(t, func(*http.Request) (authn.Principal, bool) {
-		return authn.Principal{ID: "nobody", IsRoot: false}, true
+		return authn.Principal{ID: "nobody", IsRoot: false, Audiences: []string{authn.AudienceARM}}, true
 	})
 	base := "/subscriptions/" + testSub + "/resourceGroups/" + testRG + "/providers/Microsoft.Web/sites/fn1"
 	req := httptest.NewRequest(http.MethodPut, base, bytes.NewReader([]byte(`{"location":"eastus"}`)))

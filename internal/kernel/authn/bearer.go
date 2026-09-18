@@ -15,8 +15,10 @@ var ErrUnauthenticated = errors.New("unauthenticated")
 
 // Principal is an authenticated caller.
 type Principal struct {
-	ID     string
-	IsRoot bool
+	ID        string
+	IsRoot    bool
+	Audiences []string
+	Issuer    string
 }
 
 // TokenLookup resolves a registered access token hash to a principal id.
@@ -37,7 +39,6 @@ var oauthTokenPath = regexp.MustCompile(`(?i)^/[^/]+/oauth2/(v2\.0/)?token$`)
 var oauthDeviceCodePath = regexp.MustCompile(`(?i)^/[^/]+/oauth2/(v2\.0/)?devicecode$`)
 var oidcDiscoveryPath = regexp.MustCompile(`(?i)^/[^/]+(/v2\.0)?/\.well-known/openid-configuration$`)
 var jwksPath = regexp.MustCompile(`(?i)^/[^/]+/discovery(/v2\.0)?/keys$`)
-var soapPath = regexp.MustCompile(`(?i)^/provisioningwebservice\.svc$`)
 
 // AuthenticateRequest extracts and validates the Bearer token from r.
 func (a *Authenticator) AuthenticateRequest(r *http.Request) (Principal, error) {
@@ -72,7 +73,6 @@ func IsPublicPath(path string) bool {
 		return oauthTokenPath.MatchString(path) ||
 			oauthDeviceCodePath.MatchString(path) ||
 			oidcDiscoveryPath.MatchString(path) ||
-			jwksPath.MatchString(path) ||
-			soapPath.MatchString(path)
+			jwksPath.MatchString(path)
 	}
 }

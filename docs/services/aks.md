@@ -2,6 +2,10 @@
 
 Status: **lab**
 
+## Authz
+
+- Bearer required. Token `aud` must be `https://management.azure.com` or `https://management.core.windows.net` (Graph `aud` is HTTP 403 `InvalidAuthenticationTokenAudience`). Root Bearer skips audience.
+
 ## Detailed actions
 
 - ARM CRUD for `Microsoft.ContainerService/managedClusters` (lab)

@@ -73,7 +73,6 @@ func TestAuthenticateRootTokenAndPublicPaths(t *testing.T) {
 		"/tenant/v2.0/.well-known/openid-configuration",
 		"/tenant/.well-known/openid-configuration",
 		"/tenant/discovery/v2.0/keys",
-		"/provisioningwebservice.svc",
 		"/_noctaxris-az/oidc-lab/.well-known/openid-configuration",
 		"/_noctaxris-az/oidc-lab/keys",
 	} {
@@ -83,6 +82,9 @@ func TestAuthenticateRootTokenAndPublicPaths(t *testing.T) {
 	}
 	if authn.IsPublicPath("/subscriptions/x") {
 		t.Fatal("private path")
+	}
+	if authn.IsPublicPath("/provisioningwebservice.svc") {
+		t.Fatal("soap is not public")
 	}
 	if authn.HashToken("a") == authn.HashToken("b") {
 		t.Fatal("hash collision")
@@ -190,6 +192,9 @@ func TestSharedKeyAndSAS(t *testing.T) {
 	if authn.HasSAS(httptest.NewRequest(http.MethodGet, "/", nil)) {
 		t.Fatal("no sas")
 	}
+	if authn.VerifyStorageSAS("not-base64-key", req, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)) {
+		t.Fatal("presence is not a verified SAS")
+	}
 
 	ctx := authn.WithPrincipal(context.Background(), authn.Principal{ID: "p", IsRoot: true})
 	p, ok := authn.PrincipalFromContext(ctx)
@@ -199,5 +204,143 @@ func TestSharedKeyAndSAS(t *testing.T) {
 	_, ok = authn.PrincipalFromContext(context.Background())
 	if ok {
 		t.Fatal("empty ctx")
+	}
+}
+
+func TestVerifyStorageSASExpiryPermissionsAndHMAC(t *testing.T) {
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	key := base64.StdEncoding.EncodeToString([]byte("sas-account-key"))
+	sign := func(method, path, sp, st, se string) *http.Request {
+		t.Helper()
+		u := path + "?sp=" + sp + "&se=" + se
+		if st != "" {
+			u = path + "?sp=" + sp + "&st=" + st + "&se=" + se
+		}
+		req := httptest.NewRequest(method, u, nil)
+		q := req.URL.Query()
+		sts := authn.StorageSASStringToSign(req)
+		raw, err := base64.StdEncoding.DecodeString(key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		mac := hmac.New(sha256.New, raw)
+		_, _ = mac.Write([]byte(sts))
+		q.Set("sig", base64.StdEncoding.EncodeToString(mac.Sum(nil)))
+		req.URL.RawQuery = q.Encode()
+		return req
+	}
+
+	valid := sign(http.MethodGet, "/blob/acct1/c1/hello.txt", "r", "", "2026-06-02T00:00:00Z")
+	if !authn.VerifyStorageSAS(key, valid, now) {
+		t.Fatal("valid read SAS")
+	}
+	if !authn.HasSAS(valid) {
+		t.Fatal("HasSAS on verified token")
+	}
+
+	expired := sign(http.MethodGet, "/blob/acct1/c1/hello.txt", "r", "", "2026-06-01T12:00:00Z")
+	if authn.VerifyStorageSAS(key, expired, now) {
+		t.Fatal("expiry equal to now must deny")
+	}
+	past := sign(http.MethodGet, "/blob/acct1/c1/hello.txt", "r", "", "2020-01-01T00:00:00Z")
+	if authn.VerifyStorageSAS(key, past, now) {
+		t.Fatal("elapsed se")
+	}
+
+	garbage := httptest.NewRequest(http.MethodGet, "/blob/acct1/c1/hello.txt?sig=x&se=1", nil)
+	if !authn.HasSAS(garbage) {
+		t.Fatal("garbage still has SAS query shape")
+	}
+	if authn.VerifyStorageSAS(key, garbage, now) {
+		t.Fatal("unparseable se")
+	}
+	if authn.VerifyStorageSAS("", valid, now) {
+		t.Fatal("empty account key")
+	}
+	if authn.VerifyStorageSAS(key, httptest.NewRequest(http.MethodGet, "/blob/acct1/c1/b?sp=r&se=2026-06-02T00:00:00Z", nil), now) {
+		t.Fatal("missing sig")
+	}
+
+	write := httptest.NewRequest(http.MethodPut, "/blob/acct1/c1/hello.txt?sp=r&se=2026-06-02T00:00:00Z", nil)
+	q := write.URL.Query()
+	sts := authn.StorageSASStringToSign(write)
+	raw, _ := base64.StdEncoding.DecodeString(key)
+	mac := hmac.New(sha256.New, raw)
+	_, _ = mac.Write([]byte(sts))
+	q.Set("sig", base64.StdEncoding.EncodeToString(mac.Sum(nil)))
+	write.URL.RawQuery = q.Encode()
+	if authn.VerifyStorageSAS(key, write, now) {
+		t.Fatal("sp=r must not allow PUT")
+	}
+
+	futureStart := sign(http.MethodGet, "/blob/acct1/c1/hello.txt", "r", "2026-06-03T00:00:00Z", "2026-06-04T00:00:00Z")
+	if authn.VerifyStorageSAS(key, futureStart, now) {
+		t.Fatal("st in the future")
+	}
+
+	badSig := sign(http.MethodGet, "/blob/acct1/c1/hello.txt", "r", "", "2026-06-02T00:00:00Z")
+	q = badSig.URL.Query()
+	q.Set("sig", "AAAA")
+	badSig.URL.RawQuery = q.Encode()
+	if authn.VerifyStorageSAS(key, badSig, now) {
+		t.Fatal("garbage sig")
+	}
+
+	if !authn.SASPermits("l", http.MethodGet, "/blob/acct1/c1") {
+		t.Fatal("list")
+	}
+	if authn.SASPermits("", http.MethodGet, "/blob/acct1/c1/b") {
+		t.Fatal("empty sp")
+	}
+	if _, ok := authn.ParseSASExpiry("1"); ok {
+		t.Fatal("unix-like se is not a Storage timestamp")
+	}
+}
+
+func TestAudienceAllowAndHashLookup(t *testing.T) {
+	graph := authn.Principal{ID: "u", Audiences: []string{authn.AudienceGraph}, Issuer: "http://127.0.0.1:4599/tid/v2.0"}
+	if !graph.AllowsGraph() || graph.AllowsARM() {
+		t.Fatal("graph aud")
+	}
+	arm := authn.Principal{ID: "u", Audiences: []string{authn.AudienceARM + "/"}, Issuer: "http://127.0.0.1:4599/tid/v2.0"}
+	if !arm.AllowsARM() || arm.AllowsGraph() {
+		t.Fatal("arm aud")
+	}
+	iss := "http://127.0.0.1:4599/tid/v2.0"
+	issuerAud := authn.Principal{ID: "u", Audiences: []string{iss}, Issuer: iss}
+	if issuerAud.AllowsGraph() || issuerAud.AllowsARM() {
+		t.Fatal("issuer as aud")
+	}
+	if (authn.Principal{ID: "u"}).AllowsGraph() || (authn.Principal{ID: "u"}).AllowsARM() {
+		t.Fatal("empty aud")
+	}
+	if !(authn.Principal{ID: "root", IsRoot: true}).AllowsGraph() || !(authn.Principal{ID: "root", IsRoot: true}).AllowsARM() {
+		t.Fatal("root")
+	}
+
+	key, err := rsa.GenerateKey(rand.Reader, 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	tok, err := authn.EncodeRS256JWT(key, "kid1", map[string]any{
+		"aud": authn.AudienceARM,
+		"iss": "http://127.0.0.1:4599/tid/v2.0",
+		"oid": "user1",
+		"exp": float64(now.Add(time.Hour).Unix()),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &authn.Authenticator{Tokens: tokenStore{id: "user1", ok: true}}
+	p, err := a.AuthenticateToken(tok)
+	if err != nil || p.ID != "user1" {
+		t.Fatalf("%+v %v", p, err)
+	}
+	if !p.AllowsARM() || p.AllowsGraph() {
+		t.Fatalf("hash lookup skipped aud: %+v", p)
+	}
+	if _, err := a.AuthenticateToken("not.a.jwt"); err != authn.ErrUnauthenticated {
+		t.Fatalf("unparseable jwt on hash hit: %v", err)
 	}
 }

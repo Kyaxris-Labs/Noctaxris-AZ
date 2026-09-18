@@ -18,7 +18,7 @@ Azure RBAC role assignments lite on ARM scopes.
 
 ## Authz
 
-- Bearer required
+- Bearer required. Token `aud` must be `https://management.azure.com` or `https://management.core.windows.net` (Graph `aud` is HTTP 403 `InvalidAuthenticationTokenAudience`). Root Bearer skips audience.
 - Role assignment writes require Owner (or root bypass)
 - Contributor cannot mutate role assignments
 

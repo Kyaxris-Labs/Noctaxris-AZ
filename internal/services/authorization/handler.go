@@ -52,6 +52,10 @@ func (s *Service) require(w http.ResponseWriter, r *http.Request, action, scope 
 		azerrors.Unauthenticated(w, "")
 		return authn.Principal{}, false
 	}
+	if !p.AllowsARM() {
+		azerrors.InvalidAuthenticationTokenAudience(w, "")
+		return authn.Principal{}, false
+	}
 	allowed, err := s.Authz.Evaluate(p.ID, p.IsRoot, action, scope)
 	if err != nil {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())

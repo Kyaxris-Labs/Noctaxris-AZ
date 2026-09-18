@@ -35,7 +35,11 @@ func (a *Authenticator) AuthenticateToken(token string) (Principal, error) {
 			return Principal{}, err
 		}
 		if ok && id != "" {
-			return Principal{ID: id, IsRoot: false}, nil
+			p, aerr := attachJWTClaims(Principal{ID: id, IsRoot: false}, token)
+			if aerr != nil {
+				return Principal{}, ErrUnauthenticated
+			}
+			return p, nil
 		}
 	}
 	if a.JWT != nil {
@@ -44,10 +48,27 @@ func (a *Authenticator) AuthenticateToken(token string) (Principal, error) {
 			return Principal{}, err
 		}
 		if ok && id != "" {
-			return Principal{ID: id, IsRoot: false}, nil
+			p, aerr := attachJWTClaims(Principal{ID: id, IsRoot: false}, token)
+			if aerr != nil {
+				return Principal{}, ErrUnauthenticated
+			}
+			return p, nil
 		}
 	}
 	return Principal{}, ErrUnauthenticated
+}
+
+func attachJWTClaims(p Principal, token string) (Principal, error) {
+	if strings.Count(token, ".") != 2 {
+		return p, nil
+	}
+	_, claims, err := DecodeJWTUnverified(token)
+	if err != nil {
+		return Principal{}, err
+	}
+	p.Audiences = ClaimAudiences(claims)
+	p.Issuer = ClaimString(claims, "iss")
+	return p, nil
 }
 
 // EncodeRS256JWT builds a compact RS256 JWT.
@@ -157,6 +178,72 @@ func ClaimString(claims map[string]any, key string) string {
 		return strings.TrimSpace(v)
 	}
 	return ""
+}
+
+// ClaimAudiences returns aud as a string slice (JWT aud may be a string or array).
+func ClaimAudiences(claims map[string]any) []string {
+	if claims == nil {
+		return nil
+	}
+	switch v := claims["aud"].(type) {
+	case string:
+		s := strings.TrimSpace(v)
+		if s == "" {
+			return nil
+		}
+		return []string{s}
+	case []any:
+		var out []string
+		for _, item := range v {
+			s, ok := item.(string)
+			if !ok {
+				continue
+			}
+			s = strings.TrimSpace(s)
+			if s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+// ClaimUnix returns a numeric time claim as Unix seconds.
+func ClaimUnix(claims map[string]any, key string) (int64, bool) {
+	if claims == nil {
+		return 0, false
+	}
+	raw, ok := claims[key]
+	if !ok {
+		return 0, false
+	}
+	switch v := raw.(type) {
+	case float64:
+		if v == 0 {
+			return 0, false
+		}
+		return int64(v), true
+	case json.Number:
+		n, err := v.Int64()
+		if err != nil || n == 0 {
+			return 0, false
+		}
+		return n, true
+	case int64:
+		if v == 0 {
+			return 0, false
+		}
+		return v, true
+	case int:
+		if v == 0 {
+			return 0, false
+		}
+		return int64(v), true
+	default:
+		return 0, false
+	}
 }
 
 // PrincipalFromJWTClaims picks oid, then sub, then appid/azp.
