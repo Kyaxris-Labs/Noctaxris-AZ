@@ -4,7 +4,7 @@ Blob, queue, and table endpoints with Shared Key / SAS on the shared HTTP listen
 
 ## Status
 
-**lab** — Storage account ARM lite; blob put/get/list/delete; queue create/send/peek/receive (visibility timeout lite); table endpoint advertised; Shared Key and SAS.
+**lab**: Storage account ARM lite; blob put/get/list/delete; queue create/send/peek/receive (visibility timeout lite); table endpoint advertised; Shared Key HMAC and SAS HMAC (`se`, `sp`).
 
 ## Wire protocol
 
@@ -15,12 +15,13 @@ Blob, queue, and table endpoints with Shared Key / SAS on the shared HTTP listen
 | Queue | `/queue/{account}/...` |
 | Table | `/table/{account}/...` (see [table.md](table.md)) |
 
-Auth: `Authorization: SharedKey ...` or SAS query. Well-known Azurite `devstoreaccount1` key refused on non-loopback listen.
+Auth: ARM account CRUD uses Bearer. Blob/queue/table use `Authorization: SharedKey ...` or SAS query HMAC. Well-known Azurite `devstoreaccount1` key refused on non-loopback listen.
 
 ## Authz / authn
 
-- Shared Key HMAC theatre for account key
-- SAS token query validation lite
+- ARM storage account: token `aud` must be `https://management.azure.com` or `https://management.core.windows.net` (Graph `aud` is HTTP 403 `InvalidAuthenticationTokenAudience`). Root Bearer skips audience.
+- Shared Key HMAC-SHA256 of method + path with the storage account key
+- SAS query HMAC-SHA256 of `sp`, `st`, `se`, and path with the same account key. `se` is expiry (expired or unparseable is denied). `sp` is permissions (GET blob needs `r`, list needs `l`, PUT needs `w`/`c`/`a`, DELETE needs `d`). Missing account, unknown account, or garbage `sig` is HTTP 403 `AuthenticationFailed`
 - Account keys sealed at rest
 
 ## Detailed actions

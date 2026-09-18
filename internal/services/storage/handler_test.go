@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/services/storage"
@@ -271,6 +272,134 @@ func TestListDeleteBlobAndQueuePeek(t *testing.T) {
 	}
 }
 
+func TestSASHMACDeniesGarbageAndUnknownAccount(t *testing.T) {
+	st := openStore(t)
+	defer st.Close()
+
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	key, err := st.UpsertStorageAccount("sub", "rg", "acct1", "eastus", "127.0.0.1:4599")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateContainer("acct1", "c1"); err != nil {
+		t.Fatal(err)
+	}
+
+	h := &storage.Handler{
+		Store:      st,
+		Auth:       &authn.Authenticator{RootClientID: "root", RootAccessToken: "root-token", Now: func() time.Time { return now }},
+		ListenAddr: "127.0.0.1:4599",
+	}
+	mux := http.NewServeMux()
+	h.Register(mux)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	code := func(method, path string, body string) int {
+		t.Helper()
+		var rdr io.Reader
+		if body != "" {
+			rdr = strings.NewReader(body)
+		}
+		req, err := http.NewRequest(method, srv.URL+path, rdr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res.StatusCode
+	}
+
+	if got := code(http.MethodPut, "/blob/acct1/c1/secret.txt?sig=x&se=1", "stolen"); got != http.StatusForbidden {
+		t.Fatalf("garbage SAS put %d", got)
+	}
+	if got := code(http.MethodGet, "/blob/acct1/c1/secret.txt?sig=x&se=1", ""); got != http.StatusForbidden {
+		t.Fatalf("garbage SAS get %d", got)
+	}
+	if got := code(http.MethodDelete, "/blob/acct1/c1/secret.txt?sig=x&se=1", ""); got != http.StatusForbidden {
+		t.Fatalf("garbage SAS delete %d", got)
+	}
+	if got := code(http.MethodPut, "/blob/missingacct/c1/b?sig=x&se=1", "x"); got != http.StatusForbidden {
+		t.Fatalf("unknown account %d", got)
+	}
+
+	putReq, err := http.NewRequest(http.MethodPut, srv.URL+"/blob/acct1/c1/hello.txt", strings.NewReader("hello-sas"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	applySAS(putReq, key, "w", "2099-01-01T00:00:00Z")
+	putRes, err := http.DefaultClient.Do(putReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	putRes.Body.Close()
+	if putRes.StatusCode != http.StatusCreated {
+		t.Fatalf("signed SAS put %d", putRes.StatusCode)
+	}
+
+	readReq, err := http.NewRequest(http.MethodGet, srv.URL+"/blob/acct1/c1/hello.txt", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	applySAS(readReq, key, "r", "2099-01-01T00:00:00Z")
+	readRes, err := http.DefaultClient.Do(readReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer readRes.Body.Close()
+	if readRes.StatusCode != http.StatusOK {
+		t.Fatalf("signed SAS get %d", readRes.StatusCode)
+	}
+
+	denyWrite, err := http.NewRequest(http.MethodPut, srv.URL+"/blob/acct1/c1/nope.txt", strings.NewReader("x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	applySAS(denyWrite, key, "r", "2099-01-01T00:00:00Z")
+	dw, err := http.DefaultClient.Do(denyWrite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dw.Body.Close()
+	if dw.StatusCode != http.StatusForbidden {
+		t.Fatalf("sp=r put %d", dw.StatusCode)
+	}
+
+	expired, err := http.NewRequest(http.MethodGet, srv.URL+"/blob/acct1/c1/hello.txt", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	applySAS(expired, key, "r", "2020-01-01T00:00:00Z")
+	ex, err := http.DefaultClient.Do(expired)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ex.Body.Close()
+	if ex.StatusCode != http.StatusForbidden {
+		t.Fatalf("expired SAS %d", ex.StatusCode)
+	}
+
+	if got := code(http.MethodPost, "/queue/acct1/q1?sig=x&se=1", "m"); got != http.StatusForbidden {
+		t.Fatalf("garbage queue SAS %d", got)
+	}
+	qput, err := http.NewRequest(http.MethodPut, srv.URL+"/queue/acct1/q1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	applySAS(qput, key, "c", "2099-01-01T00:00:00Z")
+	qr, err := http.DefaultClient.Do(qput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	qr.Body.Close()
+	if qr.StatusCode != http.StatusCreated {
+		t.Fatalf("queue SAS create %d", qr.StatusCode)
+	}
+}
+
 func signSharedKey(r *http.Request, account, accountKey string) {
 	sts := authn.StorageStringToSign(r)
 	raw, err := base64.StdEncoding.DecodeString(accountKey)
@@ -281,6 +410,22 @@ func signSharedKey(r *http.Request, account, accountKey string) {
 	_, _ = mac.Write([]byte(sts))
 	sig := base64.StdEncoding.EncodeToString(mac.Sum(nil))
 	r.Header.Set("Authorization", "SharedKey "+account+":"+sig)
+}
+
+func applySAS(r *http.Request, accountKey, sp, se string) {
+	q := r.URL.Query()
+	q.Set("sp", sp)
+	q.Set("se", se)
+	r.URL.RawQuery = q.Encode()
+	sts := authn.StorageSASStringToSign(r)
+	raw, err := base64.StdEncoding.DecodeString(accountKey)
+	if err != nil {
+		raw = []byte(accountKey)
+	}
+	mac := hmac.New(sha256.New, raw)
+	_, _ = mac.Write([]byte(sts))
+	q.Set("sig", base64.StdEncoding.EncodeToString(mac.Sum(nil)))
+	r.URL.RawQuery = q.Encode()
 }
 
 func openStore(t *testing.T) *store.Store {

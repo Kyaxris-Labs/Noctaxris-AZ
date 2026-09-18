@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/services/table"
@@ -158,6 +159,113 @@ func TestTableEntityInsertQueryGet(t *testing.T) {
 		body, _ := io.ReadAll(dtres.Body)
 		t.Fatalf("delete table status %d: %s", dtres.StatusCode, body)
 	}
+}
+
+func TestTableSASHMACDeniesGarbage(t *testing.T) {
+	st := openStore(t)
+	defer st.Close()
+
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	key, err := st.UpsertStorageAccount("sub", "rg", "acct1", "eastus", "127.0.0.1:4599")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h := &table.Handler{
+		Store: st,
+		Auth:  &authn.Authenticator{RootClientID: "root", RootAccessToken: "root-token", Now: func() time.Time { return now }},
+	}
+	mux := http.NewServeMux()
+	h.Register(mux)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	garbage, err := http.NewRequest(http.MethodPut, srv.URL+"/table/acct1/people?sig=x&se=1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gres, err := http.DefaultClient.Do(garbage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gres.Body.Close()
+	if gres.StatusCode != http.StatusForbidden {
+		t.Fatalf("garbage table SAS %d", gres.StatusCode)
+	}
+
+	unknown, err := http.NewRequest(http.MethodGet, srv.URL+"/table/nope/people?sig=x&se=1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ures, err := http.DefaultClient.Do(unknown)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ures.Body.Close()
+	if ures.StatusCode != http.StatusForbidden {
+		t.Fatalf("unknown table account %d", ures.StatusCode)
+	}
+
+	create, err := http.NewRequest(http.MethodPut, srv.URL+"/table/acct1/people", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	applySAS(create, key, "c", "2099-01-01T00:00:00Z")
+	cres, err := http.DefaultClient.Do(create)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cres.Body.Close()
+	if cres.StatusCode != http.StatusCreated {
+		t.Fatalf("signed create table %d", cres.StatusCode)
+	}
+
+	insert, err := http.NewRequest(http.MethodPost, srv.URL+"/table/acct1/people",
+		strings.NewReader(`{"PartitionKey":"p1","RowKey":"r1","Name":"Ada"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	insert.Header.Set("Content-Type", "application/json")
+	applySAS(insert, key, "a", "2099-01-01T00:00:00Z")
+	ires, err := http.DefaultClient.Do(insert)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ires.Body.Close()
+	if ires.StatusCode != http.StatusCreated {
+		t.Fatalf("signed insert %d", ires.StatusCode)
+	}
+
+	readOnly, err := http.NewRequest(http.MethodPost, srv.URL+"/table/acct1/people",
+		strings.NewReader(`{"PartitionKey":"p2","RowKey":"r2","Name":"x"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	applySAS(readOnly, key, "r", "2099-01-01T00:00:00Z")
+	ro, err := http.DefaultClient.Do(readOnly)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ro.Body.Close()
+	if ro.StatusCode != http.StatusForbidden {
+		t.Fatalf("sp=r insert %d", ro.StatusCode)
+	}
+}
+
+func applySAS(r *http.Request, accountKey, sp, se string) {
+	q := r.URL.Query()
+	q.Set("sp", sp)
+	q.Set("se", se)
+	r.URL.RawQuery = q.Encode()
+	sts := authn.StorageSASStringToSign(r)
+	raw, err := base64.StdEncoding.DecodeString(accountKey)
+	if err != nil {
+		raw = []byte(accountKey)
+	}
+	mac := hmac.New(sha256.New, raw)
+	_, _ = mac.Write([]byte(sts))
+	q.Set("sig", base64.StdEncoding.EncodeToString(mac.Sum(nil)))
+	r.URL.RawQuery = q.Encode()
 }
 
 func signSharedKey(r *http.Request, account, accountKey string) {

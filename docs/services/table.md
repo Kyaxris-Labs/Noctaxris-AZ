@@ -16,7 +16,7 @@ Azure Table Storage lab data plane under `/table/{account}/...` with Shared Key 
 | Insert entity | `POST /table/{account}/{table}` (JSON with PartitionKey/RowKey) |
 | Entity by key | `GET` / `PUT` / `MERGE` / `DELETE /table/{account}/{table}/{pk}/{rk}` |
 
-Auth: Shared Key, SAS query (`sig`+`se`), or root Bearer. Table endpoint is also advertised on storage account `primaryEndpoints.table`.
+Auth: Shared Key HMAC, SAS query HMAC (`sig` over `sp`/`st`/`se`/path, `se` expiry, `sp` permissions), or root Bearer. Garbage `sig`, expired or unparseable `se`, unknown account, and missing `sp` for the verb are HTTP 403. Table endpoint is also advertised on storage account `primaryEndpoints.table`.
 
 ## Detailed actions
 

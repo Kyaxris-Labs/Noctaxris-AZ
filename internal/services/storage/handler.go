@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
@@ -311,7 +312,7 @@ func (h *Handler) getQueueMessage(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) authorizeDataPlane(w http.ResponseWriter, r *http.Request, account string) bool {
 	if authn.HasSAS(r) {
-		return true
+		return h.authorizeSAS(w, r, account)
 	}
 	if acct, sig, ok := authn.ParseSharedKeyAuthorization(r.Header.Get("Authorization")); ok {
 		if acct != account {
@@ -343,6 +344,31 @@ func (h *Handler) authorizeDataPlane(w http.ResponseWriter, r *http.Request, acc
 	return false
 }
 
+func (h *Handler) authorizeSAS(w http.ResponseWriter, r *http.Request, account string) bool {
+	if account == "" {
+		azerrors.StorageError(w, http.StatusForbidden, "AuthenticationFailed", "SAS signature invalid")
+		return false
+	}
+	key, found, err := h.Store.GetStorageAccountKey(account)
+	if err != nil {
+		azerrors.StorageError(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return false
+	}
+	if !found {
+		azerrors.StorageError(w, http.StatusForbidden, "AuthenticationFailed", "SAS signature invalid")
+		return false
+	}
+	now := time.Now().UTC()
+	if h.Auth != nil && h.Auth.Now != nil {
+		now = h.Auth.Now()
+	}
+	if !authn.VerifyStorageSAS(key, r, now) {
+		azerrors.StorageError(w, http.StatusForbidden, "AuthenticationFailed", "SAS signature invalid")
+		return false
+	}
+	return true
+}
+
 func (h *Handler) requireBearerARM(w http.ResponseWriter, r *http.Request, action, scope string) bool {
 	if h.Auth == nil {
 		azerrors.Unauthenticated(w, "")
@@ -351,6 +377,10 @@ func (h *Handler) requireBearerARM(w http.ResponseWriter, r *http.Request, actio
 	p, err := h.Auth.AuthenticateRequest(r)
 	if err != nil {
 		azerrors.Unauthenticated(w, "")
+		return false
+	}
+	if !p.AllowsARM() {
+		azerrors.InvalidAuthenticationTokenAudience(w, "")
 		return false
 	}
 	if h.Authz == nil {
