@@ -221,36 +221,6 @@ func (s *Service) listWebSites(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"value": value})
 }
 
-func (s *Service) listSubRoleAssignments(w http.ResponseWriter, r *http.Request) {
-	if !requireAPIVersion(w, r) {
-		return
-	}
-	subID := r.PathValue("subscriptionId")
-	scope := "/subscriptions/" + subID
-	if _, ok := s.require(w, r, "Microsoft.Authorization/roleAssignments/read", scope); !ok {
-		return
-	}
-	rows, err := s.Store.ListRoleAssignmentsByScopePrefix(scope)
-	if err != nil {
-		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
-		return
-	}
-	value := make([]map[string]any, 0, len(rows))
-	for _, a := range rows {
-		value = append(value, map[string]any{
-			"id":   a.ID,
-			"name": a.ID,
-			"type": "Microsoft.Authorization/roleAssignments",
-			"properties": map[string]any{
-				"roleDefinitionId": a.RoleDefinitionID,
-				"principalId":      a.PrincipalID,
-				"scope":            a.Scope,
-			},
-		})
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"value": value})
-}
-
 func (s *Service) queryResourceGraph(w http.ResponseWriter, r *http.Request) {
 	if !requireAPIVersion(w, r) {
 		return

@@ -12,6 +12,7 @@ func (s *Server) registerIdentity() {
 		Store:      s.store,
 		TenantID:   s.cfg.TenantID,
 		PublicBase: s.cfg.IssuerBase(),
+		AuditNow:   s.effectiveNow,
 	}
 	s.authn.JWT = es
 	es.Mount(s.mux)
@@ -21,6 +22,7 @@ func (s *Server) registerIdentity() {
 		Authz:          s.authz,
 		SubscriptionID: s.cfg.SubscriptionID,
 		PrincipalFrom:  PrincipalFromContext,
+		Now:            s.effectiveNow,
 	}).Mount(s.mux)
 
 	(&authorization.Service{
@@ -36,5 +38,6 @@ func (s *Server) registerIdentity() {
 		Authz:    s.authz,
 		Entra:    es,
 		TenantID: s.cfg.TenantID,
+		AuditNow: s.effectiveNow,
 	}).Register(s.mux)
 }

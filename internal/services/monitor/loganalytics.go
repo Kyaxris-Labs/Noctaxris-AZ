@@ -23,7 +23,7 @@ func (h *Handler) putWorkspace(w http.ResponseWriter, r *http.Request, p authn.P
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"id": "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.OperationalInsights/workspaces/" + name,
+		"id":   "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.OperationalInsights/workspaces/" + name,
 		"name": name, "type": "Microsoft.OperationalInsights/workspaces", "location": "eastus",
 		"properties": map[string]any{"provisioningState": "Succeeded"},
 	})
@@ -46,7 +46,7 @@ func (h *Handler) getWorkspace(w http.ResponseWriter, r *http.Request, p authn.P
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"id": "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.OperationalInsights/workspaces/" + name,
+		"id":   "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.OperationalInsights/workspaces/" + name,
 		"name": name, "type": "Microsoft.OperationalInsights/workspaces", "location": row.Location,
 		"properties": map[string]any{"provisioningState": "Succeeded"},
 	})

@@ -1,6 +1,7 @@
 package entra
 
 import (
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -103,6 +104,7 @@ func (s *Service) tokenClientCredentials(w http.ResponseWriter, r *http.Request)
 		azerrors.WriteOAuth(w, http.StatusBadRequest, "invalid_request", "client_id is required")
 		return
 	}
+	s.recordServicePrincipalSignIn(r, clientID, s.tokenAudience(r))
 	s.writeToken(w, r, clientID, s.tokenAudience(r), false)
 }
 
@@ -176,4 +178,30 @@ func (s *Service) tokenDeviceCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeToken(w, r, id, s.tokenAudience(r), true)
+}
+
+func (s *Service) recordServicePrincipalSignIn(r *http.Request, appID, audience string) {
+	if s == nil || s.Store == nil {
+		return
+	}
+	row := map[string]any{
+		"TimeGenerated":        s.auditNow().Format(time.RFC3339Nano),
+		"AppId":                appID,
+		"ServicePrincipalName": appID,
+		"IPAddress":            entraClientIP(r),
+		"ResultType":           "0",
+		"ResourceDisplayName":  audience,
+	}
+	_ = s.Store.InsertLogAnalyticsRow(store.DefaultLogAnalyticsWorkspace, store.LogTableAADServicePrincipalSignInLogs, row)
+}
+
+func entraClientIP(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }

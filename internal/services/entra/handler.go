@@ -23,6 +23,7 @@ type Service struct {
 	TenantID   string
 	PublicBase string // e.g. http://127.0.0.1:4599
 	Now        func() time.Time
+	AuditNow   func() time.Time
 
 	mu   sync.Mutex
 	kid  string
@@ -32,6 +33,13 @@ type Service struct {
 func (s *Service) now() time.Time {
 	if s.Now != nil {
 		return s.Now()
+	}
+	return time.Now().UTC()
+}
+
+func (s *Service) auditNow() time.Time {
+	if s.AuditNow != nil {
+		return s.AuditNow().UTC()
 	}
 	return time.Now().UTC()
 }

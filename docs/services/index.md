@@ -11,13 +11,13 @@ Implemented lab surface on `127.0.0.1:4599` (HTTP) and `127.0.0.1:5672` (AMQP li
 | Key Vault | lab | [keyvault.md](keyvault.md) | Secrets/keys/certificates + soft-delete theatre |
 | Storage | lab | [storage.md](storage.md) | Blob + queue Shared Key / SAS |
 | Table Storage | lab | [table.md](table.md) | Entity CRUD + OData lite |
-| Cosmos DB | lab | [cosmos.md](cosmos.md) | NoSQL in-process point read/query |
+| Cosmos DB | lab | [cosmos.md](cosmos.md) | NoSQL in-process point read/query; change-feed empty 200 |
 | Azure SQL | lab | [azuresql.md](azuresql.md) | Server ARM + connection theatre |
 | PostgreSQL | lab | [postgres.md](postgres.md) | Flexible server ARM + theatre |
 | Redis | lab | [rediscache.md](rediscache.md) | Cache ARM + theatre |
 | ACR | lab | [acr.md](acr.md) | Registry ARM + theatre |
 | Service Bus | lab | [servicebus.md](servicebus.md) | Queues/topics + AMQP lite |
-| Event Hubs | lab | [eventhubs.md](eventhubs.md) | Namespaces/hubs + HTTP messages |
+| Event Hubs | lab | [eventhubs.md](eventhubs.md) | Namespaces/hubs + HTTP messages; captured-events empty 200 |
 | Event Grid | lab | [eventgrid.md](eventgrid.md) | Topics + allowlisted egress delivery |
 | Virtual Network | lab | [network.md](network.md) | VNet ARM lite |
 | NSG / NIC | lab | [nsg.md](nsg.md) / [nic.md](nic.md) | ARM lite |
@@ -28,7 +28,7 @@ Implemented lab surface on `127.0.0.1:4599` (HTTP) and `127.0.0.1:5672` (AMQP li
 | Azure Functions | lab | [functions.md](functions.md) | ARM + mock invoke |
 | App Service / Container Apps / Logic / APIM | lab | [appservice.md](appservice.md) / [containerapps.md](containerapps.md) / [logic.md](logic.md) / [apim.md](apim.md) | Control-plane lite |
 | Front Door / Email / OpenAI / SignalR | lab | [frontdoor.md](frontdoor.md) / [email.md](email.md) / [openai.md](openai.md) / [signalr.md](signalr.md) | Edge/AI theatre |
-| Monitor / Log Analytics | lab | [monitor.md](monitor.md) | Activity Log + KQL subset |
+| Monitor / Log Analytics | lab | [monitor.md](monitor.md) | Activity Log + KQL subset + diagnostic settings store (no export pipeline) |
 
 Default tenant: `00000000-0000-0000-0000-000000000001` (`NOCTAXRIS_AZ_TENANT_ID`).
 Default subscription: `00000000-0000-0000-0000-000000000002` (`NOCTAXRIS_AZ_SUBSCRIPTION_ID`).

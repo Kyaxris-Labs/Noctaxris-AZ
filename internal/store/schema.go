@@ -172,7 +172,9 @@ CREATE TABLE IF NOT EXISTS activity_log (
   operation TEXT NOT NULL,
   resource_id TEXT NOT NULL,
   status TEXT NOT NULL,
-  message TEXT NOT NULL DEFAULT ''
+  message TEXT NOT NULL DEFAULT '',
+  client_ip TEXT NOT NULL DEFAULT '',
+  identity_json TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS metrics (
@@ -543,11 +545,5 @@ CREATE TABLE IF NOT EXISTS diagnostic_settings (
   name TEXT NOT NULL,
   workspace_id TEXT NOT NULL DEFAULT '',
   properties_json TEXT NOT NULL DEFAULT '{}'
-);
-
-CREATE TABLE IF NOT EXISTS lab_clock (
-  id INTEGER PRIMARY KEY CHECK (id = 1),
-  frozen INTEGER NOT NULL DEFAULT 0,
-  frozen_at TEXT NOT NULL DEFAULT ''
 );
 `

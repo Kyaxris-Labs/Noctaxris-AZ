@@ -81,4 +81,27 @@ func TestLoadFromEnvAndTLSAMQP(t *testing.T) {
 	if _, err := LoadFromEnv(); err != nil {
 		t.Fatal(err)
 	}
+
+	t.Setenv("NOCTAXRIS_AZ_LISTEN", "127.0.0.1:4599")
+	t.Setenv("NOCTAXRIS_AZ_AMQP_LISTEN", "127.0.0.1:5672")
+	t.Setenv(EnvAllowNonLoopbackListen, "")
+	t.Setenv(EnvLabForensics, "")
+	t.Setenv(EnvActivityInject, "")
+	t.Setenv(EnvLogsInject, "")
+	t.Setenv(EnvDefenderInject, "")
+	cfg, err = LoadFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.LabForensics || cfg.ActivityInject || cfg.LogsInject || cfg.DefenderInject {
+		t.Fatalf("forensics flags should default off: %+v", cfg)
+	}
+	t.Setenv(EnvLabForensics, "1")
+	t.Setenv(EnvActivityInject, "true")
+	t.Setenv(EnvLogsInject, "1")
+	t.Setenv(EnvDefenderInject, "true")
+	cfg, err = LoadFromEnv()
+	if err != nil || !cfg.LabForensics || !cfg.ActivityInject || !cfg.LogsInject || !cfg.DefenderInject {
+		t.Fatalf("forensics flags on: %+v %v", cfg, err)
+	}
 }

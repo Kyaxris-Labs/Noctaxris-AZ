@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
@@ -19,6 +21,7 @@ type Service struct {
 	Authz          *authz.Evaluator
 	PrincipalFrom  func(context.Context) (authn.Principal, bool)
 	SubscriptionID string
+	Now            func() time.Time
 }
 
 // Mount registers ARM subscription and resource group routes.
@@ -38,7 +41,6 @@ func (s *Service) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /subscriptions/{subscriptionId}/providers/Microsoft.ContainerRegistry/registries", s.listSubProvider("Microsoft.ContainerRegistry/registries"))
 	mux.HandleFunc("GET /subscriptions/{subscriptionId}/providers/Microsoft.ContainerService/managedClusters", s.listSubProvider("Microsoft.ContainerService/managedClusters"))
 	mux.HandleFunc("GET /subscriptions/{subscriptionId}/providers/Microsoft.Logic/workflows", s.listSubProvider("Microsoft.Logic/workflows"))
-	mux.HandleFunc("GET /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/roleAssignments", s.listSubRoleAssignments)
 	mux.HandleFunc("GET /subscriptions/{subscriptionId}/providers/Microsoft.Automation/automationAccounts", s.listEmptyARM)
 	mux.HandleFunc("GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute/virtualMachineScaleSets", s.listEmptyARM)
 	// Resource Groups REST uses `resourcegroups`; resource IDs and nested
@@ -56,6 +58,24 @@ func (s *Service) principal(ctx context.Context) (authn.Principal, bool) {
 		return s.PrincipalFrom(ctx)
 	}
 	return authn.PrincipalFromContext(ctx)
+}
+
+func (s *Service) now() time.Time {
+	if s != nil && s.Now != nil {
+		return s.Now().UTC()
+	}
+	return time.Now().UTC()
+}
+
+func requestClientIP(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }
 
 func requireAPIVersion(w http.ResponseWriter, r *http.Request) bool {
@@ -167,7 +187,14 @@ func (s *Service) putResourceGroup(w http.ResponseWriter, r *http.Request) {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
 		return
 	}
-	_ = s.Store.AppendActivityLog(p.ID, "Microsoft.Resources/subscriptions/resourceGroups/write", scope, "Succeeded", "")
+	_ = s.Store.AppendActivityLogRow(store.ActivityLogRow{
+		Timestamp:  s.now(),
+		Caller:     p.ID,
+		Operation:  "Microsoft.Resources/subscriptions/resourceGroups/write",
+		ResourceID: scope,
+		Status:     "Succeeded",
+		ClientIP:   requestClientIP(r),
+	})
 	writeJSON(w, http.StatusOK, resourceGroupJSON(subID, name, location))
 }
 

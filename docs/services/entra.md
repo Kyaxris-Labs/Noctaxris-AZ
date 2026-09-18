@@ -45,6 +45,7 @@ Public: discovery, JWKS, token, device code, SOAP, lab OIDC issuer. Graph, AAD G
 - Federated identity credentials create with HTTP 201; default audience `api://AzureADTokenExchange`
 - Unknown Graph collection GET returns `200` and `"value": []`. Item GET by GUID returns Graph 404
 - AAD Graph `api-version=1.6` users / tenantDetails / directoryRoles; SOAP ListUsers XML
+- Client-credentials token mint appends a row to Log Analytics table `AADServicePrincipalSignInLogs` on workspace `default` (`TimeGenerated`, `AppId`, `IPAddress`, `ResourceDisplayName`). Secrets are not stored. `TimeGenerated` follows the lab clock when freeze/set is on. See [monitor.md](monitor.md).
 
 OIDC paths follow the Microsoft identity platform v1 and v2 layout. Literal tenant prefixes plus Graph `/v1.0` and `/beta` catch-alls avoid ServeMux conflicts with ARM `/subscriptions/...` and storage `/blob/...`.
 
@@ -65,7 +66,7 @@ OIDC paths follow the Microsoft identity platform v1 and v2 layout. Literal tena
 ## Deferred depth
 
 - Broader Graph write coverage (PIM schedules, CA policy CRUD, app role assignment writes)
-- Live Microsoft Graph SDK / AzureHound smokes (soft-skip when the binary is missing)
+- Live Microsoft Graph SDK / AzureHound / `az` / `prowler` smokes (soft-skip when the binary is missing; not executed in this cut)
 
 ## Verification / CLI smoke
 
@@ -83,4 +84,4 @@ curl -s -H "Authorization: Bearer $TOKEN" \
   "http://127.0.0.1:4599/$TENANT/users?api-version=1.6"
 ```
 
-Soft-skip live Azure CLI / AzureHound / Microsoft Graph PowerShell runs when those tools are not installed. `az cloud register` and `Add-MgEnvironment` examples are in the root README.
+Soft-skip live Azure CLI / AzureHound / Microsoft Graph PowerShell / `prowler` runs when those tools are not installed. Those live runs are not executed in this cut. `az cloud register` and `Add-MgEnvironment` examples are in [configuration.md](../configuration.md) and the root README.

@@ -43,7 +43,6 @@ func TestHealthReadyVersionMiddleware(t *testing.T) {
 		authn: &authn.Authenticator{RootClientID: "root", RootAccessToken: "tok", Tokens: st},
 		authz: &authz.Evaluator{Assignments: st},
 		mux:   http.NewServeMux(),
-		now:   func() time.Time { return time.Now().UTC() },
 	}
 	s.registerREST()
 	s.mux.HandleFunc("GET /private", func(w http.ResponseWriter, r *http.Request) {
@@ -81,7 +80,7 @@ func TestHealthReadyVersionMiddleware(t *testing.T) {
 		}
 	}
 
-	s2 := &Server{mux: http.NewServeMux(), authn: s.authn, now: s.now}
+	s2 := &Server{mux: http.NewServeMux(), authn: s.authn}
 	s2.registerREST()
 	rec := httptest.NewRecorder()
 	s2.handleReady(rec, httptest.NewRequest(http.MethodGet, readyPath, nil))

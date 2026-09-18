@@ -27,6 +27,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT "+base+"/{ns}/eventhubs/{hub}/consumergroups/{cg}", h.putCG)
 	mux.HandleFunc("POST /eventhubs/{ns}/hubs/{hub}/messages", h.postMsg)
 	mux.HandleFunc("GET /eventhubs/{ns}/hubs/{hub}/messages", h.getMsg)
+	mux.HandleFunc("GET /eventhubs/{ns}/hubs/{hub}/capturedEvents", h.capturedEvents)
 }
 
 func (h *Handler) putNS(w http.ResponseWriter, r *http.Request) {
@@ -47,7 +48,7 @@ func (h *Handler) putNS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"id": "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.EventHub/namespaces/" + name,
+		"id":   "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.EventHub/namespaces/" + name,
 		"name": name, "type": "Microsoft.EventHub/namespaces", "location": location,
 		"properties": map[string]any{"provisioningState": "Succeeded"},
 	})
@@ -68,7 +69,7 @@ func (h *Handler) getNS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"id": "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.EventHub/namespaces/" + name,
+		"id":   "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.EventHub/namespaces/" + name,
 		"name": name, "type": "Microsoft.EventHub/namespaces", "location": location,
 		"properties": map[string]any{"provisioningState": "Succeeded"},
 	})
@@ -133,6 +134,13 @@ func (h *Handler) getMsg(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(body)
+}
+
+func (h *Handler) capturedEvents(w http.ResponseWriter, r *http.Request) {
+	if !h.requireRoot(w, r) {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"value": []any{}})
 }
 
 func (h *Handler) requireRoot(w http.ResponseWriter, r *http.Request) bool {

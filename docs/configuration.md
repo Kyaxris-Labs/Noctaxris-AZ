@@ -20,6 +20,10 @@ All settings use the `NOCTAXRIS_AZ_*` prefix.
 | `NOCTAXRIS_AZ_ALLOW_MASTER_KEY_IN_DATA_ROOT` | unset / false | Permit master key under data root |
 | `NOCTAXRIS_AZ_DOCKER_HOST` | empty | Nested DinD engine URL. Empty disables nested compute. Rejects `unix://`, `npipe://`, and `docker.sock`. |
 | `NOCTAXRIS_AZ_DOCKER_CERT_PATH` | empty | Directory with `ca.pem`, `cert.pem`, and `key.pem` for engine TLS. Required whenever Docker host is set. |
+| `NOCTAXRIS_AZ_LAB_FORENSICS` | unset / false | Enable `POST /_noctaxris-az/lab/clock:freeze`, `:unfreeze`, `:set`, and `POST /_noctaxris-az/lab/bulkSeed` (Bearer root). Lab clock is in-memory on the HTTP server. Activity Log, Log Analytics `TimeGenerated`, and ARG inject timestamps follow it. Bearer expiry stays wall clock. Default off returns AccessDenied. See [services/monitor.md](services/monitor.md). |
+| `NOCTAXRIS_AZ_ACTIVITY_INJECT` | unset / false | Enable `POST /_noctaxris-az/lab/activityLog:inject` into the same store `az monitor activity-log` lists. Bearer root. Default off returns AccessDenied. |
+| `NOCTAXRIS_AZ_LOGS_INJECT` | unset / false | Enable `POST /_noctaxris-az/lab/logs:inject` for named Log Analytics tables. Bearer root. Default off returns AccessDenied. |
+| `NOCTAXRIS_AZ_DEFENDER_INJECT` | unset / false | Enable `POST /_noctaxris-az/lab/securityAssessments:inject` into ARG `SecurityResources`. Bearer root. Default off returns AccessDenied. |
 
 ## Compose
 
@@ -43,15 +47,46 @@ before starting. Startup refuses that pair on the non-loopback container bind.
 | Client | How to point at the lab |
 |--------|-------------------------|
 | curl / raw HTTP | `http://127.0.0.1:4599` + `Authorization: Bearer <token>` |
-| Azure CLI | `az rest` / ARM against `http://127.0.0.1:4599` with Bearer, or `az cloud register` (`--endpoint-resource-manager`, `--endpoint-active-directory`, `--endpoint-microsoft-graph-resource-id`, `--skip-endpoint-discovery`; see README) |
+| Azure CLI | `az rest` / ARM against `http://127.0.0.1:4599` with Bearer, or `az cloud register` (`--name`, `--endpoint-resource-manager`, `--endpoint-active-directory`, `--endpoint-microsoft-graph-resource-id`, `--skip-endpoint-discovery`; see README) |
+| Az PowerShell | `Add-AzEnvironment -Name ... -ResourceManagerEndpoint ... -ActiveDirectoryEndpoint ... -MicrosoftGraphUrl ... -MicrosoftGraphEndpointResourceId ...` then `Connect-AzAccount -Environment ...` (see README) |
 | Storage SDK | account endpoint `http://127.0.0.1:4599/blob/{account}` (Shared Key / SAS) |
 | Key Vault SDK | vault base `http://127.0.0.1:4599/keyvault/{name}` + Bearer |
 | Service Bus | AMQP `amqp://127.0.0.1:5672` with connection string / SAS |
 | App Configuration | data plane `http://127.0.0.1:4599/appconfig/{store}` + Bearer |
 | Functions mock invoke | `POST http://127.0.0.1:4599/functions/{name}/invoke` + Bearer |
 | Monitor / Activity Log | ARM paths under `/subscriptions/.../providers/Microsoft.Insights/...` + Bearer |
-| Microsoft Graph PowerShell | `Add-MgEnvironment` then `Connect-MgGraph -AccessToken` |
+| Microsoft Graph PowerShell | `Add-MgEnvironment -Name ... -AzureADEndpoint ... -GraphEndpoint ...` then `Connect-MgGraph -Environment ... -AccessToken` |
 | Host/SNI AzureCloud | `NOCTAXRIS_AZ_CLOUD_HOSTS=1` on `127.0.0.1:8443`; HTTP `:4599` stays the default |
+| Lab inject flags | Process env (default off): `NOCTAXRIS_AZ_LAB_FORENSICS`, `NOCTAXRIS_AZ_ACTIVITY_INJECT`, `NOCTAXRIS_AZ_LOGS_INJECT`, `NOCTAXRIS_AZ_DEFENDER_INJECT`. Bearer root required. |
+
+## Official CLI and PowerShell recipes
+
+Learn flag names: `az cloud register` uses `--endpoint-resource-manager`, `--endpoint-active-directory`, `--endpoint-microsoft-graph-resource-id`, `--skip-endpoint-discovery`. Az.Accounts uses `-ResourceManagerEndpoint`, `-ActiveDirectoryEndpoint`, `-MicrosoftGraphUrl`, `-MicrosoftGraphEndpointResourceId`. Microsoft.Graph uses `-AzureADEndpoint` and `-GraphEndpoint`.
+
+```bash
+az cloud register -n NoctaxrisAZ \
+  --endpoint-resource-manager http://127.0.0.1:4599 \
+  --endpoint-active-directory http://127.0.0.1:4599 \
+  --endpoint-microsoft-graph-resource-id http://127.0.0.1:4599 \
+  --skip-endpoint-discovery
+az cloud set -n NoctaxrisAZ
+```
+
+```powershell
+Add-AzEnvironment -Name NoctaxrisAZ `
+  -ResourceManagerEndpoint http://127.0.0.1:4599 `
+  -ActiveDirectoryEndpoint http://127.0.0.1:4599/ `
+  -MicrosoftGraphUrl http://127.0.0.1:4599 `
+  -MicrosoftGraphEndpointResourceId http://127.0.0.1:4599
+Connect-AzAccount -Environment NoctaxrisAZ
+
+Add-MgEnvironment -Name NoctaxrisAZ `
+  -AzureADEndpoint http://127.0.0.1:4599 `
+  -GraphEndpoint http://127.0.0.1:4599
+Connect-MgGraph -Environment NoctaxrisAZ -AccessToken $token
+```
+
+Live `az`, AzureHound, `Connect-MgGraph`, and `prowler` runs are not executed in this cut. SDK smokes skip when those binaries are missing. Host/SNI plus lab CA steps are below.
 
 ## Cloud hosts TLS
 

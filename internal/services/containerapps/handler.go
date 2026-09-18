@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
@@ -29,6 +30,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+base+"/{name}", h.get)
 	mux.HandleFunc("DELETE "+base+"/{name}", h.del)
 	mux.HandleFunc("GET "+base, h.list)
+	mux.HandleFunc("GET "+base+"/{name}/revisions", h.listRevisions)
 }
 
 func (h *Handler) put(w http.ResponseWriter, r *http.Request) {
@@ -50,6 +52,12 @@ func (h *Handler) put(w http.ResponseWriter, r *http.Request) {
 		for k, v := range body.Properties {
 			props[k] = v
 		}
+	}
+	if _, ok := props["latestRevisionName"]; !ok {
+		props["latestRevisionName"] = name + "--0000001"
+	}
+	if _, ok := props["runningStatus"]; !ok {
+		props["runningStatus"] = "Running"
 	}
 	b, _ := json.Marshal(props)
 	if err := h.Store.UpsertProviderResource(providerKey, sub, rg, name, location, string(b)); err != nil {
@@ -113,6 +121,59 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		value = append(value, resourceJSON(row.SubscriptionID, row.ResourceGroup, row.Name, row.Location, props))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"value": value})
+}
+
+func (h *Handler) listRevisions(w http.ResponseWriter, r *http.Request) {
+	if !h.require(w, r, "Microsoft.App/containerApps/revisions/read") {
+		return
+	}
+	sub, rg, name := r.PathValue("sub"), r.PathValue("rg"), r.PathValue("name")
+	row, ok, err := h.Store.GetProviderResource(providerKey, sub, rg, name)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	}
+	if !ok {
+		azerrors.NotFound(w, "resource not found")
+		return
+	}
+	var props map[string]any
+	_ = json.Unmarshal([]byte(row.PropertiesJSON), &props)
+	if props == nil {
+		props = map[string]any{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"value": containerAppRevisions(sub, rg, name, props)})
+}
+
+func containerAppRevisions(sub, rg, name string, props map[string]any) []any {
+	if raw, ok := props["revisions"].([]any); ok {
+		return raw
+	}
+	revName, _ := props["latestRevisionName"].(string)
+	if revName == "" {
+		revName = name + "--0000001"
+	}
+	running, _ := props["runningStatus"].(string)
+	if running == "" {
+		running = "Running"
+	}
+	health := "Healthy"
+	active := true
+	lower := strings.ToLower(running)
+	if lower == "failed" || lower == "crashloop" || lower == "crashloopbackoff" {
+		health = "Unhealthy"
+		active = false
+		running = "Failed"
+	}
+	id := "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.App/containerApps/" + name + "/revisions/" + revName
+	return []any{map[string]any{
+		"id": id, "name": revName, "type": "Microsoft.App/containerApps/revisions",
+		"properties": map[string]any{
+			"runningState": running,
+			"healthState":  health,
+			"active":       active,
+		},
+	}}
 }
 
 func resourceJSON(sub, rg, name, location string, props map[string]any) map[string]any {

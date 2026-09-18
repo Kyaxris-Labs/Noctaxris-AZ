@@ -77,9 +77,11 @@ HTTP `:4599` is the default. Cloud-hosts TLS (`NOCTAXRIS_AZ_CLOUD_HOSTS=1`) list
 | Client | Point it at the lab |
 |--------|---------------------|
 | Azure CLI | `az cloud register -n NoctaxrisAZ --endpoint-resource-manager http://127.0.0.1:4599 --endpoint-active-directory http://127.0.0.1:4599 --endpoint-microsoft-graph-resource-id http://127.0.0.1:4599 --skip-endpoint-discovery` then `az cloud set -n NoctaxrisAZ` |
-| Az PowerShell | `Add-AzEnvironment -Name NoctaxrisAZ -ResourceManagerUrl http://127.0.0.1:4599 -ActiveDirectoryAuthority http://127.0.0.1:4599/` then `Connect-AzAccount -Environment NoctaxrisAZ` |
-| Microsoft Graph PowerShell | `Add-MgEnvironment -Name NoctaxrisAZ -GraphEndpoint http://127.0.0.1:4599 -AzureADEndpoint http://127.0.0.1:4599` then `Connect-MgGraph -Environment NoctaxrisAZ -AccessToken $token` |
+| Az PowerShell | `Add-AzEnvironment -Name NoctaxrisAZ -ResourceManagerEndpoint http://127.0.0.1:4599 -ActiveDirectoryEndpoint http://127.0.0.1:4599/ -MicrosoftGraphUrl http://127.0.0.1:4599 -MicrosoftGraphEndpointResourceId http://127.0.0.1:4599` then `Connect-AzAccount -Environment NoctaxrisAZ` |
+| Microsoft Graph PowerShell | `Add-MgEnvironment -Name NoctaxrisAZ -AzureADEndpoint http://127.0.0.1:4599 -GraphEndpoint http://127.0.0.1:4599` then `Connect-MgGraph -Environment NoctaxrisAZ -AccessToken $token` |
 | Host/SNI AzureCloud | `NOCTAXRIS_AZ_CLOUD_HOSTS=1`; lab CA from `go run ./scripts/generatelabca ./lab-ca` or secrets next to `master.key` |
+| Prowler Azure | Same Host/SNI path (AzureCloud URLs). Live `prowler` is not executed; smokes skip when the binary is missing. |
+| Lab inject | `NOCTAXRIS_AZ_LAB_FORENSICS`, `NOCTAXRIS_AZ_ACTIVITY_INJECT`, `NOCTAXRIS_AZ_LOGS_INJECT`, `NOCTAXRIS_AZ_DEFENDER_INJECT` (default off; Bearer root) |
 
 ## Services
 
@@ -145,8 +147,8 @@ Open the service matrix for detailed actions and gaps. Full notes and CLI smoke:
     </tr>
     <tr>
       <td>Cosmos DB</td>
-      <td>Account ARM; in-process NoSQL point read/query lite.</td>
-      <td>Multi-API engines; RU/s fidelity.</td>
+      <td>Account ARM; in-process NoSQL point read/query lite; change-feed empty 200 list.</td>
+      <td>Multi-API engines; RU/s fidelity; change-feed version store.</td>
     </tr>
     <tr>
       <td>Azure SQL</td>
@@ -176,8 +178,8 @@ Open the service matrix for detailed actions and gaps. Full notes and CLI smoke:
     </tr>
     <tr>
       <td>Event Hubs</td>
-      <td>Namespaces/hubs/consumer groups; HTTP message lab.</td>
-      <td>Kafka capture; Schema Registry.</td>
+      <td>Namespaces/hubs/consumer groups; HTTP message lab; captured-events empty 200 list.</td>
+      <td>Kafka capture store; Schema Registry.</td>
     </tr>
     <tr>
       <td>Event Grid</td>
@@ -224,8 +226,8 @@ Open the service matrix for detailed actions and gaps. Full notes and CLI smoke:
     <tr>
       <td align="center" valign="middle">Observe</td>
       <td>Monitor / Log Analytics</td>
-      <td>Activity Log; metrics theatre; workspace + KQL subset + ingest.</td>
-      <td>Full KQL; alert evaluation; App Insights ingest.</td>
+      <td>Activity Log; metrics theatre; workspace + KQL subset + ingest; diagnostic settings store.</td>
+      <td>Diagnostic export pipeline; full KQL; alert evaluation; App Insights ingest.</td>
     </tr>
   </tbody>
 </table>

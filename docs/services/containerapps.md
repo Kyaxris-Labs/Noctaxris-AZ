@@ -6,6 +6,7 @@ Status: **lab**
 
 - ARM CRUD for `Microsoft.App/containerApps` (lab)
 - Properties stored as JSON theatre
+- `GET .../containerApps/{name}/revisions` lists a theatre revision (`latestRevisionName`, `runningStatus`). `CrashLoopBackOff` / `Failed` maps to Unhealthy/inactive; default is Running/Healthy
 
 ## Not implemented
 

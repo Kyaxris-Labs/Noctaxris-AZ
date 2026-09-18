@@ -278,12 +278,40 @@ func (s *Store) InvokeFunctionAppMock(name string) (string, bool, error) {
 	return row.MockResponse, true, nil
 }
 
-// AppendActivityLog records an ARM mutation for Activity Log.
+// ActivityLogRow is one Microsoft.Insights activity event.
+type ActivityLogRow struct {
+	Timestamp    time.Time
+	Caller       string
+	Operation    string
+	ResourceID   string
+	Status       string
+	Message      string
+	ClientIP     string
+	IdentityJSON string
+}
+
+// AppendActivityLog records an ARM mutation for Activity Log using wall clock.
 func (s *Store) AppendActivityLog(caller, operation, resourceID, status, message string) error {
+	return s.AppendActivityLogRow(ActivityLogRow{
+		Timestamp:  time.Now().UTC(),
+		Caller:     caller,
+		Operation:  operation,
+		ResourceID: resourceID,
+		Status:     status,
+		Message:    message,
+	})
+}
+
+// AppendActivityLogRow records a fully specified Activity Log event.
+func (s *Store) AppendActivityLogRow(row ActivityLogRow) error {
+	ts := row.Timestamp.UTC()
+	if ts.IsZero() {
+		ts = time.Now().UTC()
+	}
 	_, err := s.db.Exec(`
-INSERT INTO activity_log (timestamp, caller, operation, resource_id, status, message)
-VALUES (?, ?, ?, ?, ?, ?)`,
-		time.Now().UTC().Format(time.RFC3339), caller, operation, resourceID, status, message)
+INSERT INTO activity_log (timestamp, caller, operation, resource_id, status, message, client_ip, identity_json)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		ts.Format(time.RFC3339Nano), row.Caller, row.Operation, row.ResourceID, row.Status, row.Message, row.ClientIP, row.IdentityJSON)
 	return err
 }
 
@@ -293,7 +321,7 @@ func (s *Store) ListActivityLog(limit int) ([]map[string]string, error) {
 		limit = 50
 	}
 	rows, err := s.db.Query(`
-SELECT timestamp, caller, operation, resource_id, status, message
+SELECT timestamp, caller, operation, resource_id, status, message, client_ip, identity_json
 FROM activity_log ORDER BY id DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
@@ -301,13 +329,14 @@ FROM activity_log ORDER BY id DESC LIMIT ?`, limit)
 	defer rows.Close()
 	var out []map[string]string
 	for rows.Next() {
-		var ts, caller, op, rid, st, msg string
-		if err := rows.Scan(&ts, &caller, &op, &rid, &st, &msg); err != nil {
+		var ts, caller, op, rid, st, msg, ip, ident string
+		if err := rows.Scan(&ts, &caller, &op, &rid, &st, &msg, &ip, &ident); err != nil {
 			return nil, err
 		}
 		out = append(out, map[string]string{
 			"timestamp": ts, "caller": caller, "operation": op,
 			"resourceId": rid, "status": st, "message": msg,
+			"clientIp": ip, "identity": ident,
 		})
 	}
 	return out, rows.Err()

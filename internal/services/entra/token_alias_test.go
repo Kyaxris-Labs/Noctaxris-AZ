@@ -12,6 +12,7 @@ import (
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/services/entra"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/store"
 )
 
 func tokenPOST(t *testing.T, mux http.Handler, path, body string) *httptest.ResponseRecorder {
@@ -141,6 +142,11 @@ func TestTokenAliasesDeviceRefreshAndWIF(t *testing.T) {
 	denied := tokenPOST(t, mux, "/"+config.DefaultTenantID+"/oauth2/v2.0/token", badWIF)
 	if denied.Code != http.StatusUnauthorized {
 		t.Fatalf("entra assertion status=%d body=%s", denied.Code, denied.Body.String())
+	}
+
+	rows, err := st.QueryLogAnalyticsKQL(store.DefaultLogAnalyticsWorkspace, store.LogTableAADServicePrincipalSignInLogs+" | take 5")
+	if err != nil || len(rows) == 0 {
+		t.Fatalf("expected live sign-in rows: %v %v", rows, err)
 	}
 }
 

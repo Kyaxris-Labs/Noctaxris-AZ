@@ -12,21 +12,25 @@ import (
 const (
 	EnvAllowNonLoopbackListen = "NOCTAXRIS_AZ_ALLOW_NONLOOPBACK_LISTEN"
 	EnvCloudHosts             = "NOCTAXRIS_AZ_CLOUD_HOSTS"
+	EnvLabForensics           = "NOCTAXRIS_AZ_LAB_FORENSICS"
+	EnvActivityInject         = "NOCTAXRIS_AZ_ACTIVITY_INJECT"
+	EnvLogsInject             = "NOCTAXRIS_AZ_LOGS_INJECT"
+	EnvDefenderInject         = "NOCTAXRIS_AZ_DEFENDER_INJECT"
 
-	DefaultListenAddr          = "127.0.0.1:4599"
-	DefaultAMQPListenAddr      = "127.0.0.1:5672"
+	DefaultListenAddr           = "127.0.0.1:4599"
+	DefaultAMQPListenAddr       = "127.0.0.1:5672"
 	DefaultCloudHostsListenAddr = "127.0.0.1:8443"
-	DefaultDataRoot            = "/var/lib/noctaxris-az"
+	DefaultDataRoot             = "/var/lib/noctaxris-az"
 	// Fixed lab GUIDs (not secrets).
 	DefaultTenantID       = "00000000-0000-0000-0000-000000000001"
 	DefaultSubscriptionID = "00000000-0000-0000-0000-000000000002"
 )
 
 const (
-	exampleRootClientID     = "00000000-0000-0000-0000-00000000root"
-	exampleRootAccessToken  = "noctaxris-az-example-root-token"
-	azuriteAccountName      = "devstoreaccount1"
-	azuriteAccountKey       = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
+	exampleRootClientID    = "00000000-0000-0000-0000-00000000root"
+	exampleRootAccessToken = "noctaxris-az-example-root-token"
+	azuriteAccountName     = "devstoreaccount1"
+	azuriteAccountKey      = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
 )
 
 // Config holds process configuration from NOCTAXRIS_AZ_* environment variables.
@@ -46,6 +50,14 @@ type Config struct {
 	CloudHostsListen       string
 	DockerHost             string
 	DockerTLSCertPath      string
+	// LabForensics enables /_noctaxris-az/lab clock and BulkSeed (default off).
+	LabForensics bool
+	// ActivityInject enables Activity Log inject (default off).
+	ActivityInject bool
+	// LogsInject enables named Log Analytics table inject (default off).
+	LogsInject bool
+	// DefenderInject enables ARG SecurityResources assessment inject (default off).
+	DefenderInject bool
 }
 
 // LoadFromEnv reads configuration from the process environment.
@@ -66,6 +78,10 @@ func LoadFromEnv() (Config, error) {
 		CloudHostsListen:       getenv("NOCTAXRIS_AZ_CLOUD_HOSTS_LISTEN", ""),
 		DockerHost:             getenv("NOCTAXRIS_AZ_DOCKER_HOST", ""),
 		DockerTLSCertPath:      getenv("NOCTAXRIS_AZ_DOCKER_CERT_PATH", ""),
+		LabForensics:           envTruthy(EnvLabForensics),
+		ActivityInject:         envTruthy(EnvActivityInject),
+		LogsInject:             envTruthy(EnvLogsInject),
+		DefenderInject:         envTruthy(EnvDefenderInject),
 	}
 	if cfg.CloudHosts && strings.TrimSpace(cfg.CloudHostsListen) == "" {
 		cfg.CloudHostsListen = DefaultCloudHostsListenAddr

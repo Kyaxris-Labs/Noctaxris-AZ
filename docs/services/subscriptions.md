@@ -25,7 +25,6 @@ ARM subscription list/get, tenants, management groups, Azure Resource Graph, and
 | `GET` | `/subscriptions/{subscriptionId}/providers/Microsoft.ContainerRegistry/registries` |
 | `GET` | `/subscriptions/{subscriptionId}/providers/Microsoft.ContainerService/managedClusters` |
 | `GET` | `/subscriptions/{subscriptionId}/providers/Microsoft.Logic/workflows` |
-| `GET` | `/subscriptions/{subscriptionId}/providers/Microsoft.Authorization/roleAssignments` |
 | `GET` | `/subscriptions/{subscriptionId}/providers/Microsoft.Automation/automationAccounts` |
 | `GET` | `/subscriptions/{subscriptionId}/resourcegroups` |
 | `PUT` | `/subscriptions/{subscriptionId}/resourcegroups/{rg}` |
@@ -56,8 +55,8 @@ ARG body: `{"subscriptions":["..."],"query":"..."}`. Tables `Resources` and `Sec
 - List management groups and descendants (subscriptions as child rows)
 - Upsert and get resource group location
 - List resource groups in a subscription
-- ARG query over stored `arg_resources` rows
-- Subscription-scope inventory for VMs, Key Vault, Storage, Web sites, ACR, AKS, Logic Apps, role assignments
+- ARG query over stored `arg_resources` rows (`Resources` and `SecurityResources`; Defender inject writes assessments into `SecurityResources`)
+- Subscription-scope inventory for VMs, Key Vault, Storage, Web sites, ACR, AKS, Logic Apps (role assignment list is [authorization.md](authorization.md))
 
 ## Not implemented
 

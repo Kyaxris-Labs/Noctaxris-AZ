@@ -30,6 +30,7 @@ Lab path is on the API listener (not a real link-local `169.254.169.254`).
 
 - Create / get / delete / list user-assigned identities
 - Mint access token for a `resource` audience, optionally scoped by `client_id`
+- IMDS mint appends a row to Log Analytics table `AADManagedIdentitySignInLogs` on workspace `default` (no secrets). `TimeGenerated` follows the lab clock when freeze/set is on. `expires_on` / `not_before` stay wall clock.
 
 ## Not implemented
 

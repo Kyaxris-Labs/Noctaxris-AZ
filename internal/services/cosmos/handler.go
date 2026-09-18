@@ -29,6 +29,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /cosmos/{account}/dbs/{db}/colls/{coll}/docs/{id}", h.putDoc)
 	mux.HandleFunc("GET /cosmos/{account}/dbs/{db}/colls/{coll}/docs/{id}", h.getDoc)
 	mux.HandleFunc("GET /cosmos/{account}/dbs/{db}/colls/{coll}/docs", h.queryDocs)
+	mux.HandleFunc("GET /cosmos/{account}/dbs/{db}/colls/{coll}/changefeed", h.changeFeed)
 }
 
 func (h *Handler) putAccount(w http.ResponseWriter, r *http.Request) {
@@ -50,7 +51,7 @@ func (h *Handler) putAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"id": "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.DocumentDB/databaseAccounts/" + name,
+		"id":   "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.DocumentDB/databaseAccounts/" + name,
 		"name": name, "type": "Microsoft.DocumentDB/databaseAccounts", "location": location,
 		"properties": map[string]any{
 			"provisioningState": "Succeeded",
@@ -75,7 +76,7 @@ func (h *Handler) getAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"id": "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.DocumentDB/databaseAccounts/" + name,
+		"id":   "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.DocumentDB/databaseAccounts/" + name,
 		"name": name, "type": "Microsoft.DocumentDB/databaseAccounts", "location": location,
 		"properties": map[string]any{"provisioningState": "Succeeded", "documentEndpoint": "/cosmos/" + name, "primaryMasterKey": key},
 	})
@@ -181,6 +182,14 @@ func (h *Handler) queryDocs(w http.ResponseWriter, r *http.Request) {
 		items = append(items, json.RawMessage(d))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"Documents": items})
+}
+
+func (h *Handler) changeFeed(w http.ResponseWriter, r *http.Request) {
+	if !h.authData(w, r) {
+		return
+	}
+	// cosmos_items has no version history; empty list rather than a new engine.
+	writeJSON(w, http.StatusOK, map[string]any{"Documents": []any{}})
 }
 
 func (h *Handler) authData(w http.ResponseWriter, r *http.Request) bool {

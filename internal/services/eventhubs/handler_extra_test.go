@@ -90,6 +90,20 @@ func TestEventHubsHubMessagesAndGet(t *testing.T) {
 	if er.StatusCode != http.StatusNoContent {
 		t.Fatalf("empty %d", er.StatusCode)
 	}
+	capReq, _ := http.NewRequest(http.MethodGet, srv.URL+"/eventhubs/ns1/hubs/hub1/capturedEvents", nil)
+	auth(capReq)
+	capRes, err := http.DefaultClient.Do(capReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer capRes.Body.Close()
+	if capRes.StatusCode != http.StatusOK {
+		t.Fatalf("capture %d", capRes.StatusCode)
+	}
+	capBody, _ := io.ReadAll(capRes.Body)
+	if !strings.Contains(string(capBody), `"value"`) {
+		t.Fatalf("capture body %s", capBody)
+	}
 	miss, _ := http.NewRequest(http.MethodGet, srv.URL+"/subscriptions/s/resourceGroups/rg/providers/Microsoft.EventHub/namespaces/missing", nil)
 	auth(miss)
 	mr, _ := http.DefaultClient.Do(miss)

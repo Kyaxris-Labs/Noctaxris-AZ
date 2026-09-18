@@ -719,6 +719,13 @@ func TestIdentityEntraCosmosEventGridObserve(t *testing.T) {
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("where: %v %v", rows, err)
 	}
+	if err := st.IngestLogAnalyticsRow("ws", "T", `{"TimeGenerated":"2020-06-01T00:00:00Z","Col":"keep","Other":"x"}`); err != nil {
+		t.Fatal(err)
+	}
+	rows, err = st.QueryLogAnalyticsKQL("ws", `T | where TimeGenerated >= datetime('2020-01-01T00:00:00Z') | project Col`)
+	if err != nil || len(rows) < 1 {
+		t.Fatalf("time/project: %v %v", rows, err)
+	}
 	if err := st.CaptureEmail("acs", "a@b.c", "hi", "body"); err != nil {
 		t.Fatal(err)
 	}

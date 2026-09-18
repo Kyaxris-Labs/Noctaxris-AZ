@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Lab clock on the HTTP server (`clockMu` / `clockOverride`): `POST /_noctaxris-az/lab/clock:freeze`, `:unfreeze`, `:set`, and `POST /_noctaxris-az/lab/bulkSeed` (`suspicious-signin`, `blob-exfil`, `crypto-mining`) behind `NOCTAXRIS_AZ_LAB_FORENSICS` (default off, Bearer root). Activity Log, Log Analytics `TimeGenerated`, and ARG inject timestamps use the lab clock. Bearer expiry stays wall clock.
+- Activity Log inject (`NOCTAXRIS_AZ_ACTIVITY_INJECT`), named Log Analytics table inject (`NOCTAXRIS_AZ_LOGS_INJECT`), and ARG `SecurityResources` assessment inject (`NOCTAXRIS_AZ_DEFENDER_INJECT`): default off, Bearer root, batch cap 50, secret-like JSON keys redacted
+- Diagnostic settings ARM CRUD lite (`Microsoft.Insights/diagnosticSettings`, api-version `2021-05-01-preview`); PUT and DELETE append Activity Log; settings store only (no export pipeline)
+- Log Analytics KQL subset: `take`, `where Col == 'x'`, `TimeGenerated` range with `datetime()`, `project` of stored columns (not full Azure Monitor)
+- Entra client-credentials and IMDS token mint append redacted sign-in rows (`AADServicePrincipalSignInLogs`, `AADManagedIdentitySignInLogs`)
+- Container Apps revision list; Cosmos change-feed and Event Hubs captured-events return empty `200` lists (no version store)
+- Client recipes: `az cloud register` (`--endpoint-resource-manager`, `--endpoint-active-directory`, `--endpoint-microsoft-graph-resource-id`, `--skip-endpoint-discovery`); Az PowerShell `Add-AzEnvironment` (`-ResourceManagerEndpoint`, `-ActiveDirectoryEndpoint`, `-MicrosoftGraphUrl`, `-MicrosoftGraphEndpointResourceId`); `Add-MgEnvironment` (`-AzureADEndpoint`, `-GraphEndpoint`). Live `az` / AzureHound / `Connect-MgGraph` / `prowler` not executed; smokes soft-skip
 - Entra: login/token/JWKS/AAD Graph on literal tenant aliases (`NOCTAXRIS_AZ_TENANT_ID`, `common`, `organizations`) so ServeMux no longer panics against Graph `/v1.0/{path...}`
 - Entra: device code lite auto-succeeds on token exchange; refresh tokens hashed once with `authn.HashToken`; WIF `client_assertion` from lab OIDC issuer `/_noctaxris-az/oidc-lab`; OBO `jwt-bearer` rejected
 - Graph: directory lists; `addPassword` one-time `secretText` + `keyId`; owners/members `$ref`; FIC create 201 with default audience `api://AzureADTokenExchange`; unknown collections return empty `value`

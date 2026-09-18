@@ -128,6 +128,21 @@ func TestCosmosAccountAndDocs(t *testing.T) {
 		t.Fatalf("query %d", qr.StatusCode)
 	}
 
+	cf, _ := http.NewRequest(http.MethodGet, srv.URL+"/cosmos/cdb/dbs/db1/colls/c1/changefeed", nil)
+	cf.Header.Set("Authorization", "Bearer tok")
+	cfr, err := http.DefaultClient.Do(cf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cfr.Body.Close()
+	if cfr.StatusCode != http.StatusOK {
+		t.Fatalf("changefeed %d", cfr.StatusCode)
+	}
+	cfBody, _ := io.ReadAll(cfr.Body)
+	if !strings.Contains(string(cfBody), `"Documents"`) {
+		t.Fatalf("changefeed body %s", cfBody)
+	}
+
 	bad, _ := http.NewRequest(http.MethodPut, srv.URL+"/cosmos/cdb/dbs/db2", nil)
 	bad.Header.Set("x-ms-cosmos-account-key", "wrong")
 	br, err := http.DefaultClient.Do(bad)

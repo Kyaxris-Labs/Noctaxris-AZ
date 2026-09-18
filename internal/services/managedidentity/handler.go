@@ -23,6 +23,7 @@ type Handler struct {
 	Authz    *authz.Evaluator
 	Entra    *entra.Service
 	TenantID string
+	AuditNow func() time.Time
 }
 
 // Register mounts Managed Identity routes.
@@ -188,6 +189,18 @@ func (h *Handler) imdsToken(w http.ResponseWriter, r *http.Request) {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
 		return
 	}
+	ts := time.Now().UTC()
+	if h.AuditNow != nil {
+		ts = h.AuditNow().UTC()
+	}
+	_ = h.Store.InsertLogAnalyticsRow(store.DefaultLogAnalyticsWorkspace, store.LogTableAADManagedIdentitySignInLogs, map[string]any{
+		"TimeGenerated":       ts.Format(time.RFC3339Nano),
+		"AppId":               resolvedClientID,
+		"ServicePrincipalId":  principalID,
+		"IPAddress":           r.RemoteAddr,
+		"ResultType":          "0",
+		"ResourceDisplayName": resource,
+	})
 	now := time.Now().UTC()
 	expOn := now.Add(time.Duration(expiresIn) * time.Second).Unix()
 	// IMDS returns several lifetime fields as JSON strings.

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/amqp"
@@ -37,13 +38,14 @@ const ctxRequestID ctxKey = 1
 
 // Server is the HTTP listener for Noctaxris-AZ.
 type Server struct {
-	cfg   config.Config
-	store *store.Store
-	audit *audit.Writer
-	authn *authn.Authenticator
-	authz *authz.Evaluator
-	mux   *http.ServeMux
-	now   func() time.Time
+	cfg           config.Config
+	store         *store.Store
+	audit         *audit.Writer
+	authn         *authn.Authenticator
+	authz         *authz.Evaluator
+	mux           *http.ServeMux
+	clockMu       sync.RWMutex
+	clockOverride *time.Time
 }
 
 // New builds a Server with health routes and service mounts.
@@ -59,7 +61,6 @@ func New(cfg config.Config, st *store.Store, aud *audit.Writer) *Server {
 		},
 		authz: &authz.Evaluator{Assignments: st},
 		mux:   http.NewServeMux(),
-		now:   func() time.Time { return time.Now().UTC() },
 	}
 	s.registerREST()
 	s.registerIdentity()
@@ -68,6 +69,7 @@ func New(cfg config.Config, st *store.Store, aud *audit.Writer) *Server {
 	s.registerApp()
 	s.registerEdge()
 	s.registerObserve()
+	s.registerLabForensics()
 	return s
 }
 

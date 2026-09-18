@@ -6,6 +6,7 @@ Status: **lab**
 
 - ARM CRUD for namespaces, event hubs, and consumer groups
 - HTTP message enqueue/dequeue under `/eventhubs/{ns}/hubs/{hub}/messages`
+- `GET /eventhubs/{ns}/hubs/{hub}/capturedEvents` returns `200` with `"value": []` (no capture store)
 
 ## Not implemented
 
@@ -21,4 +22,4 @@ curl -H "Authorization: Bearer $ROOT_TOKEN" -H "Content-Type: application/json" 
 
 ## Deferred depth
 
-Richer AMQP entity mapping and Kafka remain deferred.
+Captured-events remains an empty `200` list (`"value": []`). There is no capture store. Richer AMQP entity mapping and Kafka remain deferred. Live `az eventhubs` smokes skip when `az` is missing.

@@ -687,44 +687,6 @@ func (s *Store) ListARGResources(tableName, typeFilter string) ([]map[string]any
 	return out, rows.Err()
 }
 
-func (s *Store) GetLabClock() (frozen bool, at time.Time, err error) {
-	var f int
-	var raw string
-	err = s.db.QueryRow(`SELECT frozen, frozen_at FROM lab_clock WHERE id = 1`).Scan(&f, &raw)
-	if err == sql.ErrNoRows {
-		return false, time.Time{}, nil
-	}
-	if err != nil {
-		return false, time.Time{}, err
-	}
-	if raw != "" {
-		at, _ = time.Parse(time.RFC3339, raw)
-	}
-	return f != 0, at, nil
-}
-
-func (s *Store) SetLabClock(frozen bool, at time.Time) error {
-	raw := ""
-	if !at.IsZero() {
-		raw = at.UTC().Format(time.RFC3339)
-	}
-	fr := 0
-	if frozen {
-		fr = 1
-	}
-	_, err := s.db.Exec(`INSERT INTO lab_clock (id, frozen, frozen_at) VALUES (1, ?, ?)
-ON CONFLICT(id) DO UPDATE SET frozen=excluded.frozen, frozen_at=excluded.frozen_at`, fr, raw)
-	return err
-}
-
-func (s *Store) Now() time.Time {
-	frozen, at, err := s.GetLabClock()
-	if err == nil && frozen && !at.IsZero() {
-		return at
-	}
-	return time.Now().UTC()
-}
-
 func (s *Store) InsertLogAnalyticsRow(workspace, tableName string, row map[string]any) error {
 	b, _ := json.Marshal(row)
 	_, err := s.db.Exec(`INSERT INTO log_analytics_rows (workspace, table_name, row_json) VALUES (?,?,?)`, workspace, tableName, string(b))

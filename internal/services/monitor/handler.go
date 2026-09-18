@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
@@ -12,10 +13,16 @@ import (
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/store"
 )
 
-// Handler serves Activity Log list and metrics theatre.
+// Handler serves Activity Log list, metrics, diagnostic settings, and inject theatre.
 type Handler struct {
-	Store *store.Store
-	Authz *authz.Evaluator
+	Store          *store.Store
+	Authz          *authz.Evaluator
+	Now            func() time.Time
+	ActivityInject bool
+	LogsInject     bool
+	DefenderInject bool
+	SubscriptionID string
+	TenantID       string
 }
 
 type principalFunc func(*http.Request) (authn.Principal, bool)
@@ -33,6 +40,8 @@ func (h *Handler) Mount(mux *http.ServeMux, principalFrom principalFunc) {
 	mux.HandleFunc("GET "+base+"/{name}", h.wrap(principalFrom, h.getWorkspace))
 	mux.HandleFunc("POST /loganalytics/{workspace}/query", h.wrap(principalFrom, h.queryKQL))
 	mux.HandleFunc("POST /loganalytics/{workspace}/ingest/{table}", h.wrap(principalFrom, h.ingestRows))
+	h.mountDiagnosticSettings(mux, principalFrom)
+	h.MountLab(mux, principalFrom)
 }
 
 type handlerFunc func(w http.ResponseWriter, r *http.Request, p authn.Principal)
@@ -60,6 +69,13 @@ func (h *Handler) require(p authn.Principal, action, scope string) error {
 }
 
 var errDenied = fmt.Errorf("permission denied")
+
+func (h *Handler) now() time.Time {
+	if h != nil && h.Now != nil {
+		return h.Now().UTC()
+	}
+	return time.Now().UTC()
+}
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -95,16 +111,28 @@ func (h *Handler) listActivity(w http.ResponseWriter, r *http.Request, p authn.P
 	}
 	value := make([]any, 0, len(rows))
 	for _, row := range rows {
-		value = append(value, map[string]any{
-			"eventTimestamp":   row["timestamp"],
-			"caller":           row["caller"],
-			"operationName":    map[string]string{"value": row["operation"], "localizedValue": row["operation"]},
-			"resourceId":       row["resourceId"],
-			"status":           map[string]string{"value": row["status"], "localizedValue": row["status"]},
-			"description":      row["message"],
-			"subscriptionId":   sub,
-			"eventDataId":      row["timestamp"] + "|" + row["operation"],
-		})
+		var ident any
+		if s := row["identity"]; s != "" {
+			if json.Unmarshal([]byte(s), &ident) != nil {
+				ident = s
+			}
+		}
+		ev := map[string]any{
+			"eventTimestamp":  row["timestamp"],
+			"caller":          row["caller"],
+			"operationName":   map[string]string{"value": row["operation"], "localizedValue": row["operation"]},
+			"resourceId":      row["resourceId"],
+			"status":          map[string]string{"value": row["status"], "localizedValue": row["status"]},
+			"description":     row["message"],
+			"subscriptionId":  sub,
+			"eventDataId":     row["timestamp"] + "|" + row["operation"],
+			"callerIpAddress": row["clientIp"],
+			"httpRequest":     map[string]any{"clientIpAddress": row["clientIp"]},
+		}
+		if ident != nil {
+			ev["identity"] = ident
+		}
+		value = append(value, ev)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"value": value})
 }

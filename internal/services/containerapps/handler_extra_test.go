@@ -46,6 +46,16 @@ func TestARMListDeleteNotFoundUnauth(t *testing.T) {
 	if lr.StatusCode != http.StatusOK {
 		t.Fatalf("list %d", lr.StatusCode)
 	}
+	rev, _ := http.NewRequest(http.MethodGet, url+"/revisions", nil)
+	rev.Header.Set("Authorization", "Bearer tok")
+	rr, err := http.DefaultClient.Do(rev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rr.Body.Close()
+	if rr.StatusCode != http.StatusOK {
+		t.Fatalf("revisions %d", rr.StatusCode)
+	}
 	miss, _ := http.NewRequest(http.MethodGet, base+"/missing", nil)
 	miss.Header.Set("Authorization", "Bearer tok")
 	mr, _ := http.DefaultClient.Do(miss)
