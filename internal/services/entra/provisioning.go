@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
-	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 )
 
 func (s *Service) mountProvisioningSOAP(mux *http.ServeMux) {
@@ -15,10 +14,8 @@ func (s *Service) mountProvisioningSOAP(mux *http.ServeMux) {
 }
 
 func (s *Service) handleProvisioningSOAP(w http.ResponseWriter, r *http.Request) {
-	if _, ok := authn.PrincipalFromContext(r.Context()); !ok {
-		if authn.IsPublicPath(r.URL.Path) {
-			// SOAP is public-path classified so AADInternals can post; still accept Bearer when present.
-		}
+	if !s.requireGraph(w, r) {
+		return
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {

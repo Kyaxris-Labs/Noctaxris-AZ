@@ -58,12 +58,52 @@ func TestAADGraphUsersAndSOAPListUsers(t *testing.T) {
 		strings.NewReader(`<s:Envelope><s:Body><ListUsers xmlns="http://provisioning.microsoftonline.com/"/></s:Body></s:Envelope>`))
 	sreq.Header.Set("Content-Type", "application/soap+xml")
 	mux.ServeHTTP(soap, sreq)
-	if soap.Code != http.StatusOK {
-		t.Fatalf("soap %d body=%s", soap.Code, soap.Body.String())
+	if soap.Code != http.StatusUnauthorized {
+		t.Fatalf("soap unauth %d body=%s", soap.Code, soap.Body.String())
 	}
-	out := soap.Body.String()
+
+	soapOK := httptest.NewRecorder()
+	sreqOK := httptest.NewRequest(http.MethodPost, "/provisioningwebservice.svc",
+		strings.NewReader(`<s:Envelope><s:Body><ListUsers xmlns="http://provisioning.microsoftonline.com/"/></s:Body></s:Envelope>`))
+	sreqOK.Header.Set("Content-Type", "application/soap+xml")
+	wrap.ServeHTTP(soapOK, sreqOK)
+	if soapOK.Code != http.StatusOK {
+		t.Fatalf("soap %d body=%s", soapOK.Code, soapOK.Body.String())
+	}
+	out := soapOK.Body.String()
 	if !strings.Contains(out, "ListUsersResponse") || !strings.Contains(out, "lab-admin@lab.local") {
 		t.Fatalf("soap body %s", out)
+	}
+
+	tenantSOAP := httptest.NewRecorder()
+	treq := httptest.NewRequest(http.MethodPost, "/provisioningwebservice.svc",
+		strings.NewReader(`<s:Envelope><s:Body><GetCompanyInformation/></s:Body></s:Envelope>`))
+	mux.ServeHTTP(tenantSOAP, treq)
+	if tenantSOAP.Code != http.StatusUnauthorized {
+		t.Fatalf("tenant soap unauth %d", tenantSOAP.Code)
+	}
+	tenantOK := httptest.NewRecorder()
+	wrap.ServeHTTP(tenantOK, httptest.NewRequest(http.MethodPost, "/provisioningwebservice.svc",
+		strings.NewReader(`<s:Envelope><s:Body><GetCompanyInformation/></s:Body></s:Envelope>`)))
+	if tenantOK.Code != http.StatusOK || !strings.Contains(tenantOK.Body.String(), "ContextId") {
+		t.Fatalf("tenant soap %d %s", tenantOK.Code, tenantOK.Body.String())
+	}
+
+	armTok, _, err := svc.MintAccessToken("sp-lab-1", authn.AudienceARM)
+	if err != nil {
+		t.Fatal(err)
+	}
+	auth := &authn.Authenticator{Tokens: st, JWT: svc}
+	p, err := auth.AuthenticateToken(armTok)
+	if err != nil {
+		t.Fatal(err)
+	}
+	armSOAP := httptest.NewRecorder()
+	areq := httptest.NewRequest(http.MethodPost, "/provisioningwebservice.svc",
+		strings.NewReader(`<s:Envelope><s:Body><ListUsers xmlns="http://provisioning.microsoftonline.com/"/></s:Body></s:Envelope>`))
+	mux.ServeHTTP(armSOAP, areq.WithContext(authn.WithPrincipal(areq.Context(), p)))
+	if armSOAP.Code != http.StatusForbidden {
+		t.Fatalf("ARM aud on SOAP %d body=%s", armSOAP.Code, armSOAP.Body.String())
 	}
 
 	iam := httptest.NewRecorder()
