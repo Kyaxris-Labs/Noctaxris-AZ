@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/services/eventhubs"
@@ -110,5 +111,85 @@ func TestEventHubsHubMessagesAndGet(t *testing.T) {
 	mr.Body.Close()
 	if mr.StatusCode != http.StatusNotFound {
 		t.Fatalf("missing %d", mr.StatusCode)
+	}
+}
+
+type directoryTokens struct {
+	id string
+}
+
+func (d directoryTokens) LookupAccessToken(string, time.Time) (string, bool, error) {
+	if d.id == "" {
+		return "", false, nil
+	}
+	return d.id, true, nil
+}
+
+func TestEventHubsDataPlaneRejectsDirectoryBearer(t *testing.T) {
+	dir := t.TempDir()
+	key, err := store.LoadOrCreateMasterKey(dir + "/master.key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := store.Open(dir+"/data", key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	h := &eventhubs.Handler{
+		Store: st,
+		Auth: &authn.Authenticator{
+			RootClientID:    "r",
+			RootAccessToken: "tok",
+			Tokens:          directoryTokens{id: "lab-admin"},
+		},
+	}
+	mux := http.NewServeMux()
+	h.Register(mux)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	user := func(r *http.Request) { r.Header.Set("Authorization", "Bearer directory-token") }
+	post, _ := http.NewRequest(http.MethodPost, srv.URL+"/eventhubs/ns1/hubs/hub1/messages", strings.NewReader("nope"))
+	user(post)
+	pr, err := http.DefaultClient.Do(post)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pr.Body.Close()
+	if pr.StatusCode != http.StatusForbidden {
+		t.Fatalf("directory send %d", pr.StatusCode)
+	}
+
+	gm, _ := http.NewRequest(http.MethodGet, srv.URL+"/eventhubs/ns1/hubs/hub1/messages", nil)
+	user(gm)
+	gmr, err := http.DefaultClient.Do(gm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gmr.Body.Close()
+	if gmr.StatusCode != http.StatusForbidden {
+		t.Fatalf("directory receive %d", gmr.StatusCode)
+	}
+
+	capReq, _ := http.NewRequest(http.MethodGet, srv.URL+"/eventhubs/ns1/hubs/hub1/capturedEvents", nil)
+	user(capReq)
+	capRes, err := http.DefaultClient.Do(capReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer capRes.Body.Close()
+	if capRes.StatusCode != http.StatusForbidden {
+		t.Fatalf("directory capturedEvents %d", capRes.StatusCode)
+	}
+
+	unauth, _ := http.NewRequest(http.MethodGet, srv.URL+"/eventhubs/ns1/hubs/hub1/capturedEvents", nil)
+	ur, err := http.DefaultClient.Do(unauth)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ur.Body.Close()
+	if ur.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("missing bearer capturedEvents %d", ur.StatusCode)
 	}
 }

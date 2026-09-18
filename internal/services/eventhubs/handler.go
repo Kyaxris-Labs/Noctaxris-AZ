@@ -148,11 +148,16 @@ func (h *Handler) requireRoot(w http.ResponseWriter, r *http.Request) bool {
 		azerrors.Unauthenticated(w, "")
 		return false
 	}
-	if _, err := h.Auth.AuthenticateRequest(r); err != nil {
+	p, err := h.Auth.AuthenticateRequest(r)
+	if err != nil {
 		azerrors.Unauthenticated(w, "")
 		return false
 	}
-	return true
+	if p.IsRoot {
+		return true
+	}
+	azerrors.Forbidden(w, "")
+	return false
 }
 
 func (h *Handler) require(w http.ResponseWriter, r *http.Request, action string) bool {
@@ -163,6 +168,10 @@ func (h *Handler) require(w http.ResponseWriter, r *http.Request, action string)
 	p, err := h.Auth.AuthenticateRequest(r)
 	if err != nil {
 		azerrors.Unauthenticated(w, "")
+		return false
+	}
+	if !p.AllowsARM() {
+		azerrors.InvalidAuthenticationTokenAudience(w, "")
 		return false
 	}
 	scope := "/subscriptions/" + r.PathValue("sub") + "/resourceGroups/" + r.PathValue("rg")
