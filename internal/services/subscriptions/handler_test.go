@@ -56,6 +56,7 @@ func TestGetSubscriptionAuthAndOK(t *testing.T) {
 		Authz:          &authz.Evaluator{Assignments: st},
 		PrincipalFrom:  authn.PrincipalFromContext,
 		SubscriptionID: config.DefaultSubscriptionID,
+		TenantID:       config.DefaultTenantID,
 	}
 	mux := http.NewServeMux()
 	svc.Mount(mux)
@@ -92,6 +93,7 @@ func TestResourceGroupPutGet(t *testing.T) {
 		Authz:          &authz.Evaluator{Assignments: st},
 		PrincipalFrom:  authn.PrincipalFromContext,
 		SubscriptionID: config.DefaultSubscriptionID,
+		TenantID:       config.DefaultTenantID,
 	}
 	mux := http.NewServeMux()
 	svc.Mount(mux)

@@ -6,11 +6,15 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// SeededManagementGroupID is the Tenant Root Group inserted by SeedDirectory.
+const SeededManagementGroupID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 
 func opaqueHash(s string) string {
 	sum := sha256.Sum256([]byte(s))
@@ -99,7 +103,7 @@ func (s *Store) SeedDirectory(tenantID string) error {
 	spID := "77777777-7777-7777-7777-777777777777"
 	gaRole := "88888888-8888-8888-8888-888888888888"
 	aaRole := "99999999-9999-9999-9999-999999999999"
-	mgID := "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+	mgID := SeededManagementGroupID
 	if _, err := s.db.Exec(`INSERT INTO entra_users (id, tenant_id, user_principal_name, display_name, mail, department, job_title, created_at)
 VALUES (?,?,?,?,?,?,?,?), (?,?,?,?,?,?,?,?)`,
 		adminID, tenantID, "lab-admin@lab.local", "Lab Admin", "lab-admin@lab.local", "IT", "Administrator", now,
@@ -588,7 +592,19 @@ func enabledState(en int) string {
 }
 
 func (s *Store) ListSubscriptions() ([]map[string]string, error) {
-	rows, err := s.db.Query(`SELECT id, display_name, state, tenant_id FROM subscriptions ORDER BY display_name`)
+	return s.ListSubscriptionsForTenant("")
+}
+
+// ListSubscriptionsForTenant lists subscriptions in one tenant. Empty tenantID lists all rows.
+func (s *Store) ListSubscriptionsForTenant(tenantID string) ([]map[string]string, error) {
+	q := `SELECT id, display_name, state, tenant_id FROM subscriptions`
+	var args []any
+	if tenantID != "" {
+		q += ` WHERE tenant_id = ?`
+		args = append(args, tenantID)
+	}
+	q += ` ORDER BY display_name`
+	rows, err := s.db.Query(q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -605,7 +621,61 @@ func (s *Store) ListSubscriptions() ([]map[string]string, error) {
 }
 
 func (s *Store) ListManagementGroups() ([]map[string]string, error) {
-	rows, err := s.db.Query(`SELECT id, display_name, tenant_id, parent_id FROM management_groups`)
+	return s.listManagementGroups("", "")
+}
+
+// GetManagementGroup loads one management group by id.
+func (s *Store) GetManagementGroup(id string) (displayName, tenantID, parentID string, ok bool, err error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return "", "", "", false, nil
+	}
+	err = s.db.QueryRow(`SELECT display_name, tenant_id, parent_id FROM management_groups WHERE id = ?`, id).
+		Scan(&displayName, &tenantID, &parentID)
+	if err == sql.ErrNoRows {
+		return "", "", "", false, nil
+	}
+	if err != nil {
+		return "", "", "", false, err
+	}
+	return displayName, tenantID, parentID, true, nil
+}
+
+// PutManagementGroup inserts or updates a management group row.
+func (s *Store) PutManagementGroup(id, displayName, tenantID, parentID string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return fmt.Errorf("management group id is required")
+	}
+	_, err := s.db.Exec(`
+INSERT INTO management_groups (id, display_name, tenant_id, parent_id) VALUES (?,?,?,?)
+ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name, tenant_id=excluded.tenant_id, parent_id=excluded.parent_id`,
+		id, displayName, tenantID, parentID)
+	return err
+}
+
+// ListChildManagementGroups returns direct child groups of parentID in tenantID.
+func (s *Store) ListChildManagementGroups(parentID, tenantID string) ([]map[string]string, error) {
+	parentID = strings.TrimSpace(parentID)
+	tenantID = strings.TrimSpace(tenantID)
+	if parentID == "" || tenantID == "" {
+		return []map[string]string{}, nil
+	}
+	return s.listManagementGroups(tenantID, parentID)
+}
+
+func (s *Store) listManagementGroups(tenantID, parentID string) ([]map[string]string, error) {
+	q := `SELECT id, display_name, tenant_id, parent_id FROM management_groups WHERE 1=1`
+	var args []any
+	if tenantID != "" {
+		q += ` AND tenant_id = ?`
+		args = append(args, tenantID)
+	}
+	if parentID != "" {
+		q += ` AND parent_id = ?`
+		args = append(args, parentID)
+	}
+	rows, err := s.db.Query(q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -617,6 +687,9 @@ func (s *Store) ListManagementGroups() ([]map[string]string, error) {
 			return nil, err
 		}
 		out = append(out, map[string]string{"id": id, "displayName": name, "tenantId": tid, "parentId": parent})
+	}
+	if out == nil {
+		out = []map[string]string{}
 	}
 	return out, rows.Err()
 }

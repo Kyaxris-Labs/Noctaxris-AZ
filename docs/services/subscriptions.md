@@ -32,6 +32,8 @@ ARM subscription list/get, tenants, management groups, Azure Resource Graph, and
 
 Query `api-version` is required on these ARM routes.
 
+`GET .../managementGroups/{id}/descendants` loads that group (404 if missing or in another tenant) and returns only its direct children. Subscriptions are listed for the tenant-root group (`parent_id` empty) in the same `tenant_id`. A bogus `{id}` does not dump every subscription.
+
 ARG body: `{"subscriptions":["..."],"query":"..."}`. Tables `Resources` and `SecurityResources` are recognized in the query text. Response fields: `totalRecords`, `count`, `data`, `resultTruncated`.
 
 `arm_lab_resources.provider` stores the full ARM type. Subscription-scope LISTs query that value (prefix match `provider = ? OR provider LIKE ? || '/%'`). Unseeded types such as Automation accounts return `"value": []`.
@@ -40,11 +42,11 @@ ARG body: `{"subscriptions":["..."],"query":"..."}`. Tables `Resources` and `Sec
 
 ## Authz
 
-- Bearer required
+- Bearer required. Token `aud` must be `https://management.azure.com` or `https://management.core.windows.net` (Graph `aud` is HTTP 403 `InvalidAuthenticationTokenAudience`). Root Bearer skips audience.
 - `Microsoft.Resources/subscriptions/read`
 - `Microsoft.Resources/subscriptions/resourceGroups/read|write`
 - `Microsoft.Resources/tenants/read`
-- `Microsoft.Management/managementGroups/read`
+- `Microsoft.Management/managementGroups/read` (descendants authorize `/providers/Microsoft.Management/managementGroups/{id}`)
 - `Microsoft.ResourceGraph/resources/read`
 - Provider reads use `Microsoft.Resources/resources/read` or the provider action (Storage, Web, Authorization)
 
@@ -52,7 +54,7 @@ ARG body: `{"subscriptions":["..."],"query":"..."}`. Tables `Resources` and `Sec
 
 - List and get subscription display name / state / tenant
 - List tenants (lab tenant from the seeded subscription)
-- List management groups and descendants (subscriptions as child rows)
+- List management groups and descendants (direct child groups, plus same-tenant subscriptions under the tenant-root group). Unknown `{id}` returns 404.
 - Upsert and get resource group location
 - List resource groups in a subscription
 - ARG query over stored `arg_resources` rows (`Resources` and `SecurityResources`; Defender inject writes assessments into `SecurityResources`)
@@ -87,6 +89,8 @@ curl -s -H "Authorization: Bearer $TOKEN" \
   "http://127.0.0.1:4599/subscriptions/$SUB?api-version=2022-12-01"
 curl -s -H "Authorization: Bearer $TOKEN" \
   "http://127.0.0.1:4599/tenants?api-version=2022-12-01"
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "http://127.0.0.1:4599/providers/Microsoft.Management/managementGroups/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/descendants?api-version=2020-05-01"
 curl -s -H "Authorization: Bearer $TOKEN" -X POST \
   -H "Content-Type: application/json" \
   -d '{"subscriptions":["'"$SUB"'"],"query":"Resources"}' \

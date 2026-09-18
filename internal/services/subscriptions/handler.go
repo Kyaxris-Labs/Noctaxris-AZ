@@ -21,6 +21,7 @@ type Service struct {
 	Authz          *authz.Evaluator
 	PrincipalFrom  func(context.Context) (authn.Principal, bool)
 	SubscriptionID string
+	TenantID       string
 	Now            func() time.Time
 }
 
@@ -90,6 +91,10 @@ func (s *Service) require(w http.ResponseWriter, r *http.Request, action, scope 
 	p, ok := s.principal(r.Context())
 	if !ok {
 		azerrors.Unauthenticated(w, "")
+		return authn.Principal{}, false
+	}
+	if !p.AllowsARM() {
+		azerrors.InvalidAuthenticationTokenAudience(w, "")
 		return authn.Principal{}, false
 	}
 	allowed, err := s.Authz.Evaluate(p.ID, p.IsRoot, action, scope)

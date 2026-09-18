@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authz"
 )
@@ -65,6 +66,26 @@ func (s *Store) GetSubscription(id string) (displayName, state, tenantID string,
 		return "", "", "", false, err
 	}
 	return displayName, state, tenantID, true, nil
+}
+
+// PutSubscription inserts or updates a subscription row.
+func (s *Store) PutSubscription(id, displayName, state, tenantID string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return fmt.Errorf("subscription id is required")
+	}
+	if state == "" {
+		state = "Enabled"
+	}
+	if displayName == "" {
+		displayName = id
+	}
+	_, err := s.db.Exec(`
+INSERT INTO subscriptions (id, display_name, state, tenant_id)
+VALUES (?, ?, ?, ?)
+ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name, state=excluded.state, tenant_id=excluded.tenant_id`,
+		id, displayName, state, tenantID)
+	return err
 }
 
 // UpsertResourceGroup creates or updates a resource group.

@@ -21,6 +21,7 @@ func mountARM(t *testing.T, st *store.Store) http.Handler {
 		Authz:          &authz.Evaluator{Assignments: st},
 		PrincipalFrom:  authn.PrincipalFromContext,
 		SubscriptionID: config.DefaultSubscriptionID,
+		TenantID:       config.DefaultTenantID,
 	}
 	mux := http.NewServeMux()
 	svc.Mount(mux)
@@ -155,5 +156,74 @@ func TestSubscriptionListTenantsARGAndProviderInventory(t *testing.T) {
 	data, _ := argBody["data"].([]any)
 	if len(data) == 0 {
 		t.Fatalf("SecurityResources empty %#v", argBody)
+	}
+}
+
+func TestManagementGroupDescendantsScopedToPath(t *testing.T) {
+	st := openStore(t)
+	h := mountARM(t, st)
+	sub := config.DefaultSubscriptionID
+	foreignTenant := "ffffffff-ffff-ffff-ffff-ffffffffffff"
+	foreignSub := "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+	if err := st.PutSubscription(foreignSub, "Foreign Lab", "Enabled", foreignTenant); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.PutManagementGroup("foreign-mg", "Foreign Root", foreignTenant, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.PutManagementGroup("child-mg", "Child", config.DefaultTenantID, store.SeededManagementGroupID); err != nil {
+		t.Fatal(err)
+	}
+
+	okRec := armGET(t, h, "/providers/Microsoft.Management/managementGroups/"+store.SeededManagementGroupID+"/descendants?api-version=2020-05-01")
+	if okRec.Code != http.StatusOK {
+		t.Fatalf("seeded descendants %d body=%s", okRec.Code, okRec.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(okRec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	vals, _ := body["value"].([]any)
+	foundLab, foundForeign, foundChild := false, false, false
+	for _, raw := range vals {
+		m, _ := raw.(map[string]any)
+		switch m["name"] {
+		case sub:
+			foundLab = m["type"] == "Microsoft.Management/managementGroups/subscriptions"
+		case foreignSub:
+			foundForeign = true
+		case "child-mg":
+			foundChild = m["type"] == "Microsoft.Management/managementGroups"
+		}
+	}
+	if !foundLab {
+		t.Fatalf("seeded subscription missing %#v", body)
+	}
+	if foundForeign {
+		t.Fatalf("foreign tenant subscription leaked %#v", body)
+	}
+	if !foundChild {
+		t.Fatalf("child management group missing %#v", body)
+	}
+
+	unknown := armGET(t, h, "/providers/Microsoft.Management/managementGroups/not-this-tenant/descendants?api-version=2020-05-01")
+	if unknown.Code != http.StatusNotFound {
+		t.Fatalf("unknown mg %d body=%s", unknown.Code, unknown.Body.String())
+	}
+	if strings.Contains(unknown.Body.String(), sub) || strings.Contains(unknown.Body.String(), foreignSub) {
+		t.Fatalf("unknown mg leaked subscriptions: %s", unknown.Body.String())
+	}
+
+	foreignMG := armGET(t, h, "/providers/Microsoft.Management/managementGroups/foreign-mg/descendants?api-version=2020-05-01")
+	if foreignMG.Code != http.StatusNotFound {
+		t.Fatalf("foreign mg %d body=%s", foreignMG.Code, foreignMG.Body.String())
+	}
+
+	child := armGET(t, h, "/providers/Microsoft.Management/managementGroups/child-mg/descendants?api-version=2020-05-01")
+	if child.Code != http.StatusOK {
+		t.Fatalf("child descendants %d body=%s", child.Code, child.Body.String())
+	}
+	if strings.Contains(child.Body.String(), sub) || strings.Contains(child.Body.String(), foreignSub) {
+		t.Fatalf("nested mg listed subscriptions %#v", child.Body.String())
 	}
 }

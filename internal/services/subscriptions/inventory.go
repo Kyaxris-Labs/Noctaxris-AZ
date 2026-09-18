@@ -94,18 +94,52 @@ func (s *Service) listManagementGroupDescendants(w http.ResponseWriter, r *http.
 	if !requireAPIVersion(w, r) {
 		return
 	}
-	if _, ok := s.require(w, r, "Microsoft.Management/managementGroups/read", "/providers/Microsoft.Management/managementGroups"); !ok {
+	groupID := strings.TrimSpace(r.PathValue("id"))
+	if groupID == "" {
+		azerrors.BadRequest(w, "management group id is required")
 		return
 	}
-	subs, _ := s.Store.ListSubscriptions()
-	value := make([]map[string]any, 0, len(subs))
-	for _, row := range subs {
+	scope := "/providers/Microsoft.Management/managementGroups/" + groupID
+	if _, ok := s.require(w, r, "Microsoft.Management/managementGroups/read", scope); !ok {
+		return
+	}
+	_, tenantID, parentID, ok, err := s.Store.GetManagementGroup(groupID)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+		return
+	}
+	if !ok || (strings.TrimSpace(s.TenantID) != "" && tenantID != s.TenantID) {
+		azerrors.NotFound(w, "Management group not found")
+		return
+	}
+	value := make([]map[string]any, 0)
+	children, err := s.Store.ListChildManagementGroups(groupID, tenantID)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+		return
+	}
+	for _, row := range children {
 		id := row["id"]
 		value = append(value, map[string]any{
-			"id":   "/subscriptions/" + id,
+			"id":   "/providers/Microsoft.Management/managementGroups/" + id,
 			"name": id,
-			"type": "Microsoft.Management/managementGroups/subscriptions",
+			"type": "Microsoft.Management/managementGroups",
 		})
+	}
+	if parentID == "" {
+		subs, err := s.Store.ListSubscriptionsForTenant(tenantID)
+		if err != nil {
+			azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+			return
+		}
+		for _, row := range subs {
+			id := row["id"]
+			value = append(value, map[string]any{
+				"id":   "/subscriptions/" + id,
+				"name": id,
+				"type": "Microsoft.Management/managementGroups/subscriptions",
+			})
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"value": value})
 }
