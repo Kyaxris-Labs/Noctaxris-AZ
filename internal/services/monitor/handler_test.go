@@ -96,9 +96,64 @@ func TestMonitorActivityAndMetrics(t *testing.T) {
 	}
 }
 
+func TestActivityLogListScopedToPathSubscription(t *testing.T) {
+	mux, st := mountMonitor(t, nil)
+	other := "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+	if err := st.AppendActivityLog("root", "Microsoft.Resources/subscriptions/resourceGroups/write",
+		"/subscriptions/"+testSub+"/resourceGroups/rg-a", "Succeeded", "a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AppendActivityLog("root", "Microsoft.Resources/subscriptions/resourceGroups/write",
+		"/subscriptions/"+other+"/resourceGroups/rg-b", "Succeeded", "b"); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/subscriptions/"+testSub+"/providers/Microsoft.Insights/eventtypes/management/values", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list A %d %s", rec.Code, rec.Body.String())
+	}
+	var act struct {
+		Value []map[string]any `json:"value"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &act); err != nil {
+		t.Fatal(err)
+	}
+	if len(act.Value) != 1 {
+		t.Fatalf("want 1 event for A, got %#v", act.Value)
+	}
+	if act.Value[0]["subscriptionId"] != testSub {
+		t.Fatalf("stamped sub=%v", act.Value[0]["subscriptionId"])
+	}
+	rid, _ := act.Value[0]["resourceId"].(string)
+	if rid != "/subscriptions/"+testSub+"/resourceGroups/rg-a" {
+		t.Fatalf("resourceId=%q", rid)
+	}
+
+	req = httptest.NewRequest(http.MethodGet,
+		"/subscriptions/"+other+"/providers/Microsoft.Insights/eventtypes/management/values", nil)
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list B %d %s", rec.Code, rec.Body.String())
+	}
+	act.Value = nil
+	if err := json.Unmarshal(rec.Body.Bytes(), &act); err != nil {
+		t.Fatal(err)
+	}
+	if len(act.Value) != 1 {
+		t.Fatalf("want 1 event for B, got %#v", act.Value)
+	}
+	if act.Value[0]["subscriptionId"] != other {
+		t.Fatalf("B stamped sub=%v", act.Value[0]["subscriptionId"])
+	}
+}
+
 func TestMonitorAuthzDeny(t *testing.T) {
 	mux, _ := mountMonitor(t, func(*http.Request) (authn.Principal, bool) {
-		return authn.Principal{ID: "nobody", IsRoot: false}, true
+		return authn.Principal{ID: "nobody", IsRoot: false, Audiences: []string{authn.AudienceARM}}, true
 	})
 	req := httptest.NewRequest(http.MethodGet,
 		"/subscriptions/"+testSub+"/providers/Microsoft.Insights/eventtypes/management/values", nil)

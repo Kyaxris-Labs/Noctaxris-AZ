@@ -70,8 +70,7 @@ func (h *Handler) queryKQL(w http.ResponseWriter, r *http.Request, p authn.Princ
 }
 
 func (h *Handler) ingestRows(w http.ResponseWriter, r *http.Request, p authn.Principal) {
-	if err := h.require(p, "Microsoft.OperationalInsights/workspaces/write", "/"); err != nil {
-		writeAuthz(w, err)
+	if !h.requireInjectRoot(w, p, h.LogsInject, "NOCTAXRIS_AZ_LOGS_INJECT", "Log Analytics inject") {
 		return
 	}
 	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))

@@ -26,7 +26,9 @@ Activity Log list shaped like Microsoft.Insights eventtypes, metrics write/list 
 | `POST` | `/_noctaxris-az/lab/logs:inject` |
 | `POST` | `/_noctaxris-az/lab/securityAssessments:inject` |
 
-Activity Log supports `$top`. Metrics POST body: `{"name","value","resourceId"}`. Metrics GET accepts `metricnames` or `name`.
+Activity Log supports `$top`. List returns events whose `resourceId` is `/subscriptions/{sub}` or a child of that subscription. `subscriptionId` on each event is the path subscription.
+
+Metrics POST body: `{"name","value","resourceId"}`. Metrics GET accepts `metricnames` or `name`.
 
 Diagnostic settings follow ARM `Microsoft.Insights/diagnosticSettings` with api-version `2021-05-01-preview`. PUT body properties used: `workspaceId`, `storageAccountId`, `eventHubAuthorizationRuleId`, `eventHubName`, `logs[]`, `metrics[]`. Nested resource paths cover one provider/type/name segment (not child resources such as `blobServices`). Settings are stored; logs and metrics are not shipped to a workspace, storage account, or Event Hub.
 
@@ -48,7 +50,7 @@ BulkSeed `scenarioId` values: `suspicious-signin`, `blob-exfil`, `crypto-mining`
 | Env | Route | Destination |
 |-----|-------|-------------|
 | `NOCTAXRIS_AZ_ACTIVITY_INJECT` | `POST /_noctaxris-az/lab/activityLog:inject` | Same `activity_log` rows as `GET .../eventtypes/management/values` / `az monitor activity-log` |
-| `NOCTAXRIS_AZ_LOGS_INJECT` | `POST /_noctaxris-az/lab/logs:inject` | Named Log Analytics tables |
+| `NOCTAXRIS_AZ_LOGS_INJECT` | `POST /_noctaxris-az/lab/logs:inject` and `POST /loganalytics/{workspace}/ingest/{table}` | Named Log Analytics tables (and any table name on the ingest route) |
 | `NOCTAXRIS_AZ_DEFENDER_INJECT` | `POST /_noctaxris-az/lab/securityAssessments:inject` | ARG `SecurityResources` (`microsoft.security/assessments` and `.../subassessments`) |
 
 Activity inject fields: `eventTimestamp`, `caller`, `operationName`, `status`, `resourceId`, `callerIpAddress` / `clientIp`, `identity`. List output includes `callerIpAddress`, `httpRequest.clientIpAddress`, and parsed `identity` when present. Client IP is taken from the TCP peer (`RemoteAddr`). Forwarded headers are ignored.
@@ -74,18 +76,19 @@ This is not Azure Monitor KQL. Joins, `ago()`, `summarize`, `extend`, and the re
 
 ## Authz
 
+- Bearer required. Token `aud` must be `https://management.azure.com` or `https://management.core.windows.net` (Graph `aud` is HTTP 403 `InvalidAuthenticationTokenAudience`). Root Bearer skips audience.
 - `Microsoft.Insights/eventtypes/values/read`
 - `Microsoft.Insights/metrics/read` and `.../write`
 - `Microsoft.Insights/diagnosticSettings/read`, `.../write`, `.../delete`
 - `Microsoft.OperationalInsights/workspaces/read`, `.../write`, and `.../query/action`
-- Lab inject and clock routes: env flag plus Bearer root (not RBAC)
+- Lab inject, clock, BulkSeed, and `POST /loganalytics/{workspace}/ingest/{table}`: env flag plus Bearer root (not RBAC). Ingest is off unless `NOCTAXRIS_AZ_LOGS_INJECT=1`.
 
 ## Detailed actions
 
-- List recent activity rows (`eventTimestamp`, `caller`, `operationName`, `status`, `resourceId`, client IP, `identity`)
+- List recent activity rows for the path subscription (`eventTimestamp`, `caller`, `operationName`, `status`, `resourceId`, client IP, `identity`)
 - Write a metric sample and list samples as timeseries theatre
 - PUT/GET/DELETE/LIST diagnostic settings; PUT and DELETE append Activity Log
-- Ingest JSON rows and query the KQL subset
+- Ingest JSON rows (`NOCTAXRIS_AZ_LOGS_INJECT` plus Bearer root) and query the KQL subset
 - Env-gated inject and BulkSeed for forensic labs
 
 Live mutations already appending Activity Log keep doing so (resource group write, diagnostic settings write/delete). Entra client-credentials and IMDS token mint append sign-in rows to `AADServicePrincipalSignInLogs` / `AADManagedIdentitySignInLogs` on workspace `default` (redacted metadata, not secrets). See [entra.md](entra.md) and [managedidentity.md](managedidentity.md).
@@ -100,7 +103,7 @@ Live mutations already appending Activity Log keep doing so (resource group writ
 
 ## Emulator limits
 
-- Activity Log is SQLite append-only theatre
+- Activity Log is SQLite append-only theatre, listed per path subscription (`resourceId` prefix)
 - Metrics are simple name/value samples
 - Diagnostic settings persist `workspaceId` / `logs` / `metrics` JSON and do not forward
 - Lab clock is process memory

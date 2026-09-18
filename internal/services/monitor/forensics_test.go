@@ -135,17 +135,16 @@ func TestActivityInjectFailClosed(t *testing.T) {
 }
 
 func TestLogAnalyticsTimeGeneratedAndProject(t *testing.T) {
-	mux, _ := mountMonitor(t, nil)
-	req := httptest.NewRequest(http.MethodPost, "/loganalytics/ws1/ingest/T",
-		bytes.NewReader([]byte(`[{"TimeGenerated":"2020-06-01T00:00:00Z","Col":"keep","Other":"drop"},{"TimeGenerated":"2019-01-01T00:00:00Z","Col":"old"}]`)))
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("ingest %d %s", rec.Code, rec.Body.String())
+	mux, st := mountMonitor(t, nil)
+	if err := st.IngestLogAnalyticsRow("ws1", "T", `{"TimeGenerated":"2020-06-01T00:00:00Z","Col":"keep","Other":"drop"}`); err != nil {
+		t.Fatal(err)
 	}
-	req = httptest.NewRequest(http.MethodPost, "/loganalytics/ws1/query",
+	if err := st.IngestLogAnalyticsRow("ws1", "T", `{"TimeGenerated":"2019-01-01T00:00:00Z","Col":"old"}`); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/loganalytics/ws1/query",
 		bytes.NewReader([]byte(`{"query":"T | where TimeGenerated >= datetime('2020-01-01T00:00:00Z') | project Col"}`)))
-	rec = httptest.NewRecorder()
+	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("query %d %s", rec.Code, rec.Body.String())

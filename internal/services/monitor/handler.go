@@ -53,6 +53,10 @@ func (h *Handler) wrap(principalFrom principalFunc, fn handlerFunc) http.Handler
 			azerrors.Unauthenticated(w, "")
 			return
 		}
+		if !p.AllowsARM() {
+			azerrors.InvalidAuthenticationTokenAudience(w, "")
+			return
+		}
 		fn(w, r, p)
 	}
 }
@@ -104,7 +108,7 @@ func (h *Handler) listActivity(w http.ResponseWriter, r *http.Request, p authn.P
 			limit = n
 		}
 	}
-	rows, err := h.Store.ListActivityLog(limit)
+	rows, err := h.Store.ListActivityLogForSubscription(sub, limit)
 	if err != nil {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
 		return

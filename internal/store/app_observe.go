@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -338,6 +339,43 @@ FROM activity_log ORDER BY id DESC LIMIT ?`, limit)
 			"resourceId": rid, "status": st, "message": msg,
 			"clientIp": ip, "identity": ident,
 		})
+	}
+	return out, rows.Err()
+}
+
+// ListActivityLogForSubscription returns recent activity rows whose resource_id is that subscription or a child of it.
+func (s *Store) ListActivityLogForSubscription(subscriptionID string, limit int) ([]map[string]string, error) {
+	subscriptionID = strings.TrimSpace(subscriptionID)
+	if subscriptionID == "" {
+		return []map[string]string{}, nil
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	prefix := "/subscriptions/" + subscriptionID
+	rows, err := s.db.Query(`
+SELECT timestamp, caller, operation, resource_id, status, message, client_ip, identity_json
+FROM activity_log
+WHERE resource_id = ? OR resource_id LIKE ? || '/%'
+ORDER BY id DESC LIMIT ?`, prefix, prefix, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []map[string]string
+	for rows.Next() {
+		var ts, caller, op, rid, st, msg, ip, ident string
+		if err := rows.Scan(&ts, &caller, &op, &rid, &st, &msg, &ip, &ident); err != nil {
+			return nil, err
+		}
+		out = append(out, map[string]string{
+			"timestamp": ts, "caller": caller, "operation": op,
+			"resourceId": rid, "status": st, "message": msg,
+			"clientIp": ip, "identity": ident,
+		})
+	}
+	if out == nil {
+		out = []map[string]string{}
 	}
 	return out, rows.Err()
 }
