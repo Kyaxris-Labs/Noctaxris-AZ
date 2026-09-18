@@ -58,8 +58,13 @@ func (s *Service) mountGraph(mux *http.ServeMux) {
 }
 
 func (s *Service) requireGraph(w http.ResponseWriter, r *http.Request) bool {
-	if _, ok := authn.PrincipalFromContext(r.Context()); !ok {
+	p, ok := authn.PrincipalFromContext(r.Context())
+	if !ok {
 		azerrors.WriteGraph(w, http.StatusUnauthorized, "InvalidAuthenticationToken", "Access token is empty or invalid.")
+		return false
+	}
+	if !p.AllowsGraph() {
+		azerrors.WriteGraph(w, http.StatusForbidden, "InvalidAuthenticationToken", "Access token validation failure. Invalid audience.")
 		return false
 	}
 	return true
@@ -102,28 +107,7 @@ func (s *Service) handleGraphUnknownPost(w http.ResponseWriter, r *http.Request)
 	if !s.requireGraph(w, r) {
 		return
 	}
-	rest := r.PathValue("path")
-	if strings.Contains(rest, "applications(appId=") {
-		if id := store.NormalizeAppIdFilter(rest); id != "" {
-			r.SetPathValue("appId", id)
-		}
-	}
-	switch {
-	case strings.Contains(rest, "addPassword"):
-		s.handleAddPassword(w, r)
-	case strings.Contains(rest, "addKey"):
-		s.handleAddKey(w, r)
-	case strings.Contains(rest, "owners/$ref") || strings.Contains(rest, "owners/%24ref"):
-		s.handleAddOwner(w, r)
-	case strings.Contains(rest, "members/$ref") || strings.Contains(rest, "members/%24ref"):
-		if strings.Contains(rest, "directoryRoles") {
-			s.handleAddRoleMember(w, r)
-			return
-		}
-		s.handleAddGroupMember(w, r)
-	default:
-		azerrors.WriteGraph(w, http.StatusNotFound, "Request_ResourceNotFound", "Resource not found")
-	}
+	azerrors.WriteGraph(w, http.StatusNotFound, "Request_ResourceNotFound", "Resource not found")
 }
 
 func graphPathLooksLikeItem(rest string) bool {
@@ -244,13 +228,10 @@ func (s *Service) handleGraphOwners(w http.ResponseWriter, r *http.Request) {
 	if !s.requireGraph(w, r) {
 		return
 	}
-	id := r.PathValue("appId")
-	if id == "" {
-		id = r.PathValue("id")
-	}
-	obj, _, _, ok, _ := s.Store.ResolveEntraApp(s.appTenant(), id)
-	if ok {
-		id = obj
+	id, ok := s.ownerTarget(r)
+	if !ok {
+		azerrors.WriteGraph(w, http.StatusNotFound, "Request_ResourceNotFound", "Resource not found")
+		return
 	}
 	owners, err := s.Store.ListOwners(id)
 	if err != nil {

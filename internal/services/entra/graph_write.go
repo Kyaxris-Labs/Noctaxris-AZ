@@ -95,9 +95,10 @@ func (s *Service) handleAddOwner(w http.ResponseWriter, r *http.Request) {
 		azerrors.WriteGraph(w, http.StatusBadRequest, "BadRequest", "@odata.id is required")
 		return
 	}
-	resourceID := graphPathObjectID(r)
-	if obj, _, _, ok, _ := s.Store.ResolveEntraApp(s.appTenant(), resourceID); ok {
-		resourceID = obj
+	resourceID, ok := s.ownerTarget(r)
+	if !ok {
+		azerrors.WriteGraph(w, http.StatusNotFound, "Request_ResourceNotFound", "Resource not found")
+		return
 	}
 	if err := s.Store.AddOwner(resourceID, ownerID, "user"); err != nil {
 		azerrors.WriteGraph(w, http.StatusInternalServerError, "InternalServerError", err.Error())
@@ -232,6 +233,45 @@ func segmentAfter(path, marker string) string {
 	return store.NormalizeAppIdFilter(rest)
 }
 
+func (s *Service) ownerTarget(r *http.Request) (string, bool) {
+	path := r.URL.Path
+	raw := graphPathObjectID(r)
+	if raw == "" {
+		return "", false
+	}
+	switch {
+	case strings.Contains(path, "/servicePrincipals/") || strings.Contains(path, "/servicePrincipals("):
+		if strings.Contains(path, "servicePrincipals(appId=") {
+			sp, ok, _ := s.Store.GetServicePrincipal(raw)
+			if !ok {
+				return "", false
+			}
+			return sp.ID, true
+		}
+		sp, ok, _ := s.Store.GetServicePrincipal(raw)
+		if !ok || sp.ID != raw {
+			return "", false
+		}
+		return sp.ID, true
+	case strings.Contains(path, "/applications/") || strings.Contains(path, "/applications("):
+		if strings.Contains(path, "applications(appId=") {
+			obj, _, _, ok, _ := s.Store.ResolveEntraApp(s.appTenant(), raw)
+			return obj, ok
+		}
+		row, ok, _ := s.Store.GetEntraApp(s.appTenant(), raw)
+		if !ok || row.ObjectID == "" || row.ObjectID != raw {
+			return "", false
+		}
+		return row.ObjectID, true
+	case strings.Contains(path, "/groups/"):
+		return raw, true
+	case strings.Contains(path, "/devices/"):
+		return raw, true
+	default:
+		return "", false
+	}
+}
+
 func (s *Service) passwordTarget(r *http.Request) (id, typ string) {
 	path := r.URL.Path
 	raw := graphPathObjectID(r)
@@ -295,16 +335,48 @@ func (s *Service) handleAddKey(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) validAddKeyProof(proof, objectID string) bool {
-	_, claims, err := authn.DecodeJWTUnverified(proof)
-	if err != nil {
+	pems, err := s.Store.ListKeyPEMs(objectID)
+	if err != nil || len(pems) == 0 {
 		return false
 	}
-	aud := authn.ClaimString(claims, "aud")
-	iss := authn.ClaimString(claims, "iss")
-	if aud != "00000002-0000-0000-c000-000000000000" {
+	var claims map[string]any
+	verified := false
+	for _, pemBytes := range pems {
+		pub, perr := parseRSAPublicPEM([]byte(pemBytes))
+		if perr != nil {
+			continue
+		}
+		c, verr := authn.VerifyRS256JWT(pub, proof, s.now())
+		if verr != nil {
+			continue
+		}
+		claims = c
+		verified = true
+		break
+	}
+	if !verified {
 		return false
 	}
-	return iss == objectID
+	audOK := false
+	for _, a := range authn.ClaimAudiences(claims) {
+		if a == authn.AudienceAADGraphAppID {
+			audOK = true
+			break
+		}
+	}
+	if !audOK {
+		return false
+	}
+	if authn.ClaimString(claims, "iss") != objectID {
+		return false
+	}
+	nbf, nbfOK := authn.ClaimUnix(claims, "nbf")
+	exp, expOK := authn.ClaimUnix(claims, "exp")
+	if !nbfOK || !expOK {
+		return false
+	}
+	now := s.now().Unix()
+	return now >= nbf && now <= exp
 }
 
 func (s *Service) handleListFIC(w http.ResponseWriter, r *http.Request) {

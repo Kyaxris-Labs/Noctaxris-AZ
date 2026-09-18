@@ -31,7 +31,7 @@ Form body: `grant_type=client_credentials` or `password` (ROPC lite) or `refresh
 
 ## Authz
 
-Public: discovery, JWKS, token, device code, SOAP, lab OIDC issuer. Graph, AAD Graph, and `/api/Users` require a Bearer principal. Issued JWTs authenticate later ARM and Graph calls (hashed for opaque lookup). Token errors use the OAuth JSON envelope (`error` / `error_description`). Graph errors use the Graph envelope.
+Public: discovery, JWKS, token, device code, lab OIDC issuer. Graph, AAD Graph, SOAP `POST /provisioningwebservice.svc`, and `/api/Users` require a Bearer principal. SOAP is directory read: the token `aud` must be Microsoft Graph (`https://graph.microsoft.com`) or Azure AD Graph (`https://graph.windows.net`), not ARM and not the token `iss`. Graph handlers reject ARM and issuer audiences (HTTP 403 `InvalidAuthenticationToken`). ARM control-plane handlers reject Graph audiences (HTTP 403 `InvalidAuthenticationTokenAudience`). Key Vault data plane, Storage Shared Key/SAS, table/blob, and Event Hubs HTTP data plane do not require ARM `aud`. Hash lookup of a lab JWT still reads `aud` from the compact token; it does not skip claims. Root Bearer skips audience. Token errors use the OAuth JSON envelope (`error` / `error_description`). Graph errors use the Graph envelope.
 
 ## Detailed actions
 
@@ -40,11 +40,12 @@ Public: discovery, JWKS, token, device code, SOAP, lab OIDC issuer. Graph, AAD G
 - Certificate assertion (`private_key_jwt`): `iss`/`sub` equal the app client id; `aud` is the token endpoint
 - RS256 access_token claims: `tid`, `oid`, `sub`, `appid`, `azp`, `iss`, `aud`, `exp`, `ver`
 - Graph lists for organization, users, groups, applications, service principals, devices, directory roles
-- `addPassword` returns one-time `secretText` and `keyId`. `addKey` requires proof JWT `aud=00000002-0000-0000-c000-000000000000` and `iss` equal to the app/SP object id when a key already exists
-- `POST .../owners/$ref` and `POST .../members/$ref` (official Graph `$ref`). `applications(appId='...')` is accepted via `NormalizeAppIdFilter`
+- `addPassword` returns one-time `secretText` and `keyId`. `addKey` skips proof when the app or SP has no key credentials. After a key exists, proof is an RS256 JWT verified against stored key PEMs: `aud` `00000002-0000-0000-c000-000000000000`, `iss` equal to the app or SP object id, plus `nbf`/`exp`. `DecodeJWTUnverified` is not enough. `PATCH /applications/{id}` with `keyCredentials` after a key exists requires that same proof and otherwise fails closed.
+- `POST .../owners/$ref` and `POST .../members/$ref` (official Graph `$ref`). `/applications/{id}` and `/servicePrincipals/{id}` take directory object id. Client id (`appId`) in that slot 404s. `POST /servicePrincipals/{appId}/owners/$ref` does not write application owners. `applications(appId='...')` remains the OData client-id form on GET.
+- Unknown Graph POST under `/v1.0/{path...}` and `/beta/{path...}` returns 404 and does not substring-dispatch `addPassword`, `addKey`, `owners/$ref`, or `members/$ref`.
 - Federated identity credentials create with HTTP 201; default audience `api://AzureADTokenExchange`
 - Unknown Graph collection GET returns `200` and `"value": []`. Item GET by GUID returns Graph 404
-- AAD Graph `api-version=1.6` users / tenantDetails / directoryRoles; SOAP ListUsers XML
+- AAD Graph `api-version=1.6` users / tenantDetails / directoryRoles; SOAP ListUsers XML requires Bearer (directory read)
 - Client-credentials token mint appends a row to Log Analytics table `AADServicePrincipalSignInLogs` on workspace `default` (`TimeGenerated`, `AppId`, `IPAddress`, `ResourceDisplayName`). Secrets are not stored. `TimeGenerated` follows the lab clock when freeze/set is on. See [monitor.md](monitor.md).
 
 OIDC paths follow the Microsoft identity platform v1 and v2 layout. Literal tenant prefixes plus Graph `/v1.0` and `/beta` catch-alls avoid ServeMux conflicts with ARM `/subscriptions/...` and storage `/blob/...`.

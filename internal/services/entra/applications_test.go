@@ -48,7 +48,8 @@ func TestEntraApplicationsCRUD(t *testing.T) {
 	var created map[string]any
 	_ = json.NewDecoder(cr.Body).Decode(&created)
 	appID, _ := created["appId"].(string)
-	if appID == "" {
+	appObj, _ := created["id"].(string)
+	if appID == "" || appObj == "" {
 		t.Fatal(created)
 	}
 
@@ -72,7 +73,13 @@ func TestEntraApplicationsCRUD(t *testing.T) {
 	if pr.StatusCode != http.StatusOK {
 		t.Fatalf("patch %d", pr.StatusCode)
 	}
-	del, _ := http.NewRequest(http.MethodDelete, srv.URL+"/v1.0/applications/"+appID, nil)
+	delClient, _ := http.NewRequest(http.MethodDelete, srv.URL+"/v1.0/applications/"+appID, nil)
+	dcr, _ := http.DefaultClient.Do(delClient)
+	dcr.Body.Close()
+	if dcr.StatusCode != http.StatusNotFound {
+		t.Fatalf("delete by appId %d", dcr.StatusCode)
+	}
+	del, _ := http.NewRequest(http.MethodDelete, srv.URL+"/v1.0/applications/"+appObj, nil)
 	dr, _ := http.DefaultClient.Do(del)
 	dr.Body.Close()
 	if dr.StatusCode != http.StatusNoContent {

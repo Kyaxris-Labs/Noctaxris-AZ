@@ -85,8 +85,9 @@ func (s *Service) handlePatchApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		DisplayName     string           `json:"displayName"`
-		KeyCredentials  []map[string]any `json:"keyCredentials"`
+		DisplayName    string           `json:"displayName"`
+		KeyCredentials []map[string]any `json:"keyCredentials"`
+		Proof          string           `json:"proof"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	tenant, appID := s.appTenant(), r.PathValue("appId")
@@ -95,15 +96,34 @@ func (s *Service) handlePatchApp(w http.ResponseWriter, r *http.Request) {
 		azerrors.WriteGraph(w, http.StatusNotFound, "Request_ResourceNotFound", "application not found")
 		return
 	}
+	obj := row.ObjectID
+	if obj == "" {
+		obj = row.AppID
+	}
+	addingKeys := false
+	for _, kc := range body.KeyCredentials {
+		keyPEM, _ := kc["key"].(string)
+		if keyPEM != "" {
+			addingKeys = true
+			break
+		}
+	}
+	if addingKeys {
+		n, err := s.Store.CountKeyCredentials(obj)
+		if err != nil {
+			azerrors.WriteGraph(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+			return
+		}
+		if n > 0 && !s.validAddKeyProof(body.Proof, obj) {
+			azerrors.WriteGraph(w, http.StatusBadRequest, "BadRequest", "proof JWT is required when a key credential already exists")
+			return
+		}
+	}
 	if body.DisplayName != "" {
 		if _, err := s.Store.UpsertEntraApp(tenant, row.AppID, body.DisplayName); err != nil {
 			azerrors.WriteGraph(w, http.StatusInternalServerError, "InternalServerError", err.Error())
 			return
 		}
-	}
-	obj := row.ObjectID
-	if obj == "" {
-		obj = row.AppID
 	}
 	for _, kc := range body.KeyCredentials {
 		keyPEM, _ := kc["key"].(string)
@@ -123,7 +143,13 @@ func (s *Service) handleDeleteApp(w http.ResponseWriter, r *http.Request) {
 	if !s.requireGraph(w, r) {
 		return
 	}
-	if err := s.Store.DeleteEntraApp(s.appTenant(), r.PathValue("appId")); err != nil {
+	id := r.PathValue("appId")
+	row, ok, err := s.Store.GetEntraApp(s.appTenant(), id)
+	if err != nil || !ok || row.ObjectID == "" || row.ObjectID != id {
+		azerrors.WriteGraph(w, http.StatusNotFound, "Request_ResourceNotFound", "application not found")
+		return
+	}
+	if err := s.Store.DeleteEntraApp(s.appTenant(), row.ObjectID); err != nil {
 		azerrors.WriteGraph(w, http.StatusNotFound, "Request_ResourceNotFound", "application not found")
 		return
 	}

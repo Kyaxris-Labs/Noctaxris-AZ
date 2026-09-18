@@ -66,9 +66,9 @@ WHERE tenant_id = ? ORDER BY display_name`, tenantID)
 	return out, rows.Err()
 }
 
-// DeleteEntraApp deletes an app registration.
-func (s *Store) DeleteEntraApp(tenantID, appID string) error {
-	res, err := s.db.Exec(`DELETE FROM entra_apps WHERE tenant_id = ? AND (app_id = ? OR object_id = ?)`, tenantID, appID, appID)
+// DeleteEntraApp deletes an app registration by directory object id.
+func (s *Store) DeleteEntraApp(tenantID, objectID string) error {
+	res, err := s.db.Exec(`DELETE FROM entra_apps WHERE tenant_id = ? AND object_id = ?`, tenantID, objectID)
 	if err != nil {
 		return err
 	}
