@@ -11,6 +11,7 @@ import (
 type EntraApp struct {
 	TenantID    string
 	AppID       string
+	ObjectID    string
 	DisplayName string
 	CreatedAt   string
 }
@@ -20,11 +21,12 @@ func (s *Store) UpsertEntraApp(tenantID, appID, displayName string) (string, err
 	if appID == "" {
 		appID = uuid.NewString()
 	}
+	obj := uuid.NewString()
 	_, err := s.db.Exec(`
-INSERT INTO entra_apps (tenant_id, app_id, display_name, created_at)
-VALUES (?, ?, ?, ?)
+INSERT INTO entra_apps (tenant_id, app_id, display_name, created_at, object_id)
+VALUES (?, ?, ?, ?, ?)
 ON CONFLICT(tenant_id, app_id) DO UPDATE SET display_name=excluded.display_name`,
-		tenantID, appID, displayName, time.Now().UTC().Format(time.RFC3339))
+		tenantID, appID, displayName, time.Now().UTC().Format(time.RFC3339), obj)
 	return appID, err
 }
 
@@ -32,9 +34,9 @@ ON CONFLICT(tenant_id, app_id) DO UPDATE SET display_name=excluded.display_name`
 func (s *Store) GetEntraApp(tenantID, appID string) (EntraApp, bool, error) {
 	var row EntraApp
 	err := s.db.QueryRow(`
-SELECT tenant_id, app_id, display_name, created_at FROM entra_apps
-WHERE tenant_id = ? AND app_id = ?`, tenantID, appID).
-		Scan(&row.TenantID, &row.AppID, &row.DisplayName, &row.CreatedAt)
+SELECT tenant_id, app_id, display_name, created_at, COALESCE(object_id,'') FROM entra_apps
+WHERE tenant_id = ? AND (app_id = ? OR object_id = ?)`, tenantID, appID, appID).
+		Scan(&row.TenantID, &row.AppID, &row.DisplayName, &row.CreatedAt, &row.ObjectID)
 	if err == sql.ErrNoRows {
 		return EntraApp{}, false, nil
 	}
@@ -47,7 +49,7 @@ WHERE tenant_id = ? AND app_id = ?`, tenantID, appID).
 // ListEntraApps lists apps for a tenant.
 func (s *Store) ListEntraApps(tenantID string) ([]EntraApp, error) {
 	rows, err := s.db.Query(`
-SELECT tenant_id, app_id, display_name, created_at FROM entra_apps
+SELECT tenant_id, app_id, display_name, created_at, COALESCE(object_id,'') FROM entra_apps
 WHERE tenant_id = ? ORDER BY display_name`, tenantID)
 	if err != nil {
 		return nil, err
@@ -56,7 +58,7 @@ WHERE tenant_id = ? ORDER BY display_name`, tenantID)
 	var out []EntraApp
 	for rows.Next() {
 		var row EntraApp
-		if err := rows.Scan(&row.TenantID, &row.AppID, &row.DisplayName, &row.CreatedAt); err != nil {
+		if err := rows.Scan(&row.TenantID, &row.AppID, &row.DisplayName, &row.CreatedAt, &row.ObjectID); err != nil {
 			return nil, err
 		}
 		out = append(out, row)
@@ -66,7 +68,7 @@ WHERE tenant_id = ? ORDER BY display_name`, tenantID)
 
 // DeleteEntraApp deletes an app registration.
 func (s *Store) DeleteEntraApp(tenantID, appID string) error {
-	res, err := s.db.Exec(`DELETE FROM entra_apps WHERE tenant_id = ? AND app_id = ?`, tenantID, appID)
+	res, err := s.db.Exec(`DELETE FROM entra_apps WHERE tenant_id = ? AND (app_id = ? OR object_id = ?)`, tenantID, appID, appID)
 	if err != nil {
 		return err
 	}

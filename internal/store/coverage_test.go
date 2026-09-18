@@ -396,6 +396,14 @@ func TestARMRoleAssignmentsAndProviderResources(t *testing.T) {
 	if err := st.UpsertProviderResource("Microsoft.Compute/virtualMachines", "sub", "rg", "vm1", "", ""); err != nil {
 		t.Fatal(err)
 	}
+	subRows, err := st.ListProviderResourcesInSubscription("Microsoft.Compute/virtualMachines", "sub")
+	if err != nil || len(subRows) != 1 || subRows[0].Name != "vm1" {
+		t.Fatalf("list by full type: %v %v", subRows, err)
+	}
+	nsRows, err := st.ListProviderResourcesInSubscription("Microsoft.Compute", "sub")
+	if err != nil || len(nsRows) != 1 || nsRows[0].Name != "vm1" {
+		t.Fatalf("list by namespace prefix: %v %v", nsRows, err)
+	}
 	row, ok, err := st.GetProviderResource("Microsoft.Compute/virtualMachines", "sub", "rg", "vm1")
 	if err != nil || !ok || row.Location != "eastus" || row.PropertiesJSON != "{}" {
 		t.Fatalf("get prov: %#v %v %v", row, ok, err)

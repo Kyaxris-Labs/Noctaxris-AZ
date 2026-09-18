@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/audit"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authz"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/tlsutil"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/store"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/version"
 )
@@ -182,27 +184,56 @@ func (s *Server) StartAMQP(ctx context.Context) error {
 
 // ListenAndServeContext serves until ctx is cancelled, then drains with a timeout.
 func (s *Server) ListenAndServeContext(ctx context.Context) error {
-	srv := &http.Server{
+	handler := s.Handler()
+	main := &http.Server{
 		Addr:              s.cfg.ListenAddr,
-		Handler:           s.Handler(),
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-	errCh := make(chan error, 1)
+	errCh := make(chan error, 2)
 	go func() {
 		var err error
 		if s.cfg.TLSEnabled() {
-			err = srv.ListenAndServeTLS(s.cfg.TLSCertFile, s.cfg.TLSKeyFile)
+			err = main.ListenAndServeTLS(s.cfg.TLSCertFile, s.cfg.TLSKeyFile)
 		} else {
-			err = srv.ListenAndServe()
+			err = main.ListenAndServe()
 		}
 		errCh <- err
 	}()
+
+	var cloud *http.Server
+	if s.cfg.CloudHosts {
+		secretsDir := filepath.Dir(store.DefaultMasterKeyPath(s.cfg.DataRoot))
+		if s.cfg.MasterKeyPath != "" {
+			secretsDir = filepath.Dir(s.cfg.MasterKeyPath)
+		}
+		paths, err := tlsutil.EnsureServerCert(secretsDir, time.Time{})
+		if err != nil {
+			return fmt.Errorf("cloud-hosts cert: %w", err)
+		}
+		tlsCfg, err := tlsutil.LoadTLSConfig(paths)
+		if err != nil {
+			return err
+		}
+		cloud = &http.Server{
+			Addr:              s.cfg.CloudHostsListen,
+			Handler:           handler,
+			TLSConfig:         tlsCfg,
+			ReadHeaderTimeout: 10 * time.Second,
+		}
+		go func() {
+			errCh <- cloud.ListenAndServeTLS(paths.ServerCert, paths.ServerKey)
+		}()
+	}
 
 	select {
 	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
-		_ = srv.Shutdown(shutdownCtx)
+		_ = main.Shutdown(shutdownCtx)
+		if cloud != nil {
+			_ = cloud.Shutdown(shutdownCtx)
+		}
 		err := <-errCh
 		if errors.Is(err, http.ErrServerClosed) {
 			return nil

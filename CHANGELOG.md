@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Entra: login/token/JWKS/AAD Graph on literal tenant aliases (`NOCTAXRIS_AZ_TENANT_ID`, `common`, `organizations`) so ServeMux no longer panics against Graph `/v1.0/{path...}`
+- Entra: device code lite auto-succeeds on token exchange; refresh tokens hashed once with `authn.HashToken`; WIF `client_assertion` from lab OIDC issuer `/_noctaxris-az/oidc-lab`; OBO `jwt-bearer` rejected
+- Graph: directory lists; `addPassword` one-time `secretText` + `keyId`; owners/members `$ref`; FIC create 201 with default audience `api://AzureADTokenExchange`; unknown collections return empty `value`
+- ARM: `GET /subscriptions` list vs `GET /subscriptions/{id}` get (`api-version` required); `GET /tenants`; ARG `Resources` / `SecurityResources`; subscription-scope LISTs query full ARM types such as `Microsoft.Compute/virtualMachines`
+- Cloud hosts TLS stays opt-in (`NOCTAXRIS_AZ_CLOUD_HOSTS`, listen `127.0.0.1:8443`, lab CA next to `master.key`); HTTP `:4599` remains the default
+
 ## 1.0.2
 
 Patch after 1.0.1: ARM accepts Resource Groups REST `resourcegroups` on nested provider routes. Docker Hub: `kyaxris/noctaxris-az` (`1.0.2`, `1.0`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).

@@ -33,9 +33,11 @@ type Authenticator struct {
 	Now             func() time.Time
 }
 
-var oauthTokenPath = regexp.MustCompile(`(?i)^/[^/]+/oauth2/v2\.0/token$`)
-var oidcDiscoveryPath = regexp.MustCompile(`(?i)^/[^/]+/v2\.0/\.well-known/openid-configuration$`)
-var jwksPath = regexp.MustCompile(`(?i)^/[^/]+/discovery/v2\.0/keys$`)
+var oauthTokenPath = regexp.MustCompile(`(?i)^/[^/]+/oauth2/(v2\.0/)?token$`)
+var oauthDeviceCodePath = regexp.MustCompile(`(?i)^/[^/]+/oauth2/(v2\.0/)?devicecode$`)
+var oidcDiscoveryPath = regexp.MustCompile(`(?i)^/[^/]+(/v2\.0)?/\.well-known/openid-configuration$`)
+var jwksPath = regexp.MustCompile(`(?i)^/[^/]+/discovery(/v2\.0)?/keys$`)
+var soapPath = regexp.MustCompile(`(?i)^/provisioningwebservice\.svc$`)
 
 // AuthenticateRequest extracts and validates the Bearer token from r.
 func (a *Authenticator) AuthenticateRequest(r *http.Request) (Principal, error) {
@@ -64,8 +66,13 @@ func IsPublicPath(path string) bool {
 		"/metadata/identity/oauth2/token":
 		return true
 	default:
+		if strings.HasPrefix(strings.ToLower(path), "/_noctaxris-az/oidc-lab") {
+			return true
+		}
 		return oauthTokenPath.MatchString(path) ||
+			oauthDeviceCodePath.MatchString(path) ||
 			oidcDiscoveryPath.MatchString(path) ||
-			jwksPath.MatchString(path)
+			jwksPath.MatchString(path) ||
+			soapPath.MatchString(path)
 	}
 }

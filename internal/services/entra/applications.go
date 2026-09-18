@@ -5,15 +5,10 @@ import (
 	"net/http"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
-	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 )
 
 func (s *Service) requirePrincipal(w http.ResponseWriter, r *http.Request) bool {
-	if _, ok := authn.PrincipalFromContext(r.Context()); !ok {
-		azerrors.Unauthenticated(w, "")
-		return false
-	}
-	return true
+	return s.requireGraph(w, r)
 }
 
 func (s *Service) appTenant() string {
@@ -23,26 +18,34 @@ func (s *Service) appTenant() string {
 	return "00000000-0000-0000-0000-000000000001"
 }
 
+func appGraphJSON(objectID, appID, displayName, created string) map[string]any {
+	id := objectID
+	if id == "" {
+		id = appID
+	}
+	return map[string]any{
+		"id": id, "appId": appID, "displayName": displayName, "createdDateTime": created,
+	}
+}
+
 func (s *Service) handleListApps(w http.ResponseWriter, r *http.Request) {
-	if !s.requirePrincipal(w, r) {
+	if !s.requireGraph(w, r) {
 		return
 	}
 	apps, err := s.Store.ListEntraApps(s.appTenant())
 	if err != nil {
-		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+		azerrors.WriteGraph(w, http.StatusInternalServerError, "InternalServerError", err.Error())
 		return
 	}
-	value := make([]any, 0, len(apps))
+	value := make([]map[string]any, 0, len(apps))
 	for _, a := range apps {
-		value = append(value, map[string]any{
-			"id": a.AppID, "appId": a.AppID, "displayName": a.DisplayName, "createdDateTime": a.CreatedAt,
-		})
+		value = append(value, appGraphJSON(a.ObjectID, a.AppID, a.DisplayName, a.CreatedAt))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"value": value})
+	s.writeOData(w, r, value)
 }
 
 func (s *Service) handleCreateApp(w http.ResponseWriter, r *http.Request) {
-	if !s.requirePrincipal(w, r) {
+	if !s.requireGraph(w, r) {
 		return
 	}
 	var body struct {
@@ -54,57 +57,74 @@ func (s *Service) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 	}
 	appID, err := s.Store.UpsertEntraApp(s.appTenant(), "", body.DisplayName)
 	if err != nil {
-		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+		azerrors.WriteGraph(w, http.StatusInternalServerError, "InternalServerError", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"id": appID, "appId": appID, "displayName": body.DisplayName})
+	row, _, _ := s.Store.GetEntraApp(s.appTenant(), appID)
+	writeJSON(w, http.StatusCreated, appGraphJSON(row.ObjectID, row.AppID, row.DisplayName, row.CreatedAt))
 }
 
 func (s *Service) handleGetApp(w http.ResponseWriter, r *http.Request) {
-	if !s.requirePrincipal(w, r) {
+	if !s.requireGraph(w, r) {
 		return
 	}
 	row, ok, err := s.Store.GetEntraApp(s.appTenant(), r.PathValue("appId"))
 	if err != nil {
-		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+		azerrors.WriteGraph(w, http.StatusInternalServerError, "InternalServerError", err.Error())
 		return
 	}
 	if !ok {
-		azerrors.NotFound(w, "application not found")
+		azerrors.WriteGraph(w, http.StatusNotFound, "Request_ResourceNotFound", "application not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"id": row.AppID, "appId": row.AppID, "displayName": row.DisplayName, "createdDateTime": row.CreatedAt,
-	})
+	writeJSON(w, http.StatusOK, appGraphJSON(row.ObjectID, row.AppID, row.DisplayName, row.CreatedAt))
 }
 
 func (s *Service) handlePatchApp(w http.ResponseWriter, r *http.Request) {
-	if !s.requirePrincipal(w, r) {
+	if !s.requireGraph(w, r) {
 		return
 	}
 	var body struct {
-		DisplayName string `json:"displayName"`
+		DisplayName     string           `json:"displayName"`
+		KeyCredentials  []map[string]any `json:"keyCredentials"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	tenant, appID := s.appTenant(), r.PathValue("appId")
-	if _, ok, err := s.Store.GetEntraApp(tenant, appID); err != nil || !ok {
-		azerrors.NotFound(w, "application not found")
+	row, ok, err := s.Store.GetEntraApp(tenant, appID)
+	if err != nil || !ok {
+		azerrors.WriteGraph(w, http.StatusNotFound, "Request_ResourceNotFound", "application not found")
 		return
 	}
-	if _, err := s.Store.UpsertEntraApp(tenant, appID, body.DisplayName); err != nil {
-		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
-		return
+	if body.DisplayName != "" {
+		if _, err := s.Store.UpsertEntraApp(tenant, row.AppID, body.DisplayName); err != nil {
+			azerrors.WriteGraph(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+			return
+		}
 	}
-	row, _, _ := s.Store.GetEntraApp(tenant, appID)
-	writeJSON(w, http.StatusOK, map[string]any{"id": row.AppID, "appId": row.AppID, "displayName": row.DisplayName})
+	obj := row.ObjectID
+	if obj == "" {
+		obj = row.AppID
+	}
+	for _, kc := range body.KeyCredentials {
+		keyPEM, _ := kc["key"].(string)
+		if keyPEM == "" {
+			continue
+		}
+		if _, err := s.Store.AddKeyCredential(obj, "application", keyPEM, "Verify", "AsymmetricX509Cert"); err != nil {
+			azerrors.WriteGraph(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+			return
+		}
+	}
+	row, _, _ = s.Store.GetEntraApp(tenant, row.AppID)
+	writeJSON(w, http.StatusOK, appGraphJSON(row.ObjectID, row.AppID, row.DisplayName, row.CreatedAt))
 }
 
 func (s *Service) handleDeleteApp(w http.ResponseWriter, r *http.Request) {
-	if !s.requirePrincipal(w, r) {
+	if !s.requireGraph(w, r) {
 		return
 	}
 	if err := s.Store.DeleteEntraApp(s.appTenant(), r.PathValue("appId")); err != nil {
-		azerrors.NotFound(w, "application not found")
+		azerrors.WriteGraph(w, http.StatusNotFound, "Request_ResourceNotFound", "application not found")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

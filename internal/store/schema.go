@@ -1,6 +1,6 @@
 package store
 
-const schemaVersion = 3
+const schemaVersion = 4
 
 const schema = `
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -386,5 +386,168 @@ CREATE TABLE IF NOT EXISTS email_messages (
   subject TEXT NOT NULL,
   body TEXT NOT NULL,
   inserted_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS entra_users (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  user_principal_name TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  mail TEXT NOT NULL DEFAULT '',
+  department TEXT NOT NULL DEFAULT '',
+  job_title TEXT NOT NULL DEFAULT '',
+  password_hash TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS entra_groups (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  mail TEXT NOT NULL DEFAULT '',
+  security_enabled INTEGER NOT NULL DEFAULT 1,
+  membership_rule TEXT NOT NULL DEFAULT '',
+  membership_rule_processing_state TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS entra_group_members (
+  group_id TEXT NOT NULL,
+  member_id TEXT NOT NULL,
+  member_type TEXT NOT NULL,
+  PRIMARY KEY (group_id, member_id)
+);
+
+CREATE TABLE IF NOT EXISTS entra_service_principals (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  app_id TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS entra_devices (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  device_id TEXT NOT NULL,
+  operating_system TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS entra_directory_roles (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  template_id TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS entra_directory_role_members (
+  role_id TEXT NOT NULL,
+  member_id TEXT NOT NULL,
+  PRIMARY KEY (role_id, member_id)
+);
+
+CREATE TABLE IF NOT EXISTS entra_owners (
+  resource_id TEXT NOT NULL,
+  owner_id TEXT NOT NULL,
+  owner_type TEXT NOT NULL DEFAULT 'user',
+  PRIMARY KEY (resource_id, owner_id)
+);
+
+CREATE TABLE IF NOT EXISTS entra_fics (
+  id TEXT PRIMARY KEY,
+  app_object_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  issuer TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  audiences_json TEXT NOT NULL,
+  claims_matching_expression TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS entra_passwords (
+  id TEXT PRIMARY KEY,
+  resource_id TEXT NOT NULL,
+  resource_type TEXT NOT NULL,
+  display_name TEXT NOT NULL DEFAULT '',
+  secret_hash TEXT NOT NULL,
+  hint TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS entra_key_credentials (
+  id TEXT PRIMARY KEY,
+  resource_id TEXT NOT NULL,
+  resource_type TEXT NOT NULL,
+  key_pem TEXT NOT NULL,
+  usage TEXT NOT NULL DEFAULT 'Verify',
+  key_type TEXT NOT NULL DEFAULT 'AsymmetricX509Cert'
+);
+
+CREATE TABLE IF NOT EXISTS entra_app_role_assignments (
+  id TEXT PRIMARY KEY,
+  principal_id TEXT NOT NULL,
+  resource_id TEXT NOT NULL,
+  app_role_id TEXT NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000'
+);
+
+CREATE TABLE IF NOT EXISTS entra_unified_role_assignments (
+  id TEXT PRIMARY KEY,
+  principal_id TEXT NOT NULL,
+  role_definition_id TEXT NOT NULL,
+  directory_scope_id TEXT NOT NULL DEFAULT '/'
+);
+
+CREATE TABLE IF NOT EXISTS entra_ca_policies (
+  id TEXT PRIMARY KEY,
+  display_name TEXT NOT NULL,
+  body_json TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+  token_hash TEXT PRIMARY KEY,
+  principal_id TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS device_codes (
+  device_code TEXT PRIMARY KEY,
+  principal_id TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS management_groups (
+  id TEXT PRIMARY KEY,
+  display_name TEXT NOT NULL,
+  tenant_id TEXT NOT NULL,
+  parent_id TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS arg_resources (
+  id TEXT PRIMARY KEY,
+  table_name TEXT NOT NULL,
+  type TEXT NOT NULL,
+  name TEXT NOT NULL,
+  subscription_id TEXT NOT NULL DEFAULT '',
+  resource_group TEXT NOT NULL DEFAULT '',
+  tenant_id TEXT NOT NULL DEFAULT '',
+  properties_json TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS diagnostic_settings (
+  id TEXT PRIMARY KEY,
+  resource_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  workspace_id TEXT NOT NULL DEFAULT '',
+  properties_json TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS lab_clock (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  frozen INTEGER NOT NULL DEFAULT 0,
+  frozen_at TEXT NOT NULL DEFAULT ''
 );
 `

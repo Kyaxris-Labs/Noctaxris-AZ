@@ -11,7 +11,7 @@ func (s *Server) registerIdentity() {
 	es := &entra.Service{
 		Store:      s.store,
 		TenantID:   s.cfg.TenantID,
-		PublicBase: "http://" + s.cfg.ListenAddr,
+		PublicBase: s.cfg.IssuerBase(),
 	}
 	s.authn.JWT = es
 	es.Mount(s.mux)

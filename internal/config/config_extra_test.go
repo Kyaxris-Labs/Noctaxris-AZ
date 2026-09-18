@@ -45,6 +45,18 @@ func TestLoadFromEnvAndTLSAMQP(t *testing.T) {
 		t.Fatal("azurite")
 	}
 
+	t.Setenv(EnvCloudHosts, "1")
+	t.Setenv("NOCTAXRIS_AZ_CLOUD_HOSTS_LISTEN", "0.0.0.0:443")
+	t.Setenv(EnvAllowNonLoopbackListen, "")
+	if _, err := LoadFromEnv(); err == nil {
+		t.Fatal("expected cloud hosts listen fail")
+	}
+	t.Setenv("NOCTAXRIS_AZ_CLOUD_HOSTS_LISTEN", "127.0.0.1:8443")
+	cfg, err = LoadFromEnv()
+	if err != nil || !cfg.CloudHosts || cfg.IssuerBase() != "https://login.microsoftonline.com" {
+		t.Fatalf("%+v %v", cfg, err)
+	}
+
 	t.Setenv("NOCTAXRIS_AZ_LISTEN", "0.0.0.0:4599")
 	t.Setenv(EnvAllowNonLoopbackListen, "")
 	if _, err := LoadFromEnv(); err == nil {

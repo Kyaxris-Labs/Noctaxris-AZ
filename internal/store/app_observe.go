@@ -215,6 +215,26 @@ WHERE name = ? LIMIT 1`, name).
 	return row, true, nil
 }
 
+// ListFunctionAppsInSubscription lists Function Apps across resource groups.
+func (s *Store) ListFunctionAppsInSubscription(subID string) ([]FunctionApp, error) {
+	rows, err := s.db.Query(`
+SELECT subscription_id, resource_group, name, location, mock_response FROM function_apps
+WHERE subscription_id = ? ORDER BY name`, subID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []FunctionApp
+	for rows.Next() {
+		var row FunctionApp
+		if err := rows.Scan(&row.SubscriptionID, &row.ResourceGroup, &row.Name, &row.Location, &row.MockResponse); err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
 // ListFunctionApps lists Function Apps in a resource group.
 func (s *Store) ListFunctionApps(subID, rg string) ([]FunctionApp, error) {
 	rows, err := s.db.Query(`

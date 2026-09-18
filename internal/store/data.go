@@ -66,6 +66,34 @@ WHERE subscription_id = ? AND resource_group = ? AND name = ?`, subID, rg, name)
 	return location, true, nil
 }
 
+// StorageAccountRow is subscription-scope storage account metadata.
+type StorageAccountRow struct {
+	SubscriptionID string
+	ResourceGroup  string
+	Name           string
+	Location       string
+}
+
+// ListStorageAccountsInSubscription lists storage accounts in a subscription.
+func (s *Store) ListStorageAccountsInSubscription(subID string) ([]StorageAccountRow, error) {
+	rows, err := s.db.Query(`
+SELECT subscription_id, resource_group, name, location FROM storage_accounts
+WHERE subscription_id = ? ORDER BY name`, subID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []StorageAccountRow
+	for rows.Next() {
+		var row StorageAccountRow
+		if err := rows.Scan(&row.SubscriptionID, &row.ResourceGroup, &row.Name, &row.Location); err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
 // GetStorageAccountKey unseals the account key for a storage account name.
 func (s *Store) GetStorageAccountKey(accountName string) (string, bool, error) {
 	var sealed []byte

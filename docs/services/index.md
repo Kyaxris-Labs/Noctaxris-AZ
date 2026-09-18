@@ -4,9 +4,9 @@ Implemented lab surface on `127.0.0.1:4599` (HTTP) and `127.0.0.1:5672` (AMQP li
 
 | Service | Status | Doc | Protocol |
 |---------|--------|-----|----------|
-| Microsoft Entra ID | lab | [entra.md](entra.md) | OIDC/JWKS; client credentials + ROPC; app registration lite |
+| Microsoft Entra ID | lab | [entra.md](entra.md) | OIDC/JWKS; v1/v2 token on tenant/`common`/`organizations`; Graph directory lists; device code lite; WIF vs private_key_jwt |
 | Managed Identity | lab | [managedidentity.md](managedidentity.md) | User + system-assigned ARM; IMDS theatre |
-| Subscriptions / resource groups | lab | [subscriptions.md](subscriptions.md) | ARM subscriptions + resourceGroups lite |
+| Subscriptions / resource groups | lab | [subscriptions.md](subscriptions.md) | ARM list/get subscriptions, tenants, MGs, ARG, subscription-scope LISTs |
 | Authorization (RBAC) | lab | [authorization.md](authorization.md) | Role assignments CRUD + list-by-scope |
 | Key Vault | lab | [keyvault.md](keyvault.md) | Secrets/keys/certificates + soft-delete theatre |
 | Storage | lab | [storage.md](storage.md) | Blob + queue Shared Key / SAS |

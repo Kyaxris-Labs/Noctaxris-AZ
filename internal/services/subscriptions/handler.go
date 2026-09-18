@@ -23,9 +23,24 @@ type Service struct {
 
 // Mount registers ARM subscription and resource group routes.
 func (s *Service) Mount(mux *http.ServeMux) {
+	mux.HandleFunc("GET /subscriptions", s.listSubscriptions)
+	mux.HandleFunc("GET /tenants", s.listTenants)
+	mux.HandleFunc("GET /providers/Microsoft.Management/managementGroups", s.listManagementGroups)
+	mux.HandleFunc("GET /providers/Microsoft.Management/managementGroups/{id}/descendants", s.listManagementGroupDescendants)
+	mux.HandleFunc("POST /providers/Microsoft.ResourceGraph/resources", s.queryResourceGraph)
 	mux.HandleFunc("GET /subscriptions/{subscriptionId}", s.getSubscription)
 	mux.HandleFunc("GET /subscriptions/{subscriptionId}/resources", s.listResources)
 	mux.HandleFunc("GET /subscriptions/{subscriptionId}/providers", s.listProviders)
+	mux.HandleFunc("GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute/virtualMachines", s.listSubProvider("Microsoft.Compute/virtualMachines"))
+	mux.HandleFunc("GET /subscriptions/{subscriptionId}/providers/Microsoft.KeyVault/vaults", s.listSubProvider("Microsoft.KeyVault/vaults"))
+	mux.HandleFunc("GET /subscriptions/{subscriptionId}/providers/Microsoft.Storage/storageAccounts", s.listStorageAccounts)
+	mux.HandleFunc("GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/sites", s.listWebSites)
+	mux.HandleFunc("GET /subscriptions/{subscriptionId}/providers/Microsoft.ContainerRegistry/registries", s.listSubProvider("Microsoft.ContainerRegistry/registries"))
+	mux.HandleFunc("GET /subscriptions/{subscriptionId}/providers/Microsoft.ContainerService/managedClusters", s.listSubProvider("Microsoft.ContainerService/managedClusters"))
+	mux.HandleFunc("GET /subscriptions/{subscriptionId}/providers/Microsoft.Logic/workflows", s.listSubProvider("Microsoft.Logic/workflows"))
+	mux.HandleFunc("GET /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/roleAssignments", s.listSubRoleAssignments)
+	mux.HandleFunc("GET /subscriptions/{subscriptionId}/providers/Microsoft.Automation/automationAccounts", s.listEmptyARM)
+	mux.HandleFunc("GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute/virtualMachineScaleSets", s.listEmptyARM)
 	// Resource Groups REST uses `resourcegroups`; resource IDs and nested
 	// provider routes use `resourceGroups`. Register both; HTTP middleware
 	// also canonicalizes the segment before ServeMux match.
@@ -216,6 +231,17 @@ func (s *Service) listProviders(w http.ResponseWriter, r *http.Request) {
 		{"namespace": "Microsoft.Web", "registrationState": "Registered"},
 		{"namespace": "Microsoft.AppConfiguration", "registrationState": "Registered"},
 		{"namespace": "Microsoft.Insights", "registrationState": "Registered"},
+		{"namespace": "Microsoft.Compute", "registrationState": "Registered"},
+		{"namespace": "Microsoft.ContainerRegistry", "registrationState": "Registered"},
+		{"namespace": "Microsoft.ContainerService", "registrationState": "Registered"},
+		{"namespace": "Microsoft.Logic", "registrationState": "Registered"},
+		{"namespace": "Microsoft.Automation", "registrationState": "Registered"},
+		{"namespace": "Microsoft.Management", "registrationState": "Registered"},
+		{"namespace": "Microsoft.ResourceGraph", "registrationState": "Registered"},
+		{"namespace": "Microsoft.Security", "registrationState": "Registered"},
+		{"namespace": "Microsoft.App", "registrationState": "Registered"},
+		{"namespace": "Microsoft.DocumentDB", "registrationState": "Registered"},
+		{"namespace": "Microsoft.EventHub", "registrationState": "Registered"},
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"value": providers})
 }

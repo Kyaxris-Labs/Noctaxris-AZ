@@ -48,6 +48,10 @@ func (s *Store) migrate() error {
 	_, _ = s.db.Exec(`ALTER TABLE storage_queue_messages ADD COLUMN visible_after TEXT NOT NULL DEFAULT ''`)
 	_, _ = s.db.Exec(`ALTER TABLE servicebus_messages ADD COLUMN session_id TEXT NOT NULL DEFAULT ''`)
 	_, _ = s.db.Exec(`ALTER TABLE servicebus_messages ADD COLUMN dead_letter INTEGER NOT NULL DEFAULT 0`)
+	_, _ = s.db.Exec(`ALTER TABLE entra_apps ADD COLUMN object_id TEXT NOT NULL DEFAULT ''`)
+	_, _ = s.db.Exec(`ALTER TABLE activity_log ADD COLUMN client_ip TEXT NOT NULL DEFAULT ''`)
+	_, _ = s.db.Exec(`ALTER TABLE activity_log ADD COLUMN identity_json TEXT NOT NULL DEFAULT ''`)
+	_, _ = s.db.Exec(`ALTER TABLE cosmos_items ADD COLUMN etag TEXT NOT NULL DEFAULT ''`)
 	var n int
 	if err := s.db.QueryRow(`SELECT COUNT(1) FROM schema_version`).Scan(&n); err != nil {
 		return err
@@ -85,6 +89,9 @@ ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name, tenant_id=excl
 		return fmt.Errorf("seed subscription: %w", err)
 	}
 	_ = rootPrincipal
+	if err := s.SeedDirectory(tenantID); err != nil {
+		return fmt.Errorf("seed directory: %w", err)
+	}
 	return nil
 }
 

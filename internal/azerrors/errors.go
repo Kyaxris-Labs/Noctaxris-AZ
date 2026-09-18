@@ -66,6 +66,24 @@ func Conflict(w http.ResponseWriter, message string) {
 	WriteARM(w, http.StatusConflict, "Conflict", message)
 }
 
+func WriteOAuth(w http.ResponseWriter, httpCode int, code, description string) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(httpCode)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error":             code,
+		"error_description": description,
+	})
+}
+
+// WriteGraph writes a Microsoft Graph error envelope.
+func WriteGraph(w http.ResponseWriter, httpCode int, code, message string) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(httpCode)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"error": map[string]any{"code": code, "message": message},
+	})
+}
+
 // StorageError writes a Storage-shaped XML/JSON lite error using ARM envelope for lab JSON clients.
 func StorageError(w http.ResponseWriter, httpCode int, code, message string) {
 	w.Header().Set("x-ms-error-code", code)

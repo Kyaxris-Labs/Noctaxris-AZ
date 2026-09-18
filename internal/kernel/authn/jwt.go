@@ -124,6 +124,41 @@ func VerifyRS256JWT(pub *rsa.PublicKey, token string, now time.Time) (map[string
 	return claims, nil
 }
 
+// DecodeJWTUnverified parses header and claims without verifying the signature.
+func DecodeJWTUnverified(token string) (header, claims map[string]any, err error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return nil, nil, fmt.Errorf("invalid jwt")
+	}
+	enc := base64.RawURLEncoding
+	hb, err := enc.DecodeString(parts[0])
+	if err != nil {
+		return nil, nil, err
+	}
+	cb, err := enc.DecodeString(parts[1])
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := json.Unmarshal(hb, &header); err != nil {
+		return nil, nil, err
+	}
+	if err := json.Unmarshal(cb, &claims); err != nil {
+		return nil, nil, err
+	}
+	return header, claims, nil
+}
+
+// ClaimString returns a string claim.
+func ClaimString(claims map[string]any, key string) string {
+	if claims == nil {
+		return ""
+	}
+	if v, ok := claims[key].(string); ok {
+		return strings.TrimSpace(v)
+	}
+	return ""
+}
+
 // PrincipalFromJWTClaims picks oid, then sub, then appid/azp.
 func PrincipalFromJWTClaims(claims map[string]any) string {
 	for _, k := range []string{"oid", "sub", "appid", "azp"} {

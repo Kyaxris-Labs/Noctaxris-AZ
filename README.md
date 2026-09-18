@@ -70,6 +70,17 @@ curl -H "Authorization: Bearer $ROOT_TOKEN" \
 
 When Compose files are present, copy `docker/.env.example` to `docker/.env`, replace both root values with unique lab credentials, then `docker compose -f docker/compose.yaml --env-file docker/.env up --build`. Default host publish is `127.0.0.1:4599` (AMQP optional). Per-service smoke: [docs/services/](docs/services/index.md).
 
+## Client environments
+
+HTTP `:4599` is the default. Cloud-hosts TLS (`NOCTAXRIS_AZ_CLOUD_HOSTS=1`) listens on `127.0.0.1:8443` with a lab CA. Mapping AzureCloud names in the hosts file hijacks those names for the whole machine; use a lab VM and uninstall the lab CA when finished. Details: [docs/configuration.md](docs/configuration.md).
+
+| Client | Point it at the lab |
+|--------|---------------------|
+| Azure CLI | `az cloud register -n NoctaxrisAZ --endpoint-resource-manager http://127.0.0.1:4599 --endpoint-active-directory http://127.0.0.1:4599 --endpoint-microsoft-graph-resource-id http://127.0.0.1:4599 --skip-endpoint-discovery` then `az cloud set -n NoctaxrisAZ` |
+| Az PowerShell | `Add-AzEnvironment -Name NoctaxrisAZ -ResourceManagerUrl http://127.0.0.1:4599 -ActiveDirectoryAuthority http://127.0.0.1:4599/` then `Connect-AzAccount -Environment NoctaxrisAZ` |
+| Microsoft Graph PowerShell | `Add-MgEnvironment -Name NoctaxrisAZ -GraphEndpoint http://127.0.0.1:4599 -AzureADEndpoint http://127.0.0.1:4599` then `Connect-MgGraph -Environment NoctaxrisAZ -AccessToken $token` |
+| Host/SNI AzureCloud | `NOCTAXRIS_AZ_CLOUD_HOSTS=1`; lab CA from `go run ./scripts/generatelabca ./lab-ca` or secrets next to `master.key` |
+
 ## Services
 
 | Area | Services |
@@ -102,8 +113,8 @@ Open the service matrix for detailed actions and gaps. Full notes and CLI smoke:
     <tr>
       <td rowspan="4" align="center" valign="middle">Identity</td>
       <td>Microsoft Entra ID</td>
-      <td>OIDC/JWKS; client credentials + ROPC lite; app registration CRUD lite.</td>
-      <td>Microsoft-signed JWTs; Graph; auth code / device code.</td>
+      <td>OIDC/JWKS; v1/v2 token on tenant/<code>common</code>/<code>organizations</code>; Graph directory lists; device code lite; WIF vs private_key_jwt; AAD Graph/SOAP.</td>
+      <td>Microsoft-signed JWTs; authorization code; On-Behalf-Of.</td>
     </tr>
     <tr>
       <td>Managed Identity</td>
@@ -112,8 +123,8 @@ Open the service matrix for detailed actions and gaps. Full notes and CLI smoke:
     </tr>
     <tr>
       <td>Subscriptions / RGs</td>
-      <td>Seeded subscription get; RG CRUD; resources/providers lite.</td>
-      <td>Subscription create/delete; management groups.</td>
+      <td>List/get subscriptions; tenants; management groups lite; ARG; subscription-scope provider LISTs.</td>
+      <td>Subscription create/delete; full ARG KQL.</td>
     </tr>
     <tr>
       <td>Authorization</td>

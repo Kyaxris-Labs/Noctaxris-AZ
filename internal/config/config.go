@@ -11,10 +11,12 @@ import (
 
 const (
 	EnvAllowNonLoopbackListen = "NOCTAXRIS_AZ_ALLOW_NONLOOPBACK_LISTEN"
+	EnvCloudHosts             = "NOCTAXRIS_AZ_CLOUD_HOSTS"
 
-	DefaultListenAddr     = "127.0.0.1:4599"
-	DefaultAMQPListenAddr = "127.0.0.1:5672"
-	DefaultDataRoot       = "/var/lib/noctaxris-az"
+	DefaultListenAddr          = "127.0.0.1:4599"
+	DefaultAMQPListenAddr      = "127.0.0.1:5672"
+	DefaultCloudHostsListenAddr = "127.0.0.1:8443"
+	DefaultDataRoot            = "/var/lib/noctaxris-az"
 	// Fixed lab GUIDs (not secrets).
 	DefaultTenantID       = "00000000-0000-0000-0000-000000000001"
 	DefaultSubscriptionID = "00000000-0000-0000-0000-000000000002"
@@ -40,6 +42,8 @@ type Config struct {
 	TenantID               string
 	SubscriptionID         string
 	AllowNonLoopbackListen bool
+	CloudHosts             bool
+	CloudHostsListen       string
 	DockerHost             string
 	DockerTLSCertPath      string
 }
@@ -58,8 +62,13 @@ func LoadFromEnv() (Config, error) {
 		TenantID:               getenv("NOCTAXRIS_AZ_TENANT_ID", DefaultTenantID),
 		SubscriptionID:         getenv("NOCTAXRIS_AZ_SUBSCRIPTION_ID", DefaultSubscriptionID),
 		AllowNonLoopbackListen: envTruthy(EnvAllowNonLoopbackListen),
+		CloudHosts:             envTruthy(EnvCloudHosts),
+		CloudHostsListen:       getenv("NOCTAXRIS_AZ_CLOUD_HOSTS_LISTEN", ""),
 		DockerHost:             getenv("NOCTAXRIS_AZ_DOCKER_HOST", ""),
 		DockerTLSCertPath:      getenv("NOCTAXRIS_AZ_DOCKER_CERT_PATH", ""),
+	}
+	if cfg.CloudHosts && strings.TrimSpace(cfg.CloudHostsListen) == "" {
+		cfg.CloudHostsListen = DefaultCloudHostsListenAddr
 	}
 	if err := compute.ValidateDockerHost(cfg.DockerHost, cfg.DockerTLSCertPath); err != nil {
 		return Config{}, err
@@ -68,6 +77,9 @@ func LoadFromEnv() (Config, error) {
 		return Config{}, err
 	}
 	if err := ValidateAMQPListenSecurity(cfg); err != nil {
+		return Config{}, err
+	}
+	if err := ValidateCloudHostsListen(cfg); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil
@@ -140,6 +152,33 @@ func ValidateListenSecurity(c Config) error {
 	}
 	return fmt.Errorf("NOCTAXRIS_AZ_LISTEN %q is non-loopback without TLS; set NOCTAXRIS_AZ_TLS_CERT and NOCTAXRIS_AZ_TLS_KEY, or %s=1 when host publish stays loopback (Compose)",
 		c.ListenAddr, EnvAllowNonLoopbackListen)
+}
+
+// ValidateCloudHostsListen fails closed for non-loopback cloud-hosts TLS without allow.
+func ValidateCloudHostsListen(c Config) error {
+	if !c.CloudHosts {
+		return nil
+	}
+	if ListenIsLoopback(c.CloudHostsListen) {
+		return nil
+	}
+	if c.AllowNonLoopbackListen || envTruthy(EnvAllowNonLoopbackListen) {
+		return nil
+	}
+	return fmt.Errorf("NOCTAXRIS_AZ_CLOUD_HOSTS_LISTEN %q is non-loopback; keep loopback or set %s=1 when host publish stays loopback",
+		c.CloudHostsListen, EnvAllowNonLoopbackListen)
+}
+
+// IssuerBase is the OIDC issuer origin. Cloud-hosts mode uses the public login host.
+func (c Config) IssuerBase() string {
+	if c.CloudHosts {
+		return "https://login.microsoftonline.com"
+	}
+	scheme := "http"
+	if c.TLSEnabled() {
+		scheme = "https"
+	}
+	return scheme + "://" + c.ListenAddr
 }
 
 // ValidateAMQPListenSecurity fails closed for non-loopback AMQP without allow.

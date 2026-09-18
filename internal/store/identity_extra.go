@@ -16,7 +16,7 @@ import (
 // EnsureEntraSigningKey loads or creates a sealed RSA private key for lab JWTs.
 func (s *Store) EnsureEntraSigningKey() (kid string, priv *rsa.PrivateKey, err error) {
 	var sealed []byte
-	err = s.db.QueryRow(`SELECT kid, private_key_sealed FROM entra_signing_keys ORDER BY created_at ASC LIMIT 1`).
+	err = s.db.QueryRow(`SELECT kid, private_key_sealed FROM entra_signing_keys WHERE kid != 'oidc-lab' ORDER BY created_at ASC LIMIT 1`).
 		Scan(&kid, &sealed)
 	if err == nil {
 		plain, uerr := Unseal(s.master, sealed)
@@ -62,6 +62,57 @@ VALUES (?, ?, ?)`, kid, sealed, time.Now().UTC().Format(time.RFC3339))
 		return "", nil, err
 	}
 	return kid, key, nil
+}
+
+const oidcLabKid = "oidc-lab"
+
+// EnsureOIDCLabSigningKey loads or creates the lab OIDC issuer RSA key (distinct from Entra JWTs).
+func (s *Store) EnsureOIDCLabSigningKey() (kid string, priv *rsa.PrivateKey, err error) {
+	var sealed []byte
+	err = s.db.QueryRow(`SELECT kid, private_key_sealed FROM entra_signing_keys WHERE kid = ?`, oidcLabKid).
+		Scan(&kid, &sealed)
+	if err == nil {
+		plain, uerr := Unseal(s.master, sealed)
+		if uerr != nil {
+			return "", nil, fmt.Errorf("unseal oidc-lab signing key: %w", uerr)
+		}
+		block, _ := pem.Decode(plain)
+		if block == nil {
+			return "", nil, fmt.Errorf("unseal oidc-lab signing key: invalid PEM")
+		}
+		key, perr := x509.ParsePKCS1PrivateKey(block.Bytes)
+		if perr != nil {
+			parsed, aerr := x509.ParsePKCS8PrivateKey(block.Bytes)
+			if aerr != nil {
+				return "", nil, fmt.Errorf("parse oidc-lab signing key: %w", perr)
+			}
+			var ok bool
+			key, ok = parsed.(*rsa.PrivateKey)
+			if !ok {
+				return "", nil, fmt.Errorf("oidc-lab signing key is not RSA")
+			}
+		}
+		return kid, key, nil
+	}
+	if err != sql.ErrNoRows {
+		return "", nil, err
+	}
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return "", nil, fmt.Errorf("generate oidc-lab signing key: %w", err)
+	}
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
+	sealed, err = Seal(s.master, pemBytes)
+	if err != nil {
+		return "", nil, fmt.Errorf("seal oidc-lab signing key: %w", err)
+	}
+	_, err = s.db.Exec(`
+INSERT INTO entra_signing_keys (kid, private_key_sealed, created_at)
+VALUES (?, ?, ?)`, oidcLabKid, sealed, time.Now().UTC().Format(time.RFC3339))
+	if err != nil {
+		return "", nil, err
+	}
+	return oidcLabKid, key, nil
 }
 
 // UpsertManagedIdentity creates or updates a user-assigned managed identity.

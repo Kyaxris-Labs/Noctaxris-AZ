@@ -110,37 +110,89 @@ func (s *Service) MintAccessToken(principalID, audience string) (token string, e
 	return token, defaultExpiresIn, nil
 }
 
-// Mount registers Entra routes on mux.
-// OIDC paths use the configured tenant as a literal segment (not /{tenant}/...) so
-// Go ServeMux does not conflict with ARM /subscriptions/... or /blob/.../{blob}.
+// loginTenants are literal path prefixes. Wildcards conflict with Graph /v1.0/{path...}.
+func (s *Service) loginTenants() []string {
+	seen := map[string]struct{}{}
+	var out []string
+	add := func(t string) {
+		t = strings.TrimSpace(t)
+		if t == "" {
+			return
+		}
+		if _, ok := seen[t]; ok {
+			return
+		}
+		seen[t] = struct{}{}
+		out = append(out, t)
+	}
+	add(s.TenantID)
+	add(s.appTenant())
+	add("common")
+	add("organizations")
+	return out
+}
+
+// Mount registers Entra OIDC, token, Graph, AAD Graph, and lab OIDC issuer routes.
 func (s *Service) Mount(mux *http.ServeMux) {
-	tenant := s.appTenant()
-	mux.HandleFunc("GET /"+tenant+"/v2.0/.well-known/openid-configuration", s.handleOIDCDiscovery)
-	mux.HandleFunc("GET /"+tenant+"/discovery/v2.0/keys", s.handleJWKS)
-	mux.HandleFunc("POST /"+tenant+"/oauth2/v2.0/token", s.handleToken)
-	mux.HandleFunc("GET /v1.0/applications", s.handleListApps)
-	mux.HandleFunc("POST /v1.0/applications", s.handleCreateApp)
-	mux.HandleFunc("GET /v1.0/applications/{appId}", s.handleGetApp)
-	mux.HandleFunc("PATCH /v1.0/applications/{appId}", s.handlePatchApp)
-	mux.HandleFunc("DELETE /v1.0/applications/{appId}", s.handleDeleteApp)
+	for _, tenant := range s.loginTenants() {
+		t := tenant
+		mux.HandleFunc("GET /"+t+"/v2.0/.well-known/openid-configuration", s.handleOIDCDiscovery)
+		mux.HandleFunc("GET /"+t+"/.well-known/openid-configuration", s.handleOIDCDiscovery)
+		mux.HandleFunc("GET /"+t+"/discovery/v2.0/keys", s.handleJWKS)
+		mux.HandleFunc("GET /"+t+"/discovery/keys", s.handleJWKS)
+		mux.HandleFunc("POST /"+t+"/oauth2/v2.0/token", s.handleToken)
+		mux.HandleFunc("POST /"+t+"/oauth2/token", s.handleToken)
+		mux.HandleFunc("POST /"+t+"/oauth2/v2.0/devicecode", s.handleDeviceCode)
+		mux.HandleFunc("POST /"+t+"/oauth2/devicecode", s.handleDeviceCode)
+		mux.HandleFunc("GET /"+t+"/tenantDetails", s.handleAADTenantDetails)
+		mux.HandleFunc("GET /"+t+"/users", s.handleAADUsers)
+		mux.HandleFunc("GET /"+t+"/directoryRoles", s.handleAADDirectoryRoles)
+	}
+	mux.HandleFunc("GET /_noctaxris-az/oidc-lab/.well-known/openid-configuration", s.handleLabOIDCDiscovery)
+	mux.HandleFunc("GET /_noctaxris-az/oidc-lab/keys", s.handleLabJWKS)
+
+	s.mountGraph(mux)
+	s.mountIAMPortal(mux)
+	s.mountProvisioningSOAP(mux)
+}
+
+func (s *Service) pathTenant(r *http.Request) string {
+	t := strings.TrimSpace(r.PathValue("tenant"))
+	if t == "" {
+		p := strings.Trim(r.URL.Path, "/")
+		if i := strings.IndexByte(p, '/'); i > 0 {
+			t = p[:i]
+		}
+	}
+	if t == "" || strings.EqualFold(t, "common") || strings.EqualFold(t, "organizations") {
+		return s.appTenant()
+	}
+	return t
 }
 
 func (s *Service) handleOIDCDiscovery(w http.ResponseWriter, r *http.Request) {
-	tenant := s.appTenant()
+	tenant := s.pathTenant(r)
 	base := s.base()
-	issuer := base + "/" + tenant + "/v2.0"
-	// Shape mirrors Microsoft identity platform OIDC discovery (lab issuer/base).
-	// See https://learn.microsoft.com/entra/identity-platform/v2-protocols-oidc
+	v2 := strings.Contains(r.URL.Path, "/v2.0/")
+	issuer := base + "/" + tenant
+	tokenPath := base + "/" + tenant + "/oauth2/token"
+	jwksPath := base + "/" + tenant + "/discovery/keys"
+	if v2 {
+		issuer += "/v2.0"
+		tokenPath = base + "/" + tenant + "/oauth2/v2.0/token"
+		jwksPath = base + "/" + tenant + "/discovery/v2.0/keys"
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"token_endpoint":                       base + "/" + tenant + "/oauth2/v2.0/token",
+		"token_endpoint":                        tokenPath,
 		"token_endpoint_auth_methods_supported": []string{"client_secret_post", "private_key_jwt"},
-		"jwks_uri":                             base + "/" + tenant + "/discovery/v2.0/keys",
-		"issuer":                               issuer,
-		"authorization_endpoint":               base + "/" + tenant + "/oauth2/v2.0/authorize",
-		"response_types_supported":             []string{"code", "id_token", "token", "code id_token"},
+		"jwks_uri":                              jwksPath,
+		"issuer":                                issuer,
+		"authorization_endpoint":                base + "/" + tenant + "/oauth2/v2.0/authorize",
+		"device_authorization_endpoint":         base + "/" + tenant + "/oauth2/v2.0/devicecode",
+		"response_types_supported":              []string{"code", "id_token", "token", "code id_token"},
 		"id_token_signing_alg_values_supported": []string{"RS256"},
-		"subject_types_supported":              []string{"pairwise"},
-		"scopes_supported":                     []string{"openid", "profile", "email", "offline_access"},
+		"subject_types_supported":               []string{"pairwise"},
+		"scopes_supported":                      []string{"openid", "profile", "email", "offline_access"},
 	})
 }
 
@@ -150,7 +202,10 @@ func (s *Service) handleJWKS(w http.ResponseWriter, r *http.Request) {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
 		return
 	}
-	tenant := s.appTenant()
+	tenant := s.pathTenant(r)
+	if tenant == "" {
+		tenant = s.appTenant()
+	}
 	pub := priv.PublicKey
 	n := base64.RawURLEncoding.EncodeToString(pub.N.Bytes())
 	eBytes := make([]byte, 8)
@@ -175,65 +230,7 @@ func (s *Service) handleJWKS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) {
-	if ct := r.Header.Get("Content-Type"); ct != "" &&
-		!strings.HasPrefix(strings.ToLower(ct), "application/x-www-form-urlencoded") {
-		azerrors.BadRequest(w, "Content-Type must be application/x-www-form-urlencoded")
-		return
-	}
-	if err := r.ParseForm(); err != nil {
-		azerrors.BadRequest(w, "invalid form body")
-		return
-	}
-	grant := strings.TrimSpace(r.Form.Get("grant_type"))
-	switch grant {
-	case "client_credentials":
-		clientID := strings.TrimSpace(r.Form.Get("client_id"))
-		if clientID == "" {
-			azerrors.BadRequest(w, "client_id is required")
-			return
-		}
-		audience := strings.TrimSpace(r.Form.Get("scope"))
-		if audience == "" {
-			audience = strings.TrimSpace(r.Form.Get("resource"))
-		}
-		audience = strings.TrimSuffix(audience, "/.default")
-		token, expiresIn, err := s.MintAccessToken(clientID, audience)
-		if err != nil {
-			azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{
-			"token_type":     "Bearer",
-			"expires_in":     expiresIn,
-			"ext_expires_in": expiresIn,
-			"access_token":   token,
-		})
-	case "password":
-		username := strings.TrimSpace(r.Form.Get("username"))
-		password := strings.TrimSpace(r.Form.Get("password"))
-		if username == "" || password == "" {
-			azerrors.BadRequest(w, "username and password are required")
-			return
-		}
-		audience := strings.TrimSpace(r.Form.Get("scope"))
-		if audience == "" {
-			audience = strings.TrimSpace(r.Form.Get("resource"))
-		}
-		audience = strings.TrimSuffix(audience, "/.default")
-		token, expiresIn, err := s.MintAccessToken(username, audience)
-		if err != nil {
-			azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{
-			"token_type":     "Bearer",
-			"expires_in":     expiresIn,
-			"ext_expires_in": expiresIn,
-			"access_token":   token,
-		})
-	default:
-		azerrors.BadRequest(w, "grant_type must be client_credentials or password")
-	}
+	s.dispatchToken(w, r)
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

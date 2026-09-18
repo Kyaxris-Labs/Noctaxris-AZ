@@ -9,6 +9,9 @@ func TestListenIsLoopback(t *testing.T) {
 	if ListenIsLoopback("0.0.0.0:4599") {
 		t.Fatal("expected non-loopback")
 	}
+	if err := ValidateCloudHostsListen(Config{CloudHosts: true, CloudHostsListen: "0.0.0.0:443"}); err == nil {
+		t.Fatal("expected cloud hosts error")
+	}
 }
 
 func TestExampleRootCredentials(t *testing.T) {
