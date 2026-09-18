@@ -11,7 +11,7 @@ import (
 const EnvImagePullAllowlist = "NOCTAXRIS_AZ_IMAGE_PULL_ALLOWLIST"
 
 // DefaultLabImage is the pinned alpine base used for nested lab scaffolding.
-const DefaultLabImage = "alpine:3.20"
+const DefaultLabImage = "alpine:3.23"
 
 // AllowImagePull fails closed unless imageRef is a pinned lab base image or an
 // explicit allowlist entry. Prefix entries must end with "/" and the ref must
@@ -52,12 +52,14 @@ func AllowImagePull(imageRef string) error {
 
 func isPinnedLabImage(ref string) bool {
 	lower := strings.ToLower(ref)
-	if strings.HasPrefix(lower, "docker:27-dind") {
+	if strings.HasPrefix(lower, "docker:27-dind") || strings.HasPrefix(lower, "docker:29-dind") {
 		return true
 	}
 	pinnedExact := map[string]struct{}{
-		"alpine:3.20":                               {},
+		"alpine:3.20": {},
+		"alpine:3.23": {},
 		"public.ecr.aws/docker/library/alpine:3.20": {},
+		"public.ecr.aws/docker/library/alpine:3.23": {},
 	}
 	_, ok := pinnedExact[lower]
 	return ok

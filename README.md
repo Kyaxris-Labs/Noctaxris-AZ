@@ -81,7 +81,7 @@ HTTP `:4599` is the default. Cloud-hosts TLS (`NOCTAXRIS_AZ_CLOUD_HOSTS=1`) list
 | Microsoft Graph PowerShell | `Add-MgEnvironment -Name NoctaxrisAZ -AzureADEndpoint http://127.0.0.1:4599 -GraphEndpoint http://127.0.0.1:4599` then `Connect-MgGraph -Environment NoctaxrisAZ -AccessToken $token` |
 | Host/SNI AzureCloud | `NOCTAXRIS_AZ_CLOUD_HOSTS=1`; lab CA from `go run ./scripts/generatelabca ./lab-ca` or secrets next to `master.key` |
 | Prowler Azure | Same Host/SNI path (AzureCloud URLs). Live `prowler` is not executed; smokes skip when the binary is missing. |
-| Lab inject | `NOCTAXRIS_AZ_LAB_FORENSICS`, `NOCTAXRIS_AZ_ACTIVITY_INJECT`, `NOCTAXRIS_AZ_LOGS_INJECT`, `NOCTAXRIS_AZ_DEFENDER_INJECT` (default off; Bearer root) |
+| Lab inject | `NOCTAXRIS_AZ_LAB_FORENSICS`, `NOCTAXRIS_AZ_ACTIVITY_INJECT`, `NOCTAXRIS_AZ_LOGS_INJECT` (also `POST /loganalytics/{workspace}/ingest/{table}`), `NOCTAXRIS_AZ_DEFENDER_INJECT` (default off; Bearer root) |
 
 ## Services
 
@@ -142,7 +142,7 @@ Open the service matrix for detailed actions and gaps. Full notes and CLI smoke:
     <tr>
       <td rowspan="6" align="center" valign="middle">Data</td>
       <td>Storage</td>
-      <td>Blob/queue/table Shared Key + SAS.</td>
+      <td>Blob/queue/table Shared Key HMAC + SAS HMAC (`se`, `sp`).</td>
       <td>Files/HNS depth; Azurite multi-port default.</td>
     </tr>
     <tr>
@@ -178,7 +178,7 @@ Open the service matrix for detailed actions and gaps. Full notes and CLI smoke:
     </tr>
     <tr>
       <td>Event Hubs</td>
-      <td>Namespaces/hubs/consumer groups; HTTP message lab; captured-events empty 200 list.</td>
+      <td>Namespaces/hubs/consumer groups; HTTP message lab (root Bearer); captured-events empty 200 for root.</td>
       <td>Kafka capture store; Schema Registry.</td>
     </tr>
     <tr>
@@ -226,7 +226,7 @@ Open the service matrix for detailed actions and gaps. Full notes and CLI smoke:
     <tr>
       <td align="center" valign="middle">Observe</td>
       <td>Monitor / Log Analytics</td>
-      <td>Activity Log; metrics theatre; workspace + KQL subset + ingest; diagnostic settings store.</td>
+      <td>Activity Log scoped to the path subscription; metrics theatre; workspace + KQL subset; ingest behind `NOCTAXRIS_AZ_LOGS_INJECT`; diagnostic settings store.</td>
       <td>Diagnostic export pipeline; full KQL; alert evaluation; App Insights ingest.</td>
     </tr>
   </tbody>
@@ -245,7 +245,7 @@ Open the service matrix for detailed actions and gaps. Full notes and CLI smoke:
 | API replicas | **One process per data root.** Multi-replica against the same SQLite volume is unsupported and can corrupt state |
 | Credentials | Root client id + Bearer token via env injection |
 | At rest | Master key on sibling secrets volume; sensitive columns sealed |
-| Authn | Bearer on ARM / Key Vault / Monitor; Storage Shared Key + SAS; Service Bus connection string / SAS |
+| Authn | Bearer on ARM / Key Vault / Monitor; Storage Shared Key HMAC + SAS HMAC; Service Bus connection string / SAS |
 
 ## Architecture
 

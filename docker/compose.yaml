@@ -1,6 +1,6 @@
 services:
   noctaxris-az-init:
-    image: busybox:1.36
+    image: busybox:1.37@sha256:9db7b59979c38555a39def84a31fb98b5296952f9e3afd4f6f11f05b07adfab0
     user: "0:0"
     volumes:
       - noctaxris-az-data:/data

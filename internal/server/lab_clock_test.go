@@ -74,6 +74,13 @@ func TestInjectDeniedWhenDisabled(t *testing.T) {
 			t.Fatalf("%s status=%d body=%s", path, rec.Code, rec.Body.String())
 		}
 	}
+	ingest := httptest.NewRequest(http.MethodPost, "/loganalytics/default/ingest/AzureActivity", strings.NewReader(`[{"OperationName":"x"}]`))
+	ingest.Header.Set("Authorization", "Bearer "+cfg.RootAccessToken)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, ingest)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("loganalytics ingest status=%d body=%s", rec.Code, rec.Body.String())
+	}
 }
 
 func TestLabClockFreezeInjectAndBulkSeed(t *testing.T) {
@@ -171,7 +178,7 @@ func TestAuthExpiryIgnoresLabClock(t *testing.T) {
 	}
 	tokReq := httptest.NewRequest(http.MethodPost,
 		"/"+config.DefaultTenantID+"/oauth2/v2.0/token",
-		strings.NewReader("grant_type=client_credentials&client_id=sp-lab-1&scope=https://management.azure.com/.default"))
+		strings.NewReader("grant_type=client_credentials&client_id=sp-lab-1&scope=https://graph.microsoft.com/.default"))
 	tokReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec = httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, tokReq)

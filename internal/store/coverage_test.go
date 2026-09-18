@@ -77,6 +77,14 @@ func TestEnsureRootTokensAndKVSecretsKeys(t *testing.T) {
 	if err != nil || !ok || state != "Enabled" || tid != "tenant" || dn == "" {
 		t.Fatalf("sub: %v %v %q %q %q", ok, err, dn, state, tid)
 	}
+	_, mgTid, parent, ok, err := st.GetManagementGroup(store.SeededManagementGroupID)
+	if err != nil || !ok || mgTid != "tenant" || parent != "" {
+		t.Fatalf("mg: %v %v %q %q", ok, err, mgTid, parent)
+	}
+	_, _, _, ok, err = st.GetManagementGroup("missing-mg")
+	if err != nil || ok {
+		t.Fatal("missing mg")
+	}
 	if st.DataRoot() == "" || len(st.Master()) != 32 {
 		t.Fatal("master/data root")
 	}
@@ -525,10 +533,13 @@ func TestIdentityEntraCosmosEventGridObserve(t *testing.T) {
 	if err != nil || len(apps) != 1 {
 		t.Fatal(err)
 	}
-	if err := st.DeleteEntraApp("tenant", appID); err != nil {
+	if err := st.DeleteEntraApp("tenant", appID); err != sql.ErrNoRows {
+		t.Fatalf("client id must not delete: %v", err)
+	}
+	if err := st.DeleteEntraApp("tenant", app.ObjectID); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.DeleteEntraApp("tenant", appID); err != sql.ErrNoRows {
+	if err := st.DeleteEntraApp("tenant", app.ObjectID); err != sql.ErrNoRows {
 		t.Fatalf("want ErrNoRows got %v", err)
 	}
 
@@ -694,6 +705,17 @@ func TestIdentityEntraCosmosEventGridObserve(t *testing.T) {
 	logs, err := st.ListActivityLog(0)
 	if err != nil || len(logs) == 0 {
 		t.Fatal(err)
+	}
+	if err := st.AppendActivityLog("c", "op", "/subscriptions/sub/resourceGroups/rg", "Succeeded", "m2"); err != nil {
+		t.Fatal(err)
+	}
+	scoped, err := st.ListActivityLogForSubscription("sub", 0)
+	if err != nil || len(scoped) != 1 || scoped[0]["resourceId"] != "/subscriptions/sub/resourceGroups/rg" {
+		t.Fatalf("scoped activity: %v %v", scoped, err)
+	}
+	empty, err := st.ListActivityLogForSubscription("", 10)
+	if err != nil || len(empty) != 0 {
+		t.Fatalf("empty sub: %v %v", empty, err)
 	}
 	if err := st.WriteMetric("m1", 1.5, "/r"); err != nil {
 		t.Fatal(err)

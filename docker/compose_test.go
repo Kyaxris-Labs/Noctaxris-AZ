@@ -26,6 +26,16 @@ func TestComposeFileHasNoDockerSock(t *testing.T) {
 	}
 }
 
+func TestComposePinsInitImage(t *testing.T) {
+	b, err := os.ReadFile("compose.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "busybox:1.37@sha256:") {
+		t.Fatal("noctaxris-az-init image must be pinned by digest")
+	}
+}
+
 func TestComposeEngineWiresNestedTLS(t *testing.T) {
 	b, err := os.ReadFile("compose.engine.yaml")
 	if err != nil {
@@ -36,7 +46,7 @@ func TestComposeEngineWiresNestedTLS(t *testing.T) {
 		"noctaxris-az-engine",
 		"NOCTAXRIS_AZ_DOCKER_HOST",
 		"tcp://noctaxris-az-engine:2376",
-		"docker:27-dind@",
+		"docker:29-dind@",
 	} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("compose.engine.yaml missing %q", want)

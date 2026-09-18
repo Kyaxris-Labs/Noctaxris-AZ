@@ -54,7 +54,7 @@ type Config struct {
 	LabForensics bool
 	// ActivityInject enables Activity Log inject (default off).
 	ActivityInject bool
-	// LogsInject enables named Log Analytics table inject (default off).
+	// LogsInject enables named Log Analytics table inject and POST /loganalytics/{workspace}/ingest/{table} (default off).
 	LogsInject bool
 	// DefenderInject enables ARG SecurityResources assessment inject (default off).
 	DefenderInject bool

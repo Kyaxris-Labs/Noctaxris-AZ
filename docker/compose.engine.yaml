@@ -23,7 +23,7 @@ services:
       noctaxris-az-engine:
         condition: service_healthy
   noctaxris-az-engine:
-    image: docker:27-dind@sha256:aa3df78ecf320f5fafdce71c659f1629e96e9de0968305fe1de670e0ca9176ce
+    image: docker:29-dind@sha256:3f3c01aaaebf7cce837356b688b7c059a4749f10bd7660dec7c58fc454a283f0
     # Restricted DinD (no privileged: true). Explicit caps/devices plus
     # host cgroup namespace so dockerd can write /sys/fs/cgroup (cgroup v2).
     privileged: false

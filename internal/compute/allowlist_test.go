@@ -12,9 +12,12 @@ func TestAllowImagePullPinned(t *testing.T) {
 	ok := []string{
 		compute.DefaultLabImage,
 		"alpine:3.20",
+		"alpine:3.23",
 		"public.ecr.aws/docker/library/alpine:3.20",
+		"public.ecr.aws/docker/library/alpine:3.23",
 		"docker:27-dind",
-		"docker:27-dind@sha256:aa3df78ecf320f5fafdce71c659f1629e96e9de0968305fe1de670e0ca9176ce",
+		"docker:29-dind",
+		"docker:29-dind@sha256:3f3c01aaaebf7cce837356b688b7c059a4749f10bd7660dec7c58fc454a283f0",
 	}
 	for _, ref := range ok {
 		if err := compute.AllowImagePull(ref); err != nil {
@@ -47,7 +50,7 @@ func TestAllowImagePullExtraAllowlistRequiresDigest(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "digest") {
 		t.Fatalf("expected digest requirement, got %v", err)
 	}
-	if err := compute.AllowImagePull("ghcr.io/kyaxris-labs/tool@sha256:"+strings.Repeat("a", 64)); err != nil {
+	if err := compute.AllowImagePull("ghcr.io/kyaxris-labs/tool@sha256:" + strings.Repeat("a", 64)); err != nil {
 		t.Fatal(err)
 	}
 }

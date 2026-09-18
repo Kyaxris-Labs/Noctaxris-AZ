@@ -111,19 +111,6 @@ func TestHealthReadyVersionMiddleware(t *testing.T) {
 		t.Fatal(res.Header.Get(requestIDHeader))
 	}
 
-	s.mux.HandleFunc("GET /blob/{account}/{container}/{blob}", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
-	sasReq, _ := http.NewRequest(http.MethodGet, hs.URL+"/blob/a/c/b?sig=x&se=1", nil)
-	sasRes, err := http.DefaultClient.Do(sasReq)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sasRes.Body.Close()
-	if sasRes.StatusCode != http.StatusOK {
-		t.Fatalf("sas %d", sasRes.StatusCode)
-	}
-
 	if s.Authz() == nil {
 		t.Fatal("authz")
 	}
@@ -178,7 +165,7 @@ func TestNewRegistersMux(t *testing.T) {
 	srv := New(config.Config{
 		ListenAddr: "127.0.0.1:0", AMQPListenAddr: "127.0.0.1:0",
 		RootClientID: "root", RootAccessToken: "tok",
-		TenantID: "00000000-0000-0000-0000-000000000001",
+		TenantID:       "00000000-0000-0000-0000-000000000001",
 		SubscriptionID: "00000000-0000-0000-0000-000000000001",
 	}, st, aud)
 	hs := httptest.NewServer(srv.Handler())
@@ -255,6 +242,18 @@ func TestSmokeCoreARMPaths(t *testing.T) {
 		`{"location":"eastus"}`, "rg-ci")
 	do(http.MethodPut, "/subscriptions/"+sub+"/resourcegroups/rg-ci/providers/Microsoft.Storage/storageAccounts/stci?api-version=2023-01-01",
 		`{"location":"eastus","kind":"StorageV2","sku":{"name":"Standard_LRS"}}`, "stci")
+	sasReq, err := http.NewRequest(http.MethodPut, hs.URL+"/blob/stci/c1/b?sig=x&se=1", strings.NewReader("nope"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sasRes, err := http.DefaultClient.Do(sasReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sasRes.Body.Close()
+	if sasRes.StatusCode != http.StatusForbidden {
+		t.Fatalf("unsigned SAS %d", sasRes.StatusCode)
+	}
 	do(http.MethodPut, "/subscriptions/"+sub+"/resourcegroups/rg-ci/providers/Microsoft.KeyVault/vaults/kv-ci?api-version=2022-07-01",
 		`{"location":"eastus","properties":{}}`, "kv-ci")
 	do(http.MethodPut, "/keyvault/kv-ci/secrets/demo", `{"value":"smoke-core"}`, "demo")

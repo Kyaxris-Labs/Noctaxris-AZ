@@ -24,7 +24,7 @@ export NOCTAXRIS_AZ_SUBSCRIPTION_ID="${NOCTAXRIS_AZ_SUBSCRIPTION_ID:-00000000-00
 
 | Suite | Tools |
 |-------|--------|
-| SDK (Go) | Go 1.22+ (module under `tests/sdk/go`). Lab clock/BulkSeed rows skip unless `NOCTAXRIS_AZ_LAB_FORENSICS=1`. `az cloud register --help` / `Add-AzEnvironment` / `Add-MgEnvironment` help skip when `az` or `pwsh` (Az.Accounts / Microsoft.Graph.Authentication) is missing. |
+| SDK (Go) | Go 1.27+ (module under `tests/sdk/go`). Lab clock/BulkSeed rows skip unless `NOCTAXRIS_AZ_LAB_FORENSICS=1`. `az cloud register --help` / `Add-AzEnvironment` / `Add-MgEnvironment` help skip when `az` or `pwsh` (Az.Accounts / Microsoft.Graph.Authentication) is missing. |
 | SDK (Node.js) | Node.js 24+; `npm install` under `tests/sdk/nodejs` |
 | SDK (Python) | Python 3.10+; `pip install -r requirements.txt` under `tests/sdk/python` |
 | Terraform | Terraform CLI when stacks exist under `tests/terraform/` |
