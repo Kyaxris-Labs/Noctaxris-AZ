@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Conditional Access: Graph POST/GET `/identity/conditionalAccess/policies`. Enabled policies run at token mint (`includeApplications` vs `client_id`, exclude wins, User-Agent include / non-enum `clientAppTypes` prefix). Deny is OAuth `invalid_grant` with `AADSTS53003` and `BlockedByConditionalAccess`. Disabled policies are skipped.
+- App Configuration snapshots copy the live KV set (labels included). Later KV writes do not change snapshot reads. List snapshots. Read with `?label=` or `GET /kv?snapshot=`.
+- Key Vault certificates: GET certificate stays public `cer`. Exportable policy publishes PKCS#8 PEM as the same-name secret. GET secret without exportable is denied.
+- Workload identity federation: `claimsMatchingExpression` `{value, languageVersion}` with `eq`, `matches` (`*` / `?`), and `and`. Exact `subject` still matches when the expression is empty.
+- Graph `addPassword`, `addKey`, and `owners/$ref` succeed for application owners and Application Administrator (template `9b895d92-2cd3-44c7-9d02-a6ac2d5ea5c3`). Other principals are denied. Root Bearer still provisions. Audience check is unchanged.
 - Toolchain: Go 1.27.1. Digest-pinned `golang:1.27.1-bookworm`, `docker:29-dind`, `busybox:1.37`, and distroless `static-debian12:nonroot`. CI govulncheck `v1.8.0`. Go modules refreshed. Nested Engine stays `github.com/moby/moby/client`. Lab alpine pin is `alpine:3.23` (`alpine:3.20` and `docker:27-dind` remain allowlisted).
 - Management group descendants load `{id}` and that group's `tenant_id`. Unknown or foreign-tenant ids return 404 and do not list every subscription. Direct child groups are included; same-tenant subscriptions appear under the tenant-root group only.
 - Activity Log list (`GET .../eventtypes/management/values`) returns events for the subscription in the path (`resourceId` prefix), not every row stamped with that id. `POST /loganalytics/{workspace}/ingest/{table}` is off unless `NOCTAXRIS_AZ_LOGS_INJECT=1` and the caller is Bearer root (same gate as `POST /_noctaxris-az/lab/logs:inject`).

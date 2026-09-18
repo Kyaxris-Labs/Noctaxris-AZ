@@ -115,7 +115,7 @@ Open the service matrix for detailed actions and gaps. Full notes and CLI smoke:
     <tr>
       <td rowspan="4" align="center" valign="middle">Identity</td>
       <td>Microsoft Entra ID</td>
-      <td>OIDC/JWKS; v1/v2 token on tenant/<code>common</code>/<code>organizations</code>; Graph directory lists; device code lite; WIF vs private_key_jwt; AAD Graph/SOAP.</td>
+      <td>OIDC/JWKS; v1/v2 token on tenant/<code>common</code>/<code>organizations</code>; Graph directory lists; device code lite; WIF vs private_key_jwt with FIC <code>claimsMatchingExpression</code>; Conditional Access at token mint (<code>AADSTS53003</code>); Graph <code>addPassword</code> / <code>addKey</code> / owners gated by owner or Application Administrator; AAD Graph/SOAP.</td>
       <td>Microsoft-signed JWTs; authorization code; On-Behalf-Of.</td>
     </tr>
     <tr>
@@ -136,7 +136,7 @@ Open the service matrix for detailed actions and gaps. Full notes and CLI smoke:
     <tr>
       <td align="center" valign="middle">Crypto</td>
       <td>Key Vault</td>
-      <td>Vault ARM; secrets/keys; certificates lite; soft-delete theatre.</td>
+      <td>Vault ARM; secrets/keys; certificates (public <code>cer</code>; exportable PKCS#8 as the same-name secret); soft-delete theatre.</td>
       <td>Managed HSM; retention timers.</td>
     </tr>
     <tr>
@@ -205,7 +205,7 @@ Open the service matrix for detailed actions and gaps. Full notes and CLI smoke:
     <tr>
       <td rowspan="4" align="center" valign="middle">App</td>
       <td>App Configuration</td>
-      <td>KV + feature flags + snapshots lite.</td>
+      <td>KV + feature flags; snapshots copy the live KV set (later writes do not change snapshot reads).</td>
       <td>Geo-replication; Sync-Token depth.</td>
     </tr>
     <tr>

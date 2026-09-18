@@ -4,11 +4,11 @@ Implemented lab surface on `127.0.0.1:4599` (HTTP) and `127.0.0.1:5672` (AMQP li
 
 | Service | Status | Doc | Protocol |
 |---------|--------|-----|----------|
-| Microsoft Entra ID | lab | [entra.md](entra.md) | OIDC/JWKS; v1/v2 token on tenant/`common`/`organizations`; Graph directory lists; device code lite; WIF vs private_key_jwt |
+| Microsoft Entra ID | lab | [entra.md](entra.md) | OIDC/JWKS; v1/v2 token on tenant/`common`/`organizations`; Graph directory lists; device code lite; WIF vs private_key_jwt with FIC `claimsMatchingExpression`; Conditional Access at token mint (`AADSTS53003`); Graph `addPassword` / `addKey` / owners gated by owner or Application Administrator |
 | Managed Identity | lab | [managedidentity.md](managedidentity.md) | User + system-assigned ARM; IMDS theatre |
 | Subscriptions / resource groups | lab | [subscriptions.md](subscriptions.md) | ARM list/get subscriptions, tenants, MGs, ARG, subscription-scope LISTs |
 | Authorization (RBAC) | lab | [authorization.md](authorization.md) | Role assignments CRUD + list-by-scope |
-| Key Vault | lab | [keyvault.md](keyvault.md) | Secrets/keys/certificates + soft-delete theatre |
+| Key Vault | lab | [keyvault.md](keyvault.md) | Secrets/keys/certificates (exportable PKCS#8 as same-name secret) + soft-delete theatre |
 | Storage | lab | [storage.md](storage.md) | Blob + queue Shared Key HMAC / SAS HMAC |
 | Table Storage | lab | [table.md](table.md) | Entity CRUD + OData lite |
 | Cosmos DB | lab | [cosmos.md](cosmos.md) | NoSQL in-process point read/query; change-feed empty 200 |
@@ -24,7 +24,7 @@ Implemented lab surface on `127.0.0.1:4599` (HTTP) and `127.0.0.1:5672` (AMQP li
 | Virtual Machines | lab | [virtualmachines.md](virtualmachines.md) | Lifecycle theatre |
 | AKS | lab | [aks.md](aks.md) | Cluster + kubeconfig theatre |
 | DNS / LB / App Gateway | lab | [dns.md](dns.md) / [loadbalancer.md](loadbalancer.md) / [appgateway.md](appgateway.md) | ARM lite |
-| App Configuration | lab | [appconfig.md](appconfig.md) | KV + feature flags + snapshots |
+| App Configuration | lab | [appconfig.md](appconfig.md) | KV + feature flags + captured-KV snapshots |
 | Azure Functions | lab | [functions.md](functions.md) | ARM + mock invoke |
 | App Service / Container Apps / Logic / APIM | lab | [appservice.md](appservice.md) / [containerapps.md](containerapps.md) / [logic.md](logic.md) / [apim.md](apim.md) | Control-plane lite |
 | Front Door / Email / OpenAI / SignalR | lab | [frontdoor.md](frontdoor.md) / [email.md](email.md) / [openai.md](openai.md) / [signalr.md](signalr.md) | Edge/AI theatre |
