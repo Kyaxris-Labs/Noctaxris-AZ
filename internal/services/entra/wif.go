@@ -34,22 +34,23 @@ func (s *Service) verifyClientAssertion(w http.ResponseWriter, r *http.Request, 
 	}
 
 	if iss == s.labOIDCIssuer() || strings.HasPrefix(iss, s.labOIDCIssuer()) {
-		return s.verifyFederatedAssertion(w, r, clientID, assertion, iss, sub, aud)
+		return s.verifyFederatedAssertion(w, r, clientID, assertion, iss, aud)
 	}
 	return s.verifyPrivateKeyJWT(w, r, clientID, assertion, iss, sub, aud)
 }
 
-func (s *Service) verifyFederatedAssertion(w http.ResponseWriter, r *http.Request, clientID, assertion, iss, sub, aud string) (string, bool) {
+func (s *Service) verifyFederatedAssertion(w http.ResponseWriter, r *http.Request, clientID, assertion, iss, aud string) (string, bool) {
 	_, priv, err := s.ensureOIDCLabKey()
 	if err != nil {
 		azerrors.WriteOAuth(w, http.StatusInternalServerError, "server_error", err.Error())
 		return "", false
 	}
-	if _, err := authn.VerifyRS256JWT(&priv.PublicKey, assertion, s.now()); err != nil {
+	claims, err := authn.VerifyRS256JWT(&priv.PublicKey, assertion, s.now())
+	if err != nil {
 		azerrors.WriteOAuth(w, http.StatusUnauthorized, "invalid_client", "federated assertion signature is invalid")
 		return "", false
 	}
-	fic, ok, err := s.Store.FindFIC(iss, sub, aud)
+	fic, ok, err := s.Store.MatchFIC(iss, aud, claims)
 	if err != nil {
 		azerrors.WriteOAuth(w, http.StatusInternalServerError, "server_error", err.Error())
 		return "", false
@@ -144,6 +145,16 @@ func parseRSAPublicPEM(raw []byte) (*rsa.PublicKey, error) {
 	}
 	if key, err := x509.ParsePKCS1PublicKey(block.Bytes); err == nil {
 		return key, nil
+	}
+	if key, err := x509.ParsePKCS1PrivateKey(block.Bytes); err == nil {
+		return &key.PublicKey, nil
+	}
+	if pk, err := x509.ParsePKCS8PrivateKey(block.Bytes); err == nil {
+		key, ok := pk.(*rsa.PrivateKey)
+		if !ok {
+			return nil, errPEM
+		}
+		return &key.PublicKey, nil
 	}
 	return nil, errPEM
 }

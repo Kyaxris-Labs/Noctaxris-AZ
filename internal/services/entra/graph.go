@@ -52,6 +52,7 @@ func (s *Service) mountGraph(mux *http.ServeMux) {
 		mux.HandleFunc("GET "+p+"/roleManagement/directory/roleEligibilityScheduleInstances", s.handleGraphEmptyList)
 		mux.HandleFunc("GET "+p+"/policies/roleManagementPolicyAssignments", s.handleGraphEmptyList)
 		mux.HandleFunc("GET "+p+"/identity/conditionalAccess/policies", s.handleGraphCAPolicies)
+		mux.HandleFunc("POST "+p+"/identity/conditionalAccess/policies", s.handleCreateCAPolicy)
 		mux.HandleFunc("GET "+p+"/{path...}", s.handleGraphUnknown)
 		mux.HandleFunc("POST "+p+"/{path...}", s.handleGraphUnknownPost)
 	}
@@ -68,6 +69,75 @@ func (s *Service) requireGraph(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	return true
+}
+
+const applicationAdministratorTemplateID = "9b895d92-2cd3-44c7-9d02-a6ac2d5ea5c3"
+const seededApplicationAdministratorRoleID = "99999999-9999-9999-9999-999999999999"
+
+// requireGraphAppWrite allows root, application owners, and Application Administrator.
+func (s *Service) requireGraphAppWrite(w http.ResponseWriter, r *http.Request, resourceID string) bool {
+	if !s.requireGraph(w, r) {
+		return false
+	}
+	p, ok := authn.PrincipalFromContext(r.Context())
+	if !ok {
+		azerrors.WriteGraph(w, http.StatusUnauthorized, "InvalidAuthenticationToken", "Access token is empty or invalid.")
+		return false
+	}
+	if p.IsRoot {
+		return true
+	}
+	if s.graphAppWriteAllowed(p.ID, resourceID) {
+		return true
+	}
+	azerrors.WriteGraph(w, http.StatusForbidden, "Authorization_RequestDenied", "Insufficient privileges to complete the operation.")
+	return false
+}
+
+func (s *Service) graphAppWriteAllowed(principalID, resourceID string) bool {
+	if principalID == "" || resourceID == "" {
+		return false
+	}
+	owners, err := s.Store.ListOwners(resourceID)
+	if err == nil {
+		for _, owner := range owners {
+			if owner == principalID {
+				return true
+			}
+		}
+	}
+	if sp, ok, err := s.Store.GetServicePrincipal(principalID); err == nil && ok {
+		for _, owner := range owners {
+			if owner == sp.ID || owner == sp.AppID {
+				return true
+			}
+		}
+	}
+	return s.isApplicationAdministrator(principalID)
+}
+
+func (s *Service) isApplicationAdministrator(principalID string) bool {
+	roles, err := s.Store.ListDirectoryRoles(s.appTenant())
+	if err != nil {
+		return false
+	}
+	for _, role := range roles {
+		if role.TemplateID != applicationAdministratorTemplateID &&
+			role.ID != seededApplicationAdministratorRoleID &&
+			!strings.EqualFold(role.DisplayName, "Application Administrator") {
+			continue
+		}
+		members, err := s.Store.ListDirectoryRoleMembers(role.ID)
+		if err != nil {
+			continue
+		}
+		for _, id := range members {
+			if id == principalID {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (s *Service) handleGraphEmptyList(w http.ResponseWriter, r *http.Request) {

@@ -55,6 +55,11 @@ func (s *Service) handleLabJWKS(w http.ResponseWriter, r *http.Request) {
 
 // MintLabOIDCAssertion issues a JWT from the lab OIDC issuer for WIF tests.
 func (s *Service) MintLabOIDCAssertion(subject, audience string) (string, error) {
+	return s.MintLabOIDCAssertionClaims(subject, audience, nil)
+}
+
+// MintLabOIDCAssertionClaims issues a lab OIDC JWT and merges extra claims (sub/iss/aud stay as given).
+func (s *Service) MintLabOIDCAssertionClaims(subject, audience string, extra map[string]any) (string, error) {
 	kid, priv, err := s.ensureOIDCLabKey()
 	if err != nil {
 		return "", err
@@ -70,6 +75,12 @@ func (s *Service) MintLabOIDCAssertion(subject, audience string) (string, error)
 		"iat": now.Unix(),
 		"nbf": now.Unix(),
 		"exp": now.Add(10 * time.Minute).Unix(),
+	}
+	for k, v := range extra {
+		if k == "iss" || k == "sub" || k == "aud" {
+			continue
+		}
+		claims[k] = v
 	}
 	return authn.EncodeRS256JWT(priv, kid, claims)
 }

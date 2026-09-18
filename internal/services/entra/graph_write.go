@@ -100,6 +100,9 @@ func (s *Service) handleAddOwner(w http.ResponseWriter, r *http.Request) {
 		azerrors.WriteGraph(w, http.StatusNotFound, "Request_ResourceNotFound", "Resource not found")
 		return
 	}
+	if !s.requireGraphAppWrite(w, r, resourceID) {
+		return
+	}
 	if err := s.Store.AddOwner(resourceID, ownerID, "user"); err != nil {
 		azerrors.WriteGraph(w, http.StatusInternalServerError, "InternalServerError", err.Error())
 		return
@@ -179,6 +182,9 @@ func (s *Service) handleAddPassword(w http.ResponseWriter, r *http.Request) {
 	resourceID, resourceType := s.passwordTarget(r)
 	if resourceID == "" {
 		azerrors.WriteGraph(w, http.StatusNotFound, "Request_ResourceNotFound", "application not found")
+		return
+	}
+	if !s.requireGraphAppWrite(w, r, resourceID) {
 		return
 	}
 	secret := store.RandomToken(20)
@@ -309,6 +315,9 @@ func (s *Service) handleAddKey(w http.ResponseWriter, r *http.Request) {
 		azerrors.WriteGraph(w, http.StatusNotFound, "Request_ResourceNotFound", "application not found")
 		return
 	}
+	if !s.requireGraphAppWrite(w, r, resourceID) {
+		return
+	}
 	n, err := s.Store.CountKeyCredentials(resourceID)
 	if err != nil {
 		azerrors.WriteGraph(w, http.StatusInternalServerError, "InternalServerError", err.Error())
@@ -395,9 +404,7 @@ func (s *Service) handleListFIC(w http.ResponseWriter, r *http.Request) {
 	}
 	items := make([]map[string]any, 0, len(list))
 	for _, f := range list {
-		items = append(items, map[string]any{
-			"id": f.ID, "name": f.Name, "issuer": f.Issuer, "subject": f.Subject, "audiences": f.Audiences,
-		})
+		items = append(items, ficJSON(f))
 	}
 	s.writeOData(w, r, items)
 }
@@ -407,11 +414,11 @@ func (s *Service) handleCreateFIC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Name                     string   `json:"name"`
-		Issuer                   string   `json:"issuer"`
-		Subject                  string   `json:"subject"`
-		Audiences                []string `json:"audiences"`
-		ClaimsMatchingExpression string   `json:"claimsMatchingExpression"`
+		Name                     string          `json:"name"`
+		Issuer                   string          `json:"issuer"`
+		Subject                  string          `json:"subject"`
+		Audiences                []string        `json:"audiences"`
+		ClaimsMatchingExpression json.RawMessage `json:"claimsMatchingExpression"`
 	}
 	_ = json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body)
 	obj, _, _, ok, _ := s.Store.ResolveEntraApp(s.appTenant(), r.PathValue("appId"))
@@ -419,18 +426,56 @@ func (s *Service) handleCreateFIC(w http.ResponseWriter, r *http.Request) {
 		azerrors.WriteGraph(w, http.StatusNotFound, "Request_ResourceNotFound", "application not found")
 		return
 	}
-	if body.Issuer == "" || body.Subject == "" {
-		azerrors.WriteGraph(w, http.StatusBadRequest, "BadRequest", "issuer and subject are required")
+	expr := encodeFICExpression(body.ClaimsMatchingExpression)
+	if body.Issuer == "" || (body.Subject == "" && expr == "") {
+		azerrors.WriteGraph(w, http.StatusBadRequest, "BadRequest", "issuer and subject are required unless claimsMatchingExpression is set")
 		return
 	}
-	f, err := s.Store.CreateFIC(obj, body.Name, body.Issuer, body.Subject, body.Audiences, body.ClaimsMatchingExpression)
+	f, err := s.Store.CreateFIC(obj, body.Name, body.Issuer, body.Subject, body.Audiences, expr)
 	if err != nil {
 		azerrors.WriteGraph(w, http.StatusInternalServerError, "InternalServerError", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{
+	writeJSON(w, http.StatusCreated, ficJSON(f))
+}
+
+func encodeFICExpression(raw json.RawMessage) string {
+	if len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var obj struct {
+		Value           string `json:"value"`
+		LanguageVersion int    `json:"languageVersion"`
+	}
+	if err := json.Unmarshal(raw, &obj); err == nil && strings.TrimSpace(obj.Value) != "" {
+		if obj.LanguageVersion == 0 {
+			obj.LanguageVersion = 1
+		}
+		b, _ := json.Marshal(obj)
+		return string(b)
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil && strings.TrimSpace(s) != "" {
+		b, _ := json.Marshal(map[string]any{"value": s, "languageVersion": 1})
+		return string(b)
+	}
+	return ""
+}
+
+func ficJSON(f store.FederatedIdentityCredential) map[string]any {
+	out := map[string]any{
 		"id": f.ID, "name": f.Name, "issuer": f.Issuer, "subject": f.Subject, "audiences": f.Audiences,
-	})
+	}
+	if strings.TrimSpace(f.ClaimsMatchingExpression) == "" {
+		return out
+	}
+	var expr any
+	if json.Unmarshal([]byte(f.ClaimsMatchingExpression), &expr) == nil {
+		out["claimsMatchingExpression"] = expr
+	} else {
+		out["claimsMatchingExpression"] = map[string]any{"value": f.ClaimsMatchingExpression, "languageVersion": 1}
+	}
+	return out
 }
 
 func (s *Service) refreshDynamicGroups() {

@@ -59,6 +59,14 @@ func (s *Service) tokenAudience(r *http.Request) string {
 }
 
 func (s *Service) writeToken(w http.ResponseWriter, r *http.Request, principalID, audience string, withRefresh bool) {
+	clientID := strings.TrimSpace(r.Form.Get("client_id"))
+	if clientID == "" {
+		clientID = principalID
+	}
+	if s.conditionalAccessBlocked(r, clientID) {
+		s.writeConditionalAccessDenied(w)
+		return
+	}
 	token, expiresIn, err := s.MintAccessToken(principalID, audience)
 	if err != nil {
 		azerrors.WriteOAuth(w, http.StatusInternalServerError, "server_error", err.Error())

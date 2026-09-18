@@ -429,6 +429,12 @@ func (s *Store) CreateFIC(appObjectID, name, issuer, subject string, audiences [
 }
 
 func (s *Store) FindFIC(issuer, subject, audience string) (FederatedIdentityCredential, bool, error) {
+	return s.MatchFIC(issuer, audience, map[string]any{"sub": subject})
+}
+
+// MatchFIC finds a federated credential by issuer, audience, and either exact subject or claimsMatchingExpression.
+func (s *Store) MatchFIC(issuer, audience string, claims map[string]any) (FederatedIdentityCredential, bool, error) {
+	sub := claimString(claims, "sub")
 	rows, err := s.db.Query(`SELECT id, app_object_id, name, issuer, subject, audiences_json, claims_matching_expression FROM entra_fics`)
 	if err != nil {
 		return FederatedIdentityCredential{}, false, err
@@ -441,19 +447,56 @@ func (s *Store) FindFIC(issuer, subject, audience string) (FederatedIdentityCred
 			return FederatedIdentityCredential{}, false, err
 		}
 		_ = json.Unmarshal([]byte(aud), &f.Audiences)
-		if f.Issuer != issuer || f.Subject != subject {
+		if f.Issuer != issuer {
 			continue
 		}
-		if audience == "" {
-			return f, true, nil
+		if audience != "" && !audienceAllowed(f.Audiences, audience) {
+			continue
 		}
-		for _, a := range f.Audiences {
-			if a == audience {
+		expr := ficExpressionValue(f.ClaimsMatchingExpression)
+		if expr != "" {
+			if EvaluateClaimsMatchingExpression(expr, claims) {
 				return f, true, nil
 			}
+			continue
 		}
+		if f.Subject != sub {
+			continue
+		}
+		return f, true, nil
 	}
 	return FederatedIdentityCredential{}, false, rows.Err()
+}
+
+func audienceAllowed(audiences []string, audience string) bool {
+	if audience == "" {
+		return true
+	}
+	for _, a := range audiences {
+		if a == audience {
+			return true
+		}
+	}
+	return false
+}
+
+// UpsertCAPolicy inserts or replaces a Conditional Access policy. Empty id allocates a UUID.
+func (s *Store) UpsertCAPolicy(id, displayName, bodyJSON string, enabled bool) (string, error) {
+	if id == "" {
+		id = uuid.NewString()
+	}
+	if bodyJSON == "" {
+		bodyJSON = "{}"
+	}
+	en := 0
+	if enabled {
+		en = 1
+	}
+	_, err := s.db.Exec(`
+INSERT INTO entra_ca_policies (id, display_name, body_json, enabled) VALUES (?,?,?,?)
+ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name, body_json=excluded.body_json, enabled=excluded.enabled`,
+		id, displayName, bodyJSON, en)
+	return id, err
 }
 
 func (s *Store) AddPassword(resourceID, resourceType, displayName, secretHash, hint string) (string, error) {
