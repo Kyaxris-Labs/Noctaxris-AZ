@@ -129,5 +129,36 @@ func (h *Handler) getSnapshot(w http.ResponseWriter, r *http.Request, p authn.Pr
 		azerrors.NotFound(w, "snapshot not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"name": name, "status": status, "createdAt": created})
+	rows, err := h.Store.ListAppConfigSnapshotKV(storeName, name, r.URL.Query().Get("label"))
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"name": name, "status": status, "createdAt": created, "items": snapshotItems(rows),
+	})
+}
+
+func (h *Handler) listSnapshots(w http.ResponseWriter, r *http.Request, p authn.Principal) {
+	storeName := r.PathValue("store")
+	st, ok, err := h.Store.GetAppConfigByName(storeName)
+	if err != nil || !ok {
+		azerrors.NotFound(w, "configuration store not found")
+		return
+	}
+	scope := storeResourceID(st.SubscriptionID, st.ResourceGroup, st.Name)
+	if err := h.requireAction(p, "Microsoft.AppConfiguration/configurationStores/keyValues/read", scope); err != nil {
+		writeAuthz(w, err)
+		return
+	}
+	rows, err := h.Store.ListAppConfigSnapshots(storeName)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+		return
+	}
+	items := make([]any, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, map[string]any{"name": row.Name, "status": row.Status, "createdAt": row.CreatedAt})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }

@@ -475,17 +475,47 @@ SELECT name, enabled, conditions_json FROM appconfig_feature_flags WHERE store =
 	return out, rows.Err()
 }
 
-// UpsertAppConfigSnapshot stores a snapshot theatre row.
+// AppConfigSnapshot is a captured KV snapshot row.
+type AppConfigSnapshot struct {
+	Store     string
+	Name      string
+	Status    string
+	CreatedAt string
+}
+
+// UpsertAppConfigSnapshot creates a snapshot and copies the current KV set (including labels).
+// A later PUT on an existing name updates status only; captured KV stays frozen.
 func (s *Store) UpsertAppConfigSnapshot(storeName, name, status string) error {
 	if status == "" {
 		status = "ready"
 	}
-	_, err := s.db.Exec(`
+	_, _, exists, err := s.GetAppConfigSnapshot(storeName, name)
+	if err != nil {
+		return err
+	}
+	if exists {
+		_, err := s.db.Exec(`UPDATE appconfig_snapshots SET status = ? WHERE store = ? AND name = ?`,
+			status, storeName, name)
+		return err
+	}
+	if _, err := s.db.Exec(`
 INSERT INTO appconfig_snapshots (store, name, status, created_at)
-VALUES (?, ?, ?, ?)
-ON CONFLICT(store, name) DO UPDATE SET status=excluded.status`,
-		storeName, name, status, time.Now().UTC().Format(time.RFC3339))
-	return err
+VALUES (?, ?, ?, ?)`,
+		storeName, name, status, time.Now().UTC().Format(time.RFC3339)); err != nil {
+		return err
+	}
+	kvs, err := s.ListAppConfigKV(storeName, "")
+	if err != nil {
+		return err
+	}
+	for _, kv := range kvs {
+		if _, err := s.db.Exec(`
+INSERT INTO appconfig_snapshot_kvs (store, snapshot, key, label, value) VALUES (?, ?, ?, ?, ?)`,
+			storeName, name, kv.Key, kv.Label, kv.Value); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // GetAppConfigSnapshot loads a snapshot.
@@ -500,6 +530,53 @@ SELECT status, created_at FROM appconfig_snapshots WHERE store = ? AND name = ?`
 		return "", "", false, err
 	}
 	return status, createdAt, true, nil
+}
+
+// ListAppConfigSnapshots lists snapshots for a store.
+func (s *Store) ListAppConfigSnapshots(storeName string) ([]AppConfigSnapshot, error) {
+	rows, err := s.db.Query(`
+SELECT store, name, status, created_at FROM appconfig_snapshots WHERE store = ? ORDER BY name`, storeName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AppConfigSnapshot
+	for rows.Next() {
+		var row AppConfigSnapshot
+		if err := rows.Scan(&row.Store, &row.Name, &row.Status, &row.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	if out == nil {
+		out = []AppConfigSnapshot{}
+	}
+	return out, rows.Err()
+}
+
+// ListAppConfigSnapshotKV returns captured key-values. Empty labelFilter returns all labels.
+func (s *Store) ListAppConfigSnapshotKV(storeName, snapshot, labelFilter string) ([]AppConfigKV, error) {
+	rows, err := s.db.Query(`
+SELECT store, key, label, value FROM appconfig_snapshot_kvs
+WHERE store = ? AND snapshot = ? AND (? = '' OR label = ?)
+ORDER BY key, label`,
+		storeName, snapshot, labelFilter, labelFilter)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AppConfigKV
+	for rows.Next() {
+		var row AppConfigKV
+		if err := rows.Scan(&row.Store, &row.Key, &row.Label, &row.Value); err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	if out == nil {
+		out = []AppConfigKV{}
+	}
+	return out, rows.Err()
 }
 
 // IngestLogAnalyticsRow stores a Log Analytics row.

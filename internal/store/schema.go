@@ -253,6 +253,15 @@ CREATE TABLE IF NOT EXISTS appconfig_snapshots (
   PRIMARY KEY (store, name)
 );
 
+CREATE TABLE IF NOT EXISTS appconfig_snapshot_kvs (
+  store TEXT NOT NULL,
+  snapshot TEXT NOT NULL,
+  key TEXT NOT NULL,
+  label TEXT NOT NULL DEFAULT '',
+  value TEXT NOT NULL,
+  PRIMARY KEY (store, snapshot, key, label)
+);
+
 CREATE TABLE IF NOT EXISTS servicebus_topics (
   namespace TEXT NOT NULL,
   name TEXT NOT NULL,

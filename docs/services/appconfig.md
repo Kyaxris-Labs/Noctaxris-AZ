@@ -4,7 +4,7 @@ ARM configuration store CRUD plus data-plane key-values under `/appconfig/{store
 
 ## Status
 
-**lab** — Store create/get/list/delete; key-value GET/PUT/list.
+**lab.** Store create/get/list/delete; key-value GET/PUT/list; feature flags; snapshots that freeze the current KV set.
 
 ## Wire protocol
 
@@ -13,9 +13,11 @@ ARM configuration store CRUD plus data-plane key-values under `/appconfig/{store
 | `PUT`/`GET`/`DELETE` | `/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.AppConfiguration/configurationStores/{name}` |
 | `GET` | `.../configurationStores` (list by RG) |
 | `PUT`/`GET` | `/appconfig/{store}/kv/{key}` |
-| `GET` | `/appconfig/{store}/kv` (`?key=` optional filter) |
+| `GET` | `/appconfig/{store}/kv` (`?key=` optional filter; `?snapshot=` reads a captured set) |
+| `PUT`/`GET` | `/appconfig/{store}/snapshots/{name}` |
+| `GET` | `/appconfig/{store}/snapshots` |
 
-Optional `?label=` on KV get/put. Response fields: `key`, `label`, `value`, `etag`, `locked`.
+Optional `?label=` on KV get/put and on snapshot read. Response fields: `key`, `label`, `value`, `etag`, `locked`. Snapshot GET also returns `items` (the captured rows) plus `status` and `createdAt`.
 
 ## Authz
 
@@ -29,11 +31,12 @@ Optional `?label=` on KV get/put. Response fields: `key`, `label`, `value`, `eta
 - Set and get key-values (label defaults empty)
 - List key-values for a store
 - Delete store removes KV rows
+- PUT snapshot copies every current key-value, including labels. Later live PUTs do not change that snapshot. List snapshots. Read by name (`?label=` filters the captured set) or `GET /kv?snapshot=`
 
 ## Not implemented
 
 - Feature flags / FeatureManagement schema depth
-- Snapshots, revisions, geo-replication
+- Revisions, geo-replication
 - Customer-managed keys
 - Private link
 
@@ -45,7 +48,6 @@ Optional `?label=` on KV get/put. Response fields: `key`, `label`, `value`, `eta
 ## Deferred depth
 
 - Push notifications / Event Grid
-- Configuration snapshots
 
 ## Verification / CLI smoke
 
@@ -59,4 +61,9 @@ curl -s -H "Authorization: Bearer $TOKEN" -X PUT -H "Content-Type: application/j
 curl -s -H "Authorization: Bearer $TOKEN" -X PUT -H "Content-Type: application/json" \
   -d '{"value":"v1"}' "http://127.0.0.1:4599/appconfig/cfg1/kv/my.key"
 curl -s -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:4599/appconfig/cfg1/kv/my.key"
+curl -s -H "Authorization: Bearer $TOKEN" -X PUT -H "Content-Type: application/json" \
+  -d '{}' "http://127.0.0.1:4599/appconfig/cfg1/snapshots/freeze1"
+curl -s -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:4599/appconfig/cfg1/snapshots"
+curl -s -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:4599/appconfig/cfg1/snapshots/freeze1"
+curl -s -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:4599/appconfig/cfg1/kv?snapshot=freeze1"
 ```

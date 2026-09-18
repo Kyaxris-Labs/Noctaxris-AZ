@@ -39,6 +39,7 @@ func (h *Handler) Mount(mux *http.ServeMux, principalFrom principalFunc) {
 	mux.HandleFunc("GET /appconfig/{store}/featureflags", h.wrap(principalFrom, h.listFeatureFlags))
 	mux.HandleFunc("PUT /appconfig/{store}/snapshots/{name}", h.wrap(principalFrom, h.putSnapshot))
 	mux.HandleFunc("GET /appconfig/{store}/snapshots/{name}", h.wrap(principalFrom, h.getSnapshot))
+	mux.HandleFunc("GET /appconfig/{store}/snapshots", h.wrap(principalFrom, h.listSnapshots))
 }
 
 type handlerFunc func(w http.ResponseWriter, r *http.Request, p authn.Principal)
@@ -275,6 +276,22 @@ func (h *Handler) listKV(w http.ResponseWriter, r *http.Request, p authn.Princip
 		writeAuthz(w, err)
 		return
 	}
+	if snap := strings.TrimSpace(r.URL.Query().Get("snapshot")); snap != "" {
+		if _, _, ok, err := h.Store.GetAppConfigSnapshot(storeName, snap); err != nil {
+			azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+			return
+		} else if !ok {
+			azerrors.NotFound(w, "snapshot not found")
+			return
+		}
+		rows, err := h.Store.ListAppConfigSnapshotKV(storeName, snap, r.URL.Query().Get("label"))
+		if err != nil {
+			azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"items": snapshotItems(rows)})
+		return
+	}
 	rows, err := h.Store.ListAppConfigKV(storeName, keyFilter)
 	if err != nil {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
@@ -285,6 +302,14 @@ func (h *Handler) listKV(w http.ResponseWriter, r *http.Request, p authn.Princip
 		items = append(items, kvResource(row.Store, row.Key, row.Label, row.Value))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func snapshotItems(rows []store.AppConfigKV) []any {
+	items := make([]any, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, kvResource(row.Store, row.Key, row.Label, row.Value))
+	}
+	return items
 }
 
 func kvResource(storeName, key, label, value string) map[string]any {
