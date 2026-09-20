@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.1.0
+
+Minor after 1.0.2: Entra Conditional Access, App Configuration snapshots, Key Vault exportable cert PEM, FIC `claimsMatchingExpression`, Graph owner write, ARM/Graph fail-closed fixes, Go 1.27.1. Docker Hub: `kyaxris/noctaxris-az` (`1.1.0`, `1.1`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
+
 - Conditional Access: Graph POST/GET `/identity/conditionalAccess/policies`. Enabled policies run at token mint (`includeApplications` vs `client_id`, exclude wins, User-Agent include / non-enum `clientAppTypes` prefix). Deny is OAuth `invalid_grant` with `AADSTS53003` and `BlockedByConditionalAccess`. Disabled policies are skipped.
 - App Configuration snapshots copy the live KV set (labels included). Later KV writes do not change snapshot reads. List snapshots. Read with `?label=` or `GET /kv?snapshot=`.
 - Key Vault certificates: GET certificate stays public `cer`. Exportable policy publishes PKCS#8 PEM as the same-name secret. GET secret without exportable is denied.
