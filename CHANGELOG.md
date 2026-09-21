@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.2.0
+
+Minor after 1.1.0: Entra group RBAC, extra built-in GUIDs, Container Registry V2, Log Analytics and ARG scoping, Event Hubs capture, Cosmos change-feed, Activity Log page size, Graph and OIDC mint gates. Docker Hub: `kyaxris/noctaxris-az` (`1.2.0`, `1.2`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
+
 - ARM RBAC expands Entra group members (nested groups, depth 8). A user in a group with Reader on a resource group is authorized; a non-member is HTTP 403.
 - Built-in role GUIDs beyond Owner / Contributor / Reader: Log Analytics Reader (including the historical alias GUID), Monitoring Reader, Log Analytics Data Reader, AcrPull, Event Hubs Data Receiver / Data Owner. Reader and Monitoring Reader grant ARM `*/read` and Resource Graph, not workspace KQL. Log Analytics Reader grants `*/read` plus `query/read` and `query/action`. AcrPull maps ARM `registries/read` and `registries/pull/read`, and Registry V2 pull (not push).
 - Container Registry V2 on HTTP `:4599` without DinD. Blobs and manifests are SQLite. Missing Bearer returns 401 `WWW-Authenticate` Bearer `realm=...` `service=containerregistry.azure.net`. Root can push and pull. Reader and AcrPull pull only. Contributor/Owner can push. `GET /oauth2/token` mints a lab JWT that `/v2/` accepts. PUT the ARM registry first when you want evaluation at the registry resource id.

@@ -1,6 +1,6 @@
 # Release checklist
 
-How to cut a public Noctaxris-AZ release (example: **1.1.0**). Docker Hub image: **`kyaxris/noctaxris-az`**.
+How to cut a public Noctaxris-AZ release (example: **1.2.0**). Docker Hub image: **`kyaxris/noctaxris-az`**.
 
 ## Secrets (GitHub Actions)
 
@@ -15,8 +15,8 @@ Forks skip publish with a log line. Missing secrets fail closed on schedule and 
 
 ## Before the tag
 
-1. Bump `VERSION` (plain text, e.g. `1.1.0`) and keep `internal/version/version.go` (and Dockerfile `ARG VERSION`) in sync.
-2. Move CHANGELOG notes under `## 1.1.0` (feature-oriented sections; no internal delivery labels).
+1. Bump `VERSION` (plain text, e.g. `1.2.0`) and keep `internal/version/version.go` (and Dockerfile `ARG VERSION`) in sync.
+2. Move CHANGELOG notes under `## 1.2.0` (feature-oriented sections; no internal delivery labels).
 3. Confirm PR CI is green (`unit`, `image`, `govulncheck`). Run nested Compose when the release touches DinD / engine overlays.
 4. Confirm docs still describe loopback defaults and opt-in nested compute only.
 
@@ -24,21 +24,21 @@ Forks skip publish with a log line. Missing secrets fail closed on schedule and 
 
 ```bash
 # On the commit you intend to ship (main tip after merge):
-git tag -a v1.1.0 -m "Release Noctaxris-AZ 1.1.0"
-git push origin v1.1.0
+git tag -a v1.2.0 -m "Release Noctaxris-AZ 1.2.0"
+git push origin v1.2.0
 ```
 
 Pushing tag `v*` runs [`.github/workflows/release.yml`](../.github/workflows/release.yml). That workflow first runs the required CI gates ([`.github/workflows/ci-required.yml`](../.github/workflows/ci-required.yml): unit, compose-static, govulncheck, race, image, smoke-core) against the tagged commit. Docker Hub push runs only when those gates succeed. Then it builds `docker/Dockerfile` and pushes:
 
 | Tag | Meaning |
 |-----|---------|
-| `kyaxris/noctaxris-az:1.1.0` | Exact semver |
-| `kyaxris/noctaxris-az:1.1` | Major.minor |
+| `kyaxris/noctaxris-az:1.2.0` | Exact semver |
+| `kyaxris/noctaxris-az:1.2` | Major.minor |
 | `kyaxris/noctaxris-az:1` | Major |
 | `kyaxris/noctaxris-az:latest` | Latest tagged release |
 | `kyaxris/noctaxris-az:sha-<short>` | Git short SHA |
 
-Then create the GitHub Release for `v1.1.0` (UI or `gh release create v1.1.0 --notes-file ...`) using the CHANGELOG `1.1.0` section.
+Then create the GitHub Release for `v1.2.0` (UI or `gh release create v1.2.0 --notes-file ...`) using the CHANGELOG `1.2.0` section.
 
 Optional: Actions → **release** → Run workflow with an existing tag if you need to re-push Hub tags after fixing secrets.
 
@@ -49,10 +49,10 @@ Optional: Actions → **release** → Run workflow with an existing tag if you n
 ## Local image check
 
 ```bash
-docker build -f docker/Dockerfile --build-arg VERSION=1.1.0 -t kyaxris/noctaxris-az:local .
+docker build -f docker/Dockerfile --build-arg VERSION=1.2.0 -t kyaxris/noctaxris-az:local .
 # Run with unique roots (see README); then:
 curl -sS http://127.0.0.1:4599/_noctaxris-az/version
-# 1.1.0
+# 1.2.0
 ```
 
 ## Related
