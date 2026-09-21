@@ -109,6 +109,66 @@ func TestRoleAssignmentPut(t *testing.T) {
 	}
 }
 
+func TestRoleAssignmentDeleteWritesActivityLog(t *testing.T) {
+	st := openStore(t)
+	svc := &authorization.Service{
+		Store:          st,
+		Authz:          &authz.Evaluator{Assignments: st},
+		PrincipalFrom:  authn.PrincipalFromContext,
+		SubscriptionID: config.DefaultSubscriptionID,
+	}
+	mux := http.NewServeMux()
+	svc.Mount(mux)
+	h := withAuth(st, mux)
+
+	sub := config.DefaultSubscriptionID
+	name := "ra-del-1"
+	path := "/subscriptions/" + sub + "/providers/Microsoft.Authorization/roleAssignments/" + name + "?api-version=2022-04-01"
+	body := `{"properties":{"roleDefinitionId":"` + authz.RoleReader + `","principalId":"sp-del"}}`
+	req := httptest.NewRequest(http.MethodPut, path, strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+rootToken)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("put status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	del := httptest.NewRequest(http.MethodDelete, path, nil)
+	del.Header.Set("Authorization", "Bearer "+rootToken)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, del)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	id := "/subscriptions/" + sub + "/providers/Microsoft.Authorization/roleAssignments/" + name
+	if _, ok, err := st.GetRoleAssignment(id); err != nil || ok {
+		t.Fatalf("still stored ok=%v err=%v", ok, err)
+	}
+	rows, err := st.ListActivityLogForSubscription(sub, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, row := range rows {
+		if row["operation"] == "Microsoft.Authorization/roleAssignments/delete" && row["resourceId"] == id {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("missing delete activity: %#v", rows)
+	}
+
+	again := httptest.NewRequest(http.MethodDelete, path, nil)
+	again.Header.Set("Authorization", "Bearer "+rootToken)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, again)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("second delete status=%d", rec.Code)
+	}
+}
+
 func TestRoleAssignmentPutAtResourceGroup(t *testing.T) {
 	st := openStore(t)
 	if err := st.UpsertResourceGroup(config.DefaultSubscriptionID, "rg-lab", "eastus"); err != nil {

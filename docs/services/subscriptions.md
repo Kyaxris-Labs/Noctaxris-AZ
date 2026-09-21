@@ -34,7 +34,7 @@ Query `api-version` is required on these ARM routes.
 
 `GET .../managementGroups/{id}/descendants` loads that group (404 if missing or in another tenant) and returns only its direct children. Subscriptions are listed for the tenant-root group (`parent_id` empty) in the same `tenant_id`. A bogus `{id}` does not dump every subscription.
 
-ARG body: `{"subscriptions":["..."],"query":"..."}`. Tables `Resources` and `SecurityResources` are recognized in the query text. Response fields: `totalRecords`, `count`, `data`, `resultTruncated`.
+ARG `POST /providers/Microsoft.ResourceGraph/resources` evaluates `Microsoft.ResourceGraph/resources/read` at each requested `/subscriptions/{id}` (the lab subscription when the body omits `subscriptions`). Subscription Reader is allowed. A principal with no grant on those subscriptions is HTTP 403. Rows are filtered to authorized subscription ids.
 
 `arm_lab_resources.provider` stores the full ARM type. Subscription-scope LISTs query that value (prefix match `provider = ? OR provider LIKE ? || '/%'`). Unseeded types such as Automation accounts return `"value": []`.
 

@@ -146,3 +146,28 @@ WHERE account = ? AND database_name = ? AND container = ? AND id = ?`,
 	}
 	return out, rows.Err()
 }
+
+// ListCosmosItems returns current item bodies in a container (latest-version change-feed lite).
+func (s *Store) ListCosmosItems(account, database, container string) ([]string, error) {
+	rows, err := s.db.Query(`
+SELECT body_json FROM cosmos_items
+WHERE account = ? AND database_name = ? AND container = ?
+ORDER BY id, partition_key_value`,
+		account, database, container)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var body string
+		if err := rows.Scan(&body); err != nil {
+			return nil, err
+		}
+		out = append(out, body)
+	}
+	if out == nil {
+		out = []string{}
+	}
+	return out, rows.Err()
+}

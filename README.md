@@ -115,7 +115,7 @@ Open the service matrix for detailed actions and gaps. Full notes and CLI smoke:
     <tr>
       <td rowspan="4" align="center" valign="middle">Identity</td>
       <td>Microsoft Entra ID</td>
-      <td>OIDC/JWKS; v1/v2 token on tenant/<code>common</code>/<code>organizations</code>; Graph directory lists; device code lite; WIF vs private_key_jwt with FIC <code>claimsMatchingExpression</code>; Conditional Access at token mint (<code>AADSTS53003</code>); Graph <code>addPassword</code> / <code>addKey</code> / owners gated by owner or Application Administrator; AAD Graph/SOAP.</td>
+      <td>OIDC/JWKS; v1/v2 token on tenant/<code>common</code>/<code>organizations</code>; lab OIDC <code>POST /_noctaxris-az/oidc-lab/token</code>; Graph directory lists and <code>POST /servicePrincipals</code>; device code lite; WIF vs private_key_jwt with FIC bound to <code>client_id</code>; Conditional Access at token mint (<code>AADSTS53003</code>, include-list scoped); <code>client_credentials</code> requires secret or assertion; Graph <code>addPassword</code> / <code>addKey</code> / owners gated by owner or Application Administrator (<code>directoryScopeId</code>); AAD Graph/SOAP.</td>
       <td>Microsoft-signed JWTs; authorization code; On-Behalf-Of.</td>
     </tr>
     <tr>
@@ -130,7 +130,7 @@ Open the service matrix for detailed actions and gaps. Full notes and CLI smoke:
     </tr>
     <tr>
       <td>Authorization</td>
-      <td>Role assignments CRUD + list-by-scope; Owner/Contributor/Reader; root bypass.</td>
+      <td>Role assignments PUT/GET/LIST/DELETE; group member expansion; built-in GUIDs including Reader-like query/ARG plus AcrPull; root bypass.</td>
       <td>Custom roles; deny assignments; PIM.</td>
     </tr>
     <tr>
@@ -147,8 +147,8 @@ Open the service matrix for detailed actions and gaps. Full notes and CLI smoke:
     </tr>
     <tr>
       <td>Cosmos DB</td>
-      <td>Account ARM; in-process NoSQL point read/query lite; change-feed empty 200 list.</td>
-      <td>Multi-API engines; RU/s fidelity; change-feed version store.</td>
+      <td>Account ARM; in-process NoSQL point read/query lite; change-feed returns current documents.</td>
+      <td>Multi-API engines; RU/s fidelity; all-versions change feed.</td>
     </tr>
     <tr>
       <td>Azure SQL</td>
@@ -178,8 +178,8 @@ Open the service matrix for detailed actions and gaps. Full notes and CLI smoke:
     </tr>
     <tr>
       <td>Event Hubs</td>
-      <td>Namespaces/hubs/consumer groups; HTTP message lab (root Bearer); captured-events empty 200 for root.</td>
-      <td>Kafka capture store; Schema Registry.</td>
+      <td>Namespaces/hubs/consumer groups; HTTP send/receive root Bearer; captured-events list/get for root or Reader.</td>
+      <td>Kafka capture to Blob; Schema Registry.</td>
     </tr>
     <tr>
       <td>Event Grid</td>
@@ -226,7 +226,7 @@ Open the service matrix for detailed actions and gaps. Full notes and CLI smoke:
     <tr>
       <td align="center" valign="middle">Observe</td>
       <td>Monitor / Log Analytics</td>
-      <td>Activity Log scoped to the path subscription; metrics theatre; workspace + KQL subset; ingest behind `NOCTAXRIS_AZ_LOGS_INJECT`; diagnostic settings store.</td>
+      <td>Activity Log scoped to the path subscription (`$top` default 1000); metrics theatre; workspace query for Reader; ingest behind `NOCTAXRIS_AZ_LOGS_INJECT`; diagnostic settings store.</td>
       <td>Diagnostic export pipeline; full KQL; alert evaluation; App Insights ingest.</td>
     </tr>
   </tbody>

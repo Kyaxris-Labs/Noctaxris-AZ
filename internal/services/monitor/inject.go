@@ -167,7 +167,7 @@ func (h *Handler) injectLogRows(w http.ResponseWriter, r *http.Request, p authn.
 		azerrors.BadRequest(w, "table must be one of "+strings.Join(store.NamedLogAnalyticsTables, ", "))
 		return
 	}
-	ws := strings.TrimSpace(req.Workspace)
+	ws := workspaceQueryName(req.Workspace)
 	if ws == "" {
 		ws = store.DefaultLogAnalyticsWorkspace
 	}

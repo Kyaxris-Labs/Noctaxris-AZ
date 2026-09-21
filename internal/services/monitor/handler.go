@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
@@ -74,6 +75,25 @@ func (h *Handler) require(p authn.Principal, action, scope string) error {
 
 var errDenied = fmt.Errorf("permission denied")
 
+const (
+	activityLogDefaultTop = 1000
+	activityLogMaxTop     = 10000
+)
+
+func parseActivityLogTop(raw string) int {
+	if strings.TrimSpace(raw) == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return 0
+	}
+	if n > activityLogMaxTop {
+		return activityLogMaxTop
+	}
+	return n
+}
+
 func (h *Handler) now() time.Time {
 	if h != nil && h.Now != nil {
 		return h.Now().UTC()
@@ -102,11 +122,12 @@ func (h *Handler) listActivity(w http.ResponseWriter, r *http.Request, p authn.P
 		writeAuthz(w, err)
 		return
 	}
-	limit := 50
-	if v := r.URL.Query().Get("$top"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			limit = n
-		}
+	limit := parseActivityLogTop(r.URL.Query().Get("$top"))
+	if limit == 0 {
+		limit = parseActivityLogTop(r.URL.Query().Get("top"))
+	}
+	if limit == 0 {
+		limit = activityLogDefaultTop
 	}
 	rows, err := h.Store.ListActivityLogForSubscription(sub, limit)
 	if err != nil {

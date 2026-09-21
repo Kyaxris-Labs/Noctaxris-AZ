@@ -316,10 +316,13 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 	return err
 }
 
+// ActivityLogDefaultLimit is used when callers pass a non-positive $top.
+const ActivityLogDefaultLimit = 1000
+
 // ListActivityLog returns recent activity log rows.
 func (s *Store) ListActivityLog(limit int) ([]map[string]string, error) {
 	if limit <= 0 {
-		limit = 50
+		limit = ActivityLogDefaultLimit
 	}
 	rows, err := s.db.Query(`
 SELECT timestamp, caller, operation, resource_id, status, message, client_ip, identity_json
@@ -350,7 +353,7 @@ func (s *Store) ListActivityLogForSubscription(subscriptionID string, limit int)
 		return []map[string]string{}, nil
 	}
 	if limit <= 0 {
-		limit = 50
+		limit = ActivityLogDefaultLimit
 	}
 	prefix := "/subscriptions/" + subscriptionID
 	rows, err := s.db.Query(`

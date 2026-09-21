@@ -26,7 +26,7 @@ Activity Log list shaped like Microsoft.Insights eventtypes, metrics write/list 
 | `POST` | `/_noctaxris-az/lab/logs:inject` |
 | `POST` | `/_noctaxris-az/lab/securityAssessments:inject` |
 
-Activity Log supports `$top`. List returns events whose `resourceId` is `/subscriptions/{sub}` or a child of that subscription. `subscriptionId` on each event is the path subscription.
+Activity Log supports `$top` (and `top`). Omitted `$top` defaults to 1000 (not 50). Values above 10000 are capped at 10000. List returns events whose `resourceId` is `/subscriptions/{sub}` or a child of that subscription. `subscriptionId` on each event is the path subscription.
 
 Metrics POST body: `{"name","value","resourceId"}`. Metrics GET accepts `metricnames` or `name`.
 
@@ -80,7 +80,7 @@ This is not Azure Monitor KQL. Joins, `ago()`, `summarize`, `extend`, and the re
 - `Microsoft.Insights/eventtypes/values/read`
 - `Microsoft.Insights/metrics/read` and `.../write`
 - `Microsoft.Insights/diagnosticSettings/read`, `.../write`, `.../delete`
-- `Microsoft.OperationalInsights/workspaces/read`, `.../write`, and `.../query/action`
+- `Microsoft.OperationalInsights/workspaces/read`, `.../write`, and `.../query/read` (the lab also treats `query/action` as the same grant). Query is authorized on the workspace ARM id when that workspace exists, otherwise on the lab subscription. Injected rows are queried by the workspace name in the path, not only `default`.
 - Lab inject, clock, BulkSeed, and `POST /loganalytics/{workspace}/ingest/{table}`: env flag plus Bearer root (not RBAC). Ingest is off unless `NOCTAXRIS_AZ_LOGS_INJECT=1`.
 
 ## Detailed actions
@@ -103,7 +103,7 @@ Live mutations already appending Activity Log keep doing so (resource group writ
 
 ## Emulator limits
 
-- Activity Log is SQLite append-only theatre, listed per path subscription (`resourceId` prefix)
+- Activity Log is SQLite append-only theatre, listed per path subscription (`resourceId` prefix). Omitted `$top` is 1000; values above 10000 are capped.
 - Metrics are simple name/value samples
 - Diagnostic settings persist `workspaceId` / `logs` / `metrics` JSON and do not forward
 - Lab clock is process memory

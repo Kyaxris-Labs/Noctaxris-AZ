@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
@@ -27,6 +28,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT "+base+"/{ns}/eventhubs/{hub}/consumergroups/{cg}", h.putCG)
 	mux.HandleFunc("POST /eventhubs/{ns}/hubs/{hub}/messages", h.postMsg)
 	mux.HandleFunc("GET /eventhubs/{ns}/hubs/{hub}/messages", h.getMsg)
+	mux.HandleFunc("GET /eventhubs/{ns}/hubs/{hub}/capturedEvents/{id}", h.getCapturedEvent)
 	mux.HandleFunc("GET /eventhubs/{ns}/hubs/{hub}/capturedEvents", h.capturedEvents)
 }
 
@@ -137,10 +139,94 @@ func (h *Handler) getMsg(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) capturedEvents(w http.ResponseWriter, r *http.Request) {
-	if !h.requireRoot(w, r) {
+	if !h.requireCaptureRead(w, r) {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"value": []any{}})
+	list, err := h.Store.ListEventHubCaptured(r.PathValue("ns"), r.PathValue("hub"))
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	}
+	value := make([]any, 0, len(list))
+	for _, ev := range list {
+		value = append(value, capturedEventJSON(ev))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"value": value})
+}
+
+func (h *Handler) getCapturedEvent(w http.ResponseWriter, r *http.Request) {
+	if !h.requireCaptureRead(w, r) {
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		azerrors.BadRequest(w, "captured event id must be a positive integer")
+		return
+	}
+	ev, ok, err := h.Store.GetEventHubCaptured(r.PathValue("ns"), r.PathValue("hub"), id)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	}
+	if !ok {
+		azerrors.NotFound(w, "captured event not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, capturedEventJSON(ev))
+}
+
+func capturedEventJSON(ev store.EventHubCapturedEvent) map[string]any {
+	return map[string]any{
+		"id":           ev.ID,
+		"partitionId":  ev.PartitionID,
+		"enqueuedTime": ev.InsertedAt,
+		"body":         string(ev.Body),
+	}
+}
+
+func (h *Handler) requireCaptureRead(w http.ResponseWriter, r *http.Request) bool {
+	if h.Auth == nil {
+		azerrors.Unauthenticated(w, "")
+		return false
+	}
+	p, err := h.Auth.AuthenticateRequest(r)
+	if err != nil {
+		azerrors.Unauthenticated(w, "")
+		return false
+	}
+	if p.IsRoot {
+		return true
+	}
+	if h.Authz == nil {
+		azerrors.Forbidden(w, "")
+		return false
+	}
+	ns := r.PathValue("ns")
+	sub, rg, _, ok, err := h.Store.GetEventHubsNamespaceByName(ns)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return false
+	}
+	if !ok {
+		azerrors.Forbidden(w, "")
+		return false
+	}
+	scope := "/subscriptions/" + sub + "/resourceGroups/" + rg
+	for _, action := range []string{
+		"Microsoft.EventHub/namespaces/eventhubs/read",
+		"Microsoft.EventHub/namespaces/eventhubs/receive/action",
+	} {
+		allowed, err := h.Authz.Evaluate(p.ID, p.IsRoot, action, scope)
+		if err != nil {
+			azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+			return false
+		}
+		if allowed {
+			return true
+		}
+	}
+	azerrors.Forbidden(w, "")
+	return false
 }
 
 func (h *Handler) requireRoot(w http.ResponseWriter, r *http.Request) bool {

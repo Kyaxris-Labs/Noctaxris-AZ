@@ -75,6 +75,7 @@ func TestAuthenticateRootTokenAndPublicPaths(t *testing.T) {
 		"/tenant/discovery/v2.0/keys",
 		"/_noctaxris-az/oidc-lab/.well-known/openid-configuration",
 		"/_noctaxris-az/oidc-lab/keys",
+		"/_noctaxris-az/oidc-lab/token",
 	} {
 		if !authn.IsPublicPath(path) {
 			t.Fatalf("expected public %s", path)

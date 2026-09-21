@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- ARM RBAC expands Entra group members (nested groups, depth 8). A user in a group with Reader on a resource group is authorized; a non-member is HTTP 403.
+- Built-in role GUIDs beyond Owner / Contributor / Reader: Log Analytics Reader (including the historical alias GUID), Monitoring Reader, Log Analytics Data Reader, AcrPull, Event Hubs Data Receiver / Data Owner. Reader-like roles grant `*/read`, workspace `query/read` (and `query/action`), and `Microsoft.ResourceGraph/resources`. AcrPull maps ARM registry read/pull only; Registry V2 docker pull is not implemented.
+- Log Analytics query authorizes `Microsoft.OperationalInsights/workspaces/query/read` on the workspace ARM id when that workspace exists. Query keys rows by the workspace name in the path, not only `default`.
+- Azure Resource Graph `POST /providers/Microsoft.ResourceGraph/resources` evaluates `Microsoft.ResourceGraph/resources/read` at each requested `/subscriptions/{id}`. Subscription Reader is allowed.
+- Event Hubs enqueue dual-writes a capture table. `GET /eventhubs/{ns}/hubs/{hub}/capturedEvents` (and `.../{id}`) is readable by root or by Reader / Event Hubs Data Receiver on the namespace resource group. HTTP send/receive stay root Bearer.
+- Cosmos `GET .../changefeed` returns current container documents as `"Documents"` (latest-version lite; no per-write history).
+- Activity Log list `$top` / `top` defaults to 1000 (cap 10000) instead of 50.
+- ARM `DELETE .../roleAssignments/{name}` at subscription and resource group scope. Success returns the deleted assignment and appends Activity Log `Microsoft.Authorization/roleAssignments/delete`.
+- Lab OIDC issuer `POST /_noctaxris-az/oidc-lab/token` signs the same RSA key as jwt-bearer FIC and returns matching `id_token` / `access_token` JWTs (`iss` `/_noctaxris-az/oidc-lab`).
+- Application Administrator Graph writes honor `directoryScopeId` on unified role assignments. `/` (or directory role membership with no scoped assignment) stays tenant-wide. A `/application-object-id` assignment cannot `addPassword` or `addKey` on other apps (403 `Authorization_RequestDenied`). Root Bearer still provisions.
+- `POST /v1.0/servicePrincipals` (and `/beta`) creates a service principal from an existing application's `appId`. Duplicate `appId` is 400 `Request_MultipleObjectsWithSameKeyValue`. GET by `appId` or object id is unchanged.
+- `client_credentials` without `client_secret`, a cert assertion, or a federated jwt-bearer assertion returns 401 `invalid_client` (`AADSTS7000218`). A secret that does not match stored `addPassword` hashes is `AADSTS7000215`.
+- jwt-bearer FIC match is restricted to the application in `client_id`. Another app's credential with the same `iss`/`sub` does not win first.
+- Conditional Access `includeApplications` other than `All` applies only to listed `client_id` values. An enabled policy for one app does not block token mint for a different app.
+
 ## 1.1.0
 
 Minor after 1.0.2: Entra Conditional Access, App Configuration snapshots, Key Vault exportable cert PEM, FIC `claimsMatchingExpression`, Graph owner write, ARM/Graph fail-closed fixes, Go 1.27.1. Docker Hub: `kyaxris/noctaxris-az` (`1.1.0`, `1.1`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).

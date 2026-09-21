@@ -5,17 +5,19 @@ Status: **lab**
 ## Authz / authn
 
 - ARM namespace, hub, and consumer group routes use Bearer plus RBAC (`Microsoft.EventHub/...`)
-- HTTP `/eventhubs/{ns}/hubs/{hub}/messages` and `capturedEvents` require root Bearer. Azure Event Hubs Data Sender / Receiver / Owner are not assigned in this lab, so any other directory token is HTTP 403. Missing Bearer is 401.
+- HTTP `/eventhubs/{ns}/hubs/{hub}/messages` send/receive stay root Bearer. Other directory tokens get HTTP 403. Missing Bearer is 401.
+- `GET /eventhubs/{ns}/hubs/{hub}/capturedEvents` (and `.../capturedEvents/{id}`) allows root, or a principal with Reader (or Event Hubs Data Receiver) on the namespace resource group. Unauthorized directory tokens stay 403.
 
 ## Detailed actions
 
 - ARM CRUD for namespaces, event hubs, and consumer groups
 - HTTP message enqueue/dequeue under `/eventhubs/{ns}/hubs/{hub}/messages` (root Bearer)
-- `GET /eventhubs/{ns}/hubs/{hub}/capturedEvents` returns `200` with `"value": []` for root (no capture store). Other directory Bearer tokens get `403`. Missing Bearer is `401`.
+- Enqueue copies the payload into a capture table. List/get captured events does not dequeue live messages.
 
 ## Not implemented
 
-- Kafka capture; Schema Registry; full AMQP SDK parity (HTTP lab is primary)
+- Kafka capture to Blob; Schema Registry; full AMQP SDK parity (HTTP lab is primary)
+- Azure Event Hubs Data Sender on the HTTP send path (send remains root)
 
 ## CLI smoke
 
@@ -27,4 +29,4 @@ curl -H "Authorization: Bearer $ROOT_TOKEN" -H "Content-Type: application/json" 
 
 ## Deferred depth
 
-Captured-events remains an empty `200` list (`"value": []`) for root Bearer. There is no capture store. Other directory tokens cannot send, receive, or list captured events (HTTP 403). Azure Event Hubs Data Sender / Receiver / Owner role GUIDs are not in the lab RBAC catalogue yet, so data-plane HTTP is root-only rather than any minted access token. Richer AMQP entity mapping and Kafka remain deferred. Live `az eventhubs` smokes skip when `az` is missing.
+HTTP send/receive remain root-only. Capture list is the data-plane read path for an authorized principal. Richer AMQP entity mapping and Kafka remain deferred. Live `az eventhubs` smokes skip when `az` is missing.

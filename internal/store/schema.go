@@ -316,6 +316,15 @@ CREATE TABLE IF NOT EXISTS eventhubs_messages (
   inserted_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS eventhubs_captured (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  namespace TEXT NOT NULL,
+  hub TEXT NOT NULL,
+  partition_id TEXT NOT NULL,
+  body BLOB NOT NULL,
+  inserted_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS eventgrid_topics (
   subscription_id TEXT NOT NULL,
   resource_group TEXT NOT NULL,

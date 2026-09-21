@@ -25,9 +25,11 @@ type Service struct {
 func (s *Service) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/roleAssignments/{roleAssignmentName}", s.putAtSubscription)
 	mux.HandleFunc("GET /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/roleAssignments/{roleAssignmentName}", s.getAtSubscription)
+	mux.HandleFunc("DELETE /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/roleAssignments/{roleAssignmentName}", s.deleteAtSubscription)
 	mux.HandleFunc("GET /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/roleAssignments", s.listAtSubscription)
 	mux.HandleFunc("PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Authorization/roleAssignments/{roleAssignmentName}", s.putAtResourceGroup)
 	mux.HandleFunc("GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Authorization/roleAssignments/{roleAssignmentName}", s.getAtResourceGroup)
+	mux.HandleFunc("DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Authorization/roleAssignments/{roleAssignmentName}", s.deleteAtResourceGroup)
 	mux.HandleFunc("GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Authorization/roleAssignments", s.listAtResourceGroup)
 }
 
@@ -100,6 +102,23 @@ func (s *Service) getAtResourceGroup(w http.ResponseWriter, r *http.Request) {
 	scope := "/subscriptions/" + subID + "/resourceGroups/" + rg
 	id := scope + "/providers/Microsoft.Authorization/roleAssignments/" + name
 	s.getRoleAssignment(w, r, scope, id, name)
+}
+
+func (s *Service) deleteAtSubscription(w http.ResponseWriter, r *http.Request) {
+	subID := r.PathValue("subscriptionId")
+	name := r.PathValue("roleAssignmentName")
+	scope := "/subscriptions/" + subID
+	id := scope + "/providers/Microsoft.Authorization/roleAssignments/" + name
+	s.deleteRoleAssignment(w, r, scope, id, name)
+}
+
+func (s *Service) deleteAtResourceGroup(w http.ResponseWriter, r *http.Request) {
+	subID := r.PathValue("subscriptionId")
+	rg := r.PathValue("resourceGroupName")
+	name := r.PathValue("roleAssignmentName")
+	scope := "/subscriptions/" + subID + "/resourceGroups/" + rg
+	id := scope + "/providers/Microsoft.Authorization/roleAssignments/" + name
+	s.deleteRoleAssignment(w, r, scope, id, name)
 }
 
 func (s *Service) listAtSubscription(w http.ResponseWriter, r *http.Request) {
@@ -203,6 +222,27 @@ func (s *Service) getRoleAssignment(w http.ResponseWriter, r *http.Request, scop
 		azerrors.NotFound(w, "Role assignment not found")
 		return
 	}
+	writeJSON(w, http.StatusOK, roleAssignmentJSON(a, name))
+}
+
+func (s *Service) deleteRoleAssignment(w http.ResponseWriter, r *http.Request, scope, id, name string) {
+	if !requireAPIVersion(w, r) {
+		return
+	}
+	p, ok := s.require(w, r, "Microsoft.Authorization/roleAssignments/delete", scope)
+	if !ok {
+		return
+	}
+	a, found, err := s.Store.DeleteRoleAssignment(id)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+		return
+	}
+	if !found {
+		azerrors.NotFound(w, "Role assignment not found")
+		return
+	}
+	_ = s.Store.AppendActivityLog(p.ID, "Microsoft.Authorization/roleAssignments/delete", id, "Succeeded", "")
 	writeJSON(w, http.StatusOK, roleAssignmentJSON(a, name))
 }
 

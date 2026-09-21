@@ -37,7 +37,7 @@ Noctaxris-AZ fails closed. Defaults favor a loopback lab on a single laptop.
 |---------|------------|
 | ARM / RBAC / Key Vault / Monitor / App Configuration / Functions | `Authorization: Bearer <token>` |
 | Storage blob / queue / table | Shared Key HMAC (`SharedKey <account>:<sig>`), SAS query HMAC (`sig` / `se` / `sp` against the account key), or root Bearer |
-| Event Hubs HTTP messages / captured-events | Root Bearer only (not an arbitrary directory token) |
+| Event Hubs HTTP messages | Root Bearer only (send/receive). Captured-events list/get: root, or Reader / Event Hubs Data Receiver on the namespace resource group |
 | Service Bus AMQP lite | Connection string / SAS |
 
 - Root token comes from `NOCTAXRIS_AZ_ROOT_ACCESS_TOKEN` and maps to `NOCTAXRIS_AZ_ROOT_CLIENT_ID`.
@@ -59,11 +59,15 @@ non-loopback listen.
 
 - Azure RBAC role assignments are stored per scope in SQLite.
 - Deny by default.
+- Group principal assignments expand `entra_group_members` (nested groups, depth 8).
 - The authenticated root principal bypasses RBAC evaluation. This matches lab
   operator convenience in the AWS/GCP sibling products and is intentional.
-  Documented here so CTF authors do not treat root as a normal app registration.
-- Built-in Owner / Contributor / Reader role definition IDs are recognized.
-  Contributor cannot mutate role assignments. Reader is read-only.
+  Documented here so operators do not treat root as a normal app registration.
+- Built-in GUIDs include Owner, Contributor, Reader, Log Analytics Reader,
+  Monitoring Reader, Log Analytics Data Reader, AcrPull, and Event Hubs Data
+  Receiver / Data Owner. Contributor cannot mutate role assignments. Reader
+  is read-only plus workspace query and Resource Graph. AcrPull does not
+  start Registry V2.
 
 ## Secrets at rest
 

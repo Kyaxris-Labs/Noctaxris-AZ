@@ -177,3 +177,44 @@ func TestAppendActivityHelper(t *testing.T) {
 		t.Fatal("expected appended activity")
 	}
 }
+
+func TestActivityLogDefaultTopAboveFifty(t *testing.T) {
+	mux, st := mountMonitor(t, nil)
+	for i := 0; i < 60; i++ {
+		if err := st.AppendActivityLog("root", "Microsoft.Resources/subscriptions/read",
+			"/subscriptions/"+testSub+"/resourceGroups/rg", "Succeeded", "n"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	req := httptest.NewRequest(http.MethodGet,
+		"/subscriptions/"+testSub+"/providers/Microsoft.Insights/eventtypes/management/values", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list %d %s", rec.Code, rec.Body.String())
+	}
+	var act struct {
+		Value []map[string]any `json:"value"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &act); err != nil {
+		t.Fatal(err)
+	}
+	if len(act.Value) != 60 {
+		t.Fatalf("default $top returned %d, want 60", len(act.Value))
+	}
+
+	req = httptest.NewRequest(http.MethodGet,
+		"/subscriptions/"+testSub+"/providers/Microsoft.Insights/eventtypes/management/values?$top=10", nil)
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("top10 %d %s", rec.Code, rec.Body.String())
+	}
+	act.Value = nil
+	if err := json.Unmarshal(rec.Body.Bytes(), &act); err != nil {
+		t.Fatal(err)
+	}
+	if len(act.Value) != 10 {
+		t.Fatalf("$top=10 returned %d", len(act.Value))
+	}
+}

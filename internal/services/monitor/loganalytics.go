@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
@@ -53,7 +54,8 @@ func (h *Handler) getWorkspace(w http.ResponseWriter, r *http.Request, p authn.P
 }
 
 func (h *Handler) queryKQL(w http.ResponseWriter, r *http.Request, p authn.Principal) {
-	if err := h.require(p, "Microsoft.OperationalInsights/workspaces/query/action", "/"); err != nil {
+	ws := workspaceQueryName(r.PathValue("workspace"))
+	if err := h.require(p, "Microsoft.OperationalInsights/workspaces/query/read", h.workspaceAuthScope(ws)); err != nil {
 		writeAuthz(w, err)
 		return
 	}
@@ -61,7 +63,7 @@ func (h *Handler) queryKQL(w http.ResponseWriter, r *http.Request, p authn.Princ
 		Query string `json:"query"`
 	}
 	_ = json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body)
-	rows, err := h.Store.QueryLogAnalyticsKQL(r.PathValue("workspace"), body.Query)
+	rows, err := h.Store.QueryLogAnalyticsKQL(ws, body.Query)
 	if err != nil {
 		azerrors.BadRequest(w, err.Error())
 		return
@@ -89,10 +91,37 @@ func (h *Handler) ingestRows(w http.ResponseWriter, r *http.Request, p authn.Pri
 	}
 	for _, row := range rows {
 		b, _ := json.Marshal(row)
-		if err := h.Store.IngestLogAnalyticsRow(r.PathValue("workspace"), r.PathValue("table"), string(b)); err != nil {
+		if err := h.Store.IngestLogAnalyticsRow(workspaceQueryName(r.PathValue("workspace")), r.PathValue("table"), string(b)); err != nil {
 			azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
 			return
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ingested": len(rows)})
+}
+
+func workspaceQueryName(raw string) string {
+	raw = strings.TrimSpace(raw)
+	lower := strings.ToLower(raw)
+	const marker = "/workspaces/"
+	if i := strings.LastIndex(lower, marker); i >= 0 {
+		raw = strings.Trim(raw[i+len(marker):], "/")
+	}
+	if raw == "" {
+		return "default"
+	}
+	return raw
+}
+
+func (h *Handler) workspaceAuthScope(workspace string) string {
+	if h != nil && h.Store != nil && workspace != "" {
+		row, ok, err := h.Store.GetProviderResourceByName("Microsoft.OperationalInsights/workspaces", workspace)
+		if err == nil && ok {
+			return "/subscriptions/" + row.SubscriptionID + "/resourceGroups/" + row.ResourceGroup +
+				"/providers/Microsoft.OperationalInsights/workspaces/" + row.Name
+		}
+	}
+	if h != nil && strings.TrimSpace(h.SubscriptionID) != "" {
+		return "/subscriptions/" + h.SubscriptionID
+	}
+	return "/"
 }

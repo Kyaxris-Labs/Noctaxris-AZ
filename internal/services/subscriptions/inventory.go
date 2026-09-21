@@ -259,7 +259,13 @@ func (s *Service) queryResourceGraph(w http.ResponseWriter, r *http.Request) {
 	if !requireAPIVersion(w, r) {
 		return
 	}
-	if _, ok := s.require(w, r, "Microsoft.ResourceGraph/resources/read", "/providers/Microsoft.ResourceGraph/resources"); !ok {
+	p, ok := s.principal(r.Context())
+	if !ok {
+		azerrors.Unauthenticated(w, "")
+		return
+	}
+	if !p.AllowsARM() {
+		azerrors.InvalidAuthenticationTokenAudience(w, "")
 		return
 	}
 	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
@@ -277,12 +283,32 @@ func (s *Service) queryResourceGraph(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	subs := uniqueNonEmpty(req.Subscriptions)
+	if len(subs) == 0 && strings.TrimSpace(s.SubscriptionID) != "" {
+		subs = []string{s.SubscriptionID}
+	}
+	allowed := make([]string, 0, len(subs))
+	for _, sub := range subs {
+		ok, err := s.Authz.Evaluate(p.ID, p.IsRoot, "Microsoft.ResourceGraph/resources/read", "/subscriptions/"+sub)
+		if err != nil {
+			azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+			return
+		}
+		if ok {
+			allowed = append(allowed, sub)
+		}
+	}
+	if len(allowed) == 0 {
+		azerrors.Forbidden(w, "")
+		return
+	}
 	table, typeFilter, limit := parseARGQuery(req.Query)
 	rows, err := s.Store.ListARGResources(table, typeFilter)
 	if err != nil {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
 		return
 	}
+	rows = filterARGBySubscriptions(rows, allowed, p.IsRoot)
 	if limit > 0 && limit < len(rows) {
 		rows = rows[:limit]
 	}
@@ -295,6 +321,45 @@ func (s *Service) queryResourceGraph(w http.ResponseWriter, r *http.Request) {
 		"data":            rows,
 		"resultTruncated": "false",
 	})
+}
+
+func uniqueNonEmpty(in []string) []string {
+	seen := map[string]struct{}{}
+	var out []string
+	for _, s := range in {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		if _, ok := seen[s]; ok {
+			continue
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	return out
+}
+
+func filterARGBySubscriptions(rows []map[string]any, allowed []string, includeEmpty bool) []map[string]any {
+	allow := map[string]struct{}{}
+	for _, s := range allowed {
+		allow[s] = struct{}{}
+	}
+	out := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		sub, _ := row["subscriptionId"].(string)
+		sub = strings.TrimSpace(sub)
+		if sub == "" {
+			if includeEmpty {
+				out = append(out, row)
+			}
+			continue
+		}
+		if _, ok := allow[sub]; ok {
+			out = append(out, row)
+		}
+	}
+	return out
 }
 
 func parseARGQuery(q string) (table, typeFilter string, limit int) {

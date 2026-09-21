@@ -11,7 +11,7 @@ import (
 // ListRoleAssignmentsForScope implements authz.AssignmentStore with exact scope match
 // plus parent subscription scope when listing under a resource group.
 func (s *Store) ListRoleAssignmentsForScope(scope string) ([]authz.Assignment, error) {
-	rows, err := s.db.Query(`SELECT id, scope, role_definition_id, principal_id FROM role_assignments WHERE scope = ? OR ? LIKE scope || '%'`, scope, scope)
+	rows, err := s.db.Query(`SELECT id, scope, role_definition_id, principal_id, principal_type FROM role_assignments WHERE scope = ? OR ? LIKE scope || '%'`, scope, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -19,12 +19,24 @@ func (s *Store) ListRoleAssignmentsForScope(scope string) ([]authz.Assignment, e
 	var out []authz.Assignment
 	for rows.Next() {
 		var a authz.Assignment
-		if err := rows.Scan(&a.ID, &a.Scope, &a.RoleDefinitionID, &a.PrincipalID); err != nil {
+		if err := rows.Scan(&a.ID, &a.Scope, &a.RoleDefinitionID, &a.PrincipalID, &a.PrincipalType); err != nil {
 			return nil, err
 		}
 		out = append(out, a)
 	}
 	return out, rows.Err()
+}
+
+// DeleteRoleAssignment removes a role assignment by id.
+func (s *Store) DeleteRoleAssignment(id string) (authz.Assignment, bool, error) {
+	a, ok, err := s.GetRoleAssignment(id)
+	if err != nil || !ok {
+		return authz.Assignment{}, ok, err
+	}
+	if _, err := s.db.Exec(`DELETE FROM role_assignments WHERE id = ?`, id); err != nil {
+		return authz.Assignment{}, false, err
+	}
+	return a, true, nil
 }
 
 // UpsertRoleAssignment stores a role assignment.

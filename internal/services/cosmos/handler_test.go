@@ -139,8 +139,8 @@ func TestCosmosAccountAndDocs(t *testing.T) {
 		t.Fatalf("changefeed %d", cfr.StatusCode)
 	}
 	cfBody, _ := io.ReadAll(cfr.Body)
-	if !strings.Contains(string(cfBody), `"Documents"`) {
-		t.Fatalf("changefeed body %s", cfBody)
+	if !strings.Contains(string(cfBody), `"id":"i1"`) && !strings.Contains(string(cfBody), `"id": "i1"`) {
+		t.Fatalf("changefeed missing item %s", cfBody)
 	}
 
 	bad, _ := http.NewRequest(http.MethodPut, srv.URL+"/cosmos/cdb/dbs/db2", nil)

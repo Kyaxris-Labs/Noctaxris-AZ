@@ -188,8 +188,21 @@ func (h *Handler) changeFeed(w http.ResponseWriter, r *http.Request) {
 	if !h.authData(w, r) {
 		return
 	}
-	// cosmos_items has no version history; empty list rather than a new engine.
-	writeJSON(w, http.StatusOK, map[string]any{"Documents": []any{}})
+	docs, err := h.Store.ListCosmosItems(r.PathValue("account"), r.PathValue("db"), r.PathValue("coll"))
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	}
+	items := make([]json.RawMessage, 0, len(docs))
+	for _, d := range docs {
+		if json.Valid([]byte(d)) {
+			items = append(items, json.RawMessage(d))
+			continue
+		}
+		b, _ := json.Marshal(map[string]any{"raw": d})
+		items = append(items, b)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"Documents": items})
 }
 
 func (h *Handler) authData(w http.ResponseWriter, r *http.Request) bool {
