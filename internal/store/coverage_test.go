@@ -352,6 +352,18 @@ func TestServiceBusTopicsSessionsAndEventHubs(t *testing.T) {
 	if err != nil || ok {
 		t.Fatal("eh empty")
 	}
+	captured, err := st.ListEventHubCaptured("ehns", "hub")
+	if err != nil || len(captured) != 2 {
+		t.Fatalf("captured after dequeue: %v %v", captured, err)
+	}
+	gotCap, ok, err := st.GetEventHubCaptured("ehns", "hub", captured[0].ID)
+	if err != nil || !ok || string(gotCap.Body) != "e1" {
+		t.Fatalf("get captured: %#v %v %v", gotCap, ok, err)
+	}
+	subID, rgName, loc2, ok, err := st.GetEventHubsNamespaceByName("ehns")
+	if err != nil || !ok || subID != "sub" || rgName != "rg" || loc2 != "eastus" {
+		t.Fatalf("ehns by name: %s %s %s %v %v", subID, rgName, loc2, ok, err)
+	}
 }
 
 func TestARMRoleAssignmentsAndProviderResources(t *testing.T) {
@@ -396,6 +408,15 @@ func TestARMRoleAssignmentsAndProviderResources(t *testing.T) {
 	list2, err := st.ListRoleAssignmentsByScopePrefix("/subscriptions/sub")
 	if err != nil || len(list2) == 0 {
 		t.Fatal(err)
+	}
+	if _, ok, err := st.DeleteRoleAssignment("ra1"); err != nil || !ok {
+		t.Fatalf("delete ra: %v %v", ok, err)
+	}
+	if _, ok, err := st.GetRoleAssignment("ra1"); err != nil || ok {
+		t.Fatal("deleted ra still present")
+	}
+	if _, ok, err := st.DeleteRoleAssignment("ra1"); err != nil || ok {
+		t.Fatalf("second delete: ok=%v err=%v", ok, err)
 	}
 	if err := store.RequireDB(); err != nil {
 		t.Fatal(err)
@@ -583,6 +604,10 @@ func TestIdentityEntraCosmosEventGridObserve(t *testing.T) {
 	docs, err := st.QueryCosmosItemsByID("cdb", "db1", "c1", "i1")
 	if err != nil || len(docs) != 1 {
 		t.Fatal(err)
+	}
+	feed, err := st.ListCosmosItems("cdb", "db1", "c1")
+	if err != nil || len(feed) != 1 || !strings.Contains(feed[0], "i1") {
+		t.Fatalf("change-feed lite: %v %v", feed, err)
 	}
 
 	if err := st.UpsertEventGridTopic("sub", "rg", "egt", ""); err != nil {

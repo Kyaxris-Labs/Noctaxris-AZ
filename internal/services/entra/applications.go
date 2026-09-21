@@ -2,9 +2,13 @@ package entra
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
+	"strings"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/store"
 )
 
 func (s *Service) requirePrincipal(w http.ResponseWriter, r *http.Request) bool {
@@ -62,6 +66,47 @@ func (s *Service) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 	}
 	row, _, _ := s.Store.GetEntraApp(s.appTenant(), appID)
 	writeJSON(w, http.StatusCreated, appGraphJSON(row.ObjectID, row.AppID, row.DisplayName, row.CreatedAt))
+}
+
+func (s *Service) handleCreateSP(w http.ResponseWriter, r *http.Request) {
+	if !s.requireGraph(w, r) {
+		return
+	}
+	var body struct {
+		AppID       string `json:"appId"`
+		DisplayName string `json:"displayName"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
+		azerrors.WriteGraph(w, http.StatusBadRequest, "BadRequest", "invalid JSON body")
+		return
+	}
+	if strings.TrimSpace(body.AppID) == "" {
+		azerrors.WriteGraph(w, http.StatusBadRequest, "BadRequest", "appId is required")
+		return
+	}
+	_, appID, display, ok, err := s.Store.ResolveEntraApp(s.appTenant(), body.AppID)
+	if err != nil {
+		azerrors.WriteGraph(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+		return
+	}
+	if !ok {
+		azerrors.WriteGraph(w, http.StatusBadRequest, "Request_BadRequest", "The appId does not exist in the tenant.")
+		return
+	}
+	name := strings.TrimSpace(body.DisplayName)
+	if name == "" {
+		name = display
+	}
+	sp, err := s.Store.CreateServicePrincipal(s.appTenant(), appID, name)
+	if errors.Is(err, store.ErrServicePrincipalExists) {
+		azerrors.WriteGraph(w, http.StatusBadRequest, "Request_MultipleObjectsWithSameKeyValue", "A service principal already exists for this application.")
+		return
+	}
+	if err != nil {
+		azerrors.WriteGraph(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, spJSON(sp))
 }
 
 func (s *Service) handleGetApp(w http.ResponseWriter, r *http.Request) {

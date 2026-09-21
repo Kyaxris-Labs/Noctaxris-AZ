@@ -6,12 +6,16 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// ErrServicePrincipalExists is returned when an application already has a service principal.
+var ErrServicePrincipalExists = errors.New("service principal already exists")
 
 // SeededManagementGroupID is the Tenant Root Group inserted by SeedDirectory.
 const SeededManagementGroupID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
@@ -279,6 +283,42 @@ func (s *Store) GetServicePrincipal(id string) (DirectoryServicePrincipal, bool,
 	return sp, true, nil
 }
 
+// CreateServicePrincipal inserts a service principal for an application client id.
+func (s *Store) CreateServicePrincipal(tenantID, appID, displayName string) (DirectoryServicePrincipal, error) {
+	appID = strings.TrimSpace(appID)
+	if appID == "" {
+		return DirectoryServicePrincipal{}, fmt.Errorf("appId is required")
+	}
+	if existing, ok, err := s.GetServicePrincipal(appID); err != nil {
+		return DirectoryServicePrincipal{}, err
+	} else if ok {
+		return existing, ErrServicePrincipalExists
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	sp := DirectoryServicePrincipal{
+		ID: uuid.NewString(), TenantID: tenantID, AppID: appID, DisplayName: displayName, CreatedAt: now,
+	}
+	_, err := s.db.Exec(`INSERT INTO entra_service_principals (id, tenant_id, app_id, display_name, created_at) VALUES (?,?,?,?,?)`,
+		sp.ID, sp.TenantID, sp.AppID, sp.DisplayName, sp.CreatedAt)
+	return sp, err
+}
+
+// PutUnifiedRoleAssignment inserts or replaces a directory role assignment, including directoryScopeId.
+func (s *Store) PutUnifiedRoleAssignment(id, principalID, roleDefinitionID, directoryScopeID string) error {
+	if id == "" {
+		id = uuid.NewString()
+	}
+	if strings.TrimSpace(directoryScopeID) == "" {
+		directoryScopeID = "/"
+	}
+	_, err := s.db.Exec(`
+INSERT INTO entra_unified_role_assignments (id, principal_id, role_definition_id, directory_scope_id)
+VALUES (?,?,?,?)
+ON CONFLICT(id) DO UPDATE SET principal_id=excluded.principal_id, role_definition_id=excluded.role_definition_id, directory_scope_id=excluded.directory_scope_id`,
+		id, principalID, roleDefinitionID, directoryScopeID)
+	return err
+}
+
 func (s *Store) ListDevices(tenantID string) ([]DirectoryDevice, error) {
 	rows, err := s.db.Query(`SELECT id, tenant_id, display_name, device_id, operating_system, created_at FROM entra_devices WHERE tenant_id = ? ORDER BY display_name`, tenantID)
 	if err != nil {
@@ -433,9 +473,17 @@ func (s *Store) FindFIC(issuer, subject, audience string) (FederatedIdentityCred
 }
 
 // MatchFIC finds a federated credential by issuer, audience, and either exact subject or claimsMatchingExpression.
-func (s *Store) MatchFIC(issuer, audience string, claims map[string]any) (FederatedIdentityCredential, bool, error) {
+// When appObjectIDs is non-empty, only credentials whose application matches one of those ids are considered.
+func (s *Store) MatchFIC(issuer, audience string, claims map[string]any, appObjectIDs ...string) (FederatedIdentityCredential, bool, error) {
 	sub := claimString(claims, "sub")
-	rows, err := s.db.Query(`SELECT id, app_object_id, name, issuer, subject, audiences_json, claims_matching_expression FROM entra_fics`)
+	allowed := map[string]struct{}{}
+	for _, id := range appObjectIDs {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			allowed[id] = struct{}{}
+		}
+	}
+	rows, err := s.db.Query(`SELECT id, app_object_id, name, issuer, subject, audiences_json, claims_matching_expression FROM entra_fics ORDER BY rowid`)
 	if err != nil {
 		return FederatedIdentityCredential{}, false, err
 	}
@@ -447,6 +495,11 @@ func (s *Store) MatchFIC(issuer, audience string, claims map[string]any) (Federa
 			return FederatedIdentityCredential{}, false, err
 		}
 		_ = json.Unmarshal([]byte(aud), &f.Audiences)
+		if len(allowed) > 0 {
+			if _, ok := allowed[f.AppObjectID]; !ok {
+				continue
+			}
+		}
 		if f.Issuer != issuer {
 			continue
 		}
@@ -504,6 +557,41 @@ func (s *Store) AddPassword(resourceID, resourceType, displayName, secretHash, h
 	_, err := s.db.Exec(`INSERT INTO entra_passwords (id, resource_id, resource_type, display_name, secret_hash, hint, created_at) VALUES (?,?,?,?,?,?,?)`,
 		id, resourceID, resourceType, displayName, secretHash, hint, time.Now().UTC().Format(time.RFC3339))
 	return id, err
+}
+
+// PasswordHashExists reports whether secretHash is stored on any of the given application or service principal ids.
+func (s *Store) PasswordHashExists(resourceIDs []string, secretHash string) (bool, error) {
+	if secretHash == "" {
+		return false, nil
+	}
+	seen := map[string]struct{}{}
+	args := []any{secretHash}
+	var placeholders []string
+	for _, id := range resourceIDs {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		placeholders = append(placeholders, "?")
+		args = append(args, id)
+	}
+	if len(placeholders) == 0 {
+		return false, nil
+	}
+	q := `SELECT 1 FROM entra_passwords WHERE secret_hash = ? AND resource_id IN (` + strings.Join(placeholders, ",") + `) LIMIT 1`
+	var n int
+	err := s.db.QueryRow(q, args...).Scan(&n)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (s *Store) CountKeyCredentials(resourceID string) (int, error) {

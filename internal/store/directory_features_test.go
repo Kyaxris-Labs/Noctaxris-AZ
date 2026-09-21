@@ -40,6 +40,33 @@ func TestMatchFICExpressionAndExactSubject(t *testing.T) {
 	}
 }
 
+func TestMatchFICPrefersRequestedApplication(t *testing.T) {
+	st := openStore(t)
+	defer st.Close()
+	issuer := "https://token.actions.githubusercontent.com"
+	aud := "api://AzureADTokenExchange"
+	sub := "repo:acme/shared"
+	first := "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+	second := "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+	if _, err := st.CreateFIC(first, "first", issuer, sub, []string{aud}, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.CreateFIC(second, "second", issuer, sub, []string{aud}, ""); err != nil {
+		t.Fatal(err)
+	}
+	firstHit, ok, err := st.MatchFIC(issuer, aud, map[string]any{"sub": sub})
+	if err != nil || !ok || firstHit.Name != "first" {
+		t.Fatalf("unscoped first match: ok=%v err=%v %#v", ok, err, firstHit)
+	}
+	owned, ok, err := st.MatchFIC(issuer, aud, map[string]any{"sub": sub}, second)
+	if err != nil || !ok || owned.Name != "second" || owned.AppObjectID != second {
+		t.Fatalf("scoped match: ok=%v err=%v %#v", ok, err, owned)
+	}
+	if _, ok, err = st.MatchFIC(issuer, aud, map[string]any{"sub": sub}, "cccccccc-cccc-cccc-cccc-cccccccccccc"); err != nil || ok {
+		t.Fatalf("wrong app: ok=%v err=%v", ok, err)
+	}
+}
+
 func TestAppConfigSnapshotKVFrozen(t *testing.T) {
 	st := openStore(t)
 	defer st.Close()

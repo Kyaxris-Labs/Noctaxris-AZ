@@ -158,6 +158,7 @@ func (s *Service) Mount(mux *http.ServeMux) {
 	}
 	mux.HandleFunc("GET /_noctaxris-az/oidc-lab/.well-known/openid-configuration", s.handleLabOIDCDiscovery)
 	mux.HandleFunc("GET /_noctaxris-az/oidc-lab/keys", s.handleLabJWKS)
+	mux.HandleFunc("POST /_noctaxris-az/oidc-lab/token", s.handleLabOIDCToken)
 
 	s.mountGraph(mux)
 	s.mountIAMPortal(mux)

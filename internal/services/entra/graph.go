@@ -34,6 +34,7 @@ func (s *Service) mountGraph(mux *http.ServeMux) {
 		mux.HandleFunc("GET "+p+"/applications/{appId}/federatedIdentityCredentials", s.handleListFIC)
 		mux.HandleFunc("POST "+p+"/applications/{appId}/federatedIdentityCredentials", s.handleCreateFIC)
 		mux.HandleFunc("GET "+p+"/servicePrincipals", s.handleGraphSPs)
+		mux.HandleFunc("POST "+p+"/servicePrincipals", s.handleCreateSP)
 		mux.HandleFunc("GET "+p+"/servicePrincipals/{id}", s.handleGraphSP)
 		mux.HandleFunc("GET "+p+"/servicePrincipals/{id}/owners", s.handleGraphOwners)
 		mux.HandleFunc("POST "+p+"/servicePrincipals/{id}/owners/$ref", s.handleAddOwner)
@@ -113,7 +114,105 @@ func (s *Service) graphAppWriteAllowed(principalID, resourceID string) bool {
 			}
 		}
 	}
+	return s.applicationAdministratorAllows(principalID, resourceID)
+}
+
+func (s *Service) applicationAdministratorAllows(principalID, resourceID string) bool {
+	assignments, err := s.Store.ListUnifiedRoleAssignments()
+	if err != nil {
+		return s.isApplicationAdministrator(principalID)
+	}
+	scopeIDs := s.directoryScopeCandidates(resourceID)
+	hasScoped := false
+	hasTenant := false
+	matched := false
+	for _, row := range assignments {
+		if row["principalId"] != principalID {
+			continue
+		}
+		if !s.isAppAdminRoleID(row["roleDefinitionId"]) {
+			continue
+		}
+		scope := strings.TrimSpace(row["directoryScopeId"])
+		if scope == "" || scope == "/" {
+			hasTenant = true
+			continue
+		}
+		hasScoped = true
+		if directoryScopeMatches(scope, scopeIDs) {
+			matched = true
+		}
+	}
+	if matched || hasTenant {
+		return true
+	}
+	if hasScoped {
+		return false
+	}
 	return s.isApplicationAdministrator(principalID)
+}
+
+func (s *Service) isAppAdminRoleID(id string) bool {
+	if id == applicationAdministratorTemplateID || id == seededApplicationAdministratorRoleID {
+		return true
+	}
+	roles, err := s.Store.ListDirectoryRoles(s.appTenant())
+	if err != nil {
+		return false
+	}
+	for _, role := range roles {
+		if role.ID != id {
+			continue
+		}
+		if role.TemplateID == applicationAdministratorTemplateID ||
+			strings.EqualFold(role.DisplayName, "Application Administrator") {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Service) directoryScopeCandidates(resourceID string) []string {
+	seen := map[string]struct{}{}
+	add := func(id string) {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			return
+		}
+		seen[id] = struct{}{}
+		seen[strings.TrimPrefix(id, "/")] = struct{}{}
+	}
+	add(resourceID)
+	if obj, appID, _, ok, err := s.Store.ResolveEntraApp(s.appTenant(), resourceID); err == nil && ok {
+		add(obj)
+		add(appID)
+	}
+	if sp, ok, err := s.Store.GetServicePrincipal(resourceID); err == nil && ok {
+		add(sp.ID)
+		add(sp.AppID)
+		if obj, appID, _, found, err := s.Store.ResolveEntraApp(s.appTenant(), sp.AppID); err == nil && found {
+			add(obj)
+			add(appID)
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for id := range seen {
+		out = append(out, id)
+	}
+	return out
+}
+
+func directoryScopeMatches(scope string, candidates []string) bool {
+	scope = strings.TrimPrefix(strings.TrimSpace(scope), "/")
+	if scope == "" {
+		return false
+	}
+	for _, c := range candidates {
+		if c != "" && scope == strings.TrimPrefix(c, "/") {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) isApplicationAdministrator(principalID string) bool {

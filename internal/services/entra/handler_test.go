@@ -33,13 +33,40 @@ func openStore(t *testing.T) *store.Store {
 	return st
 }
 
+func addClientSecret(t *testing.T, st *store.Store, tenant, clientID string) string {
+	t.Helper()
+	row, ok, err := st.GetEntraApp(tenant, clientID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		if _, err := st.UpsertEntraApp(tenant, clientID, clientID); err != nil {
+			t.Fatal(err)
+		}
+		row, ok, err = st.GetEntraApp(tenant, clientID)
+		if err != nil || !ok {
+			t.Fatalf("app after upsert: ok=%v err=%v", ok, err)
+		}
+	}
+	obj := row.ObjectID
+	if obj == "" {
+		obj = row.AppID
+	}
+	secret := store.RandomToken(16)
+	if _, err := st.AddPassword(obj, "application", "lab", authn.HashToken(secret), store.HintFromSecret(secret)); err != nil {
+		t.Fatal(err)
+	}
+	return secret
+}
+
 func TestTokenMintClientCredentials(t *testing.T) {
 	st := openStore(t)
 	svc := &entra.Service{Store: st, TenantID: config.DefaultTenantID, PublicBase: "http://127.0.0.1:4599"}
 	mux := http.NewServeMux()
 	svc.Mount(mux)
 
-	body := "grant_type=client_credentials&client_id=sp-lab-1&client_secret=unused"
+	secret := addClientSecret(t, st, config.DefaultTenantID, "sp-lab-1")
+	body := "grant_type=client_credentials&client_id=sp-lab-1&client_secret=" + secret
 	req := httptest.NewRequest(http.MethodPost, "/"+config.DefaultTenantID+"/oauth2/v2.0/token", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()

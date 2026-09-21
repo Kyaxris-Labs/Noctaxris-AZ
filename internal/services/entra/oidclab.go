@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
@@ -50,6 +51,51 @@ func (s *Service) handleLabJWKS(w http.ResponseWriter, r *http.Request) {
 			"n":   n,
 			"e":   e,
 		}},
+	})
+}
+
+func (s *Service) handleLabOIDCToken(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		azerrors.WriteOAuth(w, http.StatusBadRequest, "invalid_request", "invalid form body")
+		return
+	}
+	grant := strings.TrimSpace(r.Form.Get("grant_type"))
+	if grant != "" && grant != "client_credentials" {
+		azerrors.WriteOAuth(w, http.StatusBadRequest, "unsupported_grant_type", "grant_type must be client_credentials")
+		return
+	}
+	subject := strings.TrimSpace(r.Form.Get("subject"))
+	if subject == "" {
+		subject = strings.TrimSpace(r.Form.Get("sub"))
+	}
+	if subject == "" {
+		azerrors.WriteOAuth(w, http.StatusBadRequest, "invalid_request", "subject is required")
+		return
+	}
+	audience := strings.TrimSpace(r.Form.Get("audience"))
+	if audience == "" {
+		audience = strings.TrimSpace(r.Form.Get("aud"))
+	}
+	if audience == "" {
+		audience = strings.TrimSpace(r.Form.Get("resource"))
+	}
+	if audience == "" {
+		audience = strings.TrimSpace(r.Form.Get("scope"))
+		audience = strings.TrimSuffix(audience, "/.default")
+		if i := strings.IndexByte(audience, ' '); i > 0 {
+			audience = audience[:i]
+		}
+	}
+	token, err := s.MintLabOIDCAssertion(subject, audience)
+	if err != nil {
+		azerrors.WriteOAuth(w, http.StatusInternalServerError, "server_error", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"token_type":   "Bearer",
+		"expires_in":   600,
+		"access_token": token,
+		"id_token":     token,
 	})
 }
 

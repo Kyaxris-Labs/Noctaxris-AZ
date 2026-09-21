@@ -38,6 +38,9 @@ func TestConditionalAccessListAndUserAgent(t *testing.T) {
 		t.Fatalf("create CA %d body=%s", rec.Code, rec.Body.String())
 	}
 
+	caSecret := addClientSecret(t, st, config.DefaultTenantID, "ca-client")
+	otherSecret := addClientSecret(t, st, config.DefaultTenantID, "other-client")
+
 	list := httptest.NewRecorder()
 	lreq := httptest.NewRequest(http.MethodGet, "/v1.0/identity/conditionalAccess/policies", nil)
 	graph.ServeHTTP(list, lreq)
@@ -55,7 +58,7 @@ func TestConditionalAccessListAndUserAgent(t *testing.T) {
 
 	okTok := httptest.NewRecorder()
 	okReq := httptest.NewRequest(http.MethodPost, "/"+config.DefaultTenantID+"/oauth2/v2.0/token",
-		strings.NewReader("grant_type=client_credentials&client_id=ca-client&scope=https://graph.microsoft.com/.default"))
+		strings.NewReader("grant_type=client_credentials&client_id=ca-client&client_secret="+caSecret+"&scope=https://graph.microsoft.com/.default"))
 	okReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	okReq.Header.Set("User-Agent", "LabAgent/1.0")
 	mux.ServeHTTP(okTok, okReq)
@@ -65,7 +68,7 @@ func TestConditionalAccessListAndUserAgent(t *testing.T) {
 
 	denied := httptest.NewRecorder()
 	badReq := httptest.NewRequest(http.MethodPost, "/"+config.DefaultTenantID+"/oauth2/v2.0/token",
-		strings.NewReader("grant_type=client_credentials&client_id=ca-client&scope=https://graph.microsoft.com/.default"))
+		strings.NewReader("grant_type=client_credentials&client_id=ca-client&client_secret="+caSecret+"&scope=https://graph.microsoft.com/.default"))
 	badReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	badReq.Header.Set("User-Agent", "OtherAgent/9.9")
 	mux.ServeHTTP(denied, badReq)
@@ -78,11 +81,11 @@ func TestConditionalAccessListAndUserAgent(t *testing.T) {
 
 	unknown := httptest.NewRecorder()
 	unkReq := httptest.NewRequest(http.MethodPost, "/"+config.DefaultTenantID+"/oauth2/v2.0/token",
-		strings.NewReader("grant_type=client_credentials&client_id=other-client&scope=https://graph.microsoft.com/.default"))
+		strings.NewReader("grant_type=client_credentials&client_id=other-client&client_secret="+otherSecret+"&scope=https://graph.microsoft.com/.default"))
 	unkReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	unkReq.Header.Set("User-Agent", "LabAgent/1.0")
+	unkReq.Header.Set("User-Agent", "OtherAgent/9.9")
 	mux.ServeHTTP(unknown, unkReq)
-	if unknown.Code != http.StatusBadRequest || !strings.Contains(unknown.Body.String(), "AADSTS53003") {
-		t.Fatalf("unknown client %d body=%s", unknown.Code, unknown.Body.String())
+	if unknown.Code != http.StatusOK {
+		t.Fatalf("unrelated client %d body=%s", unknown.Code, unknown.Body.String())
 	}
 }

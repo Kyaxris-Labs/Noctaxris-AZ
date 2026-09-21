@@ -65,14 +65,11 @@ func (s *Service) conditionalAccessBlocked(r *http.Request, clientID string) boo
 	if r != nil {
 		ua = r.Header.Get("User-Agent")
 	}
-	sawEnabled := false
-	applied := false
 	for _, p := range policies {
 		state, _ := p["state"].(string)
 		if !strings.EqualFold(state, "enabled") {
 			continue
 		}
-		sawEnabled = true
 		cond, _ := p["conditions"].(map[string]any)
 		if cond == nil {
 			continue
@@ -83,12 +80,11 @@ func (s *Service) conditionalAccessBlocked(r *http.Request, clientID string) boo
 		if !caClientIncluded(cond, clientID) {
 			continue
 		}
-		applied = true
 		if !caUserAgentAllowed(cond, ua) {
 			return true
 		}
 	}
-	return sawEnabled && !applied
+	return false
 }
 
 func caClientIncluded(cond map[string]any, clientID string) bool {

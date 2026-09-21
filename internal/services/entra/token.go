@@ -112,8 +112,44 @@ func (s *Service) tokenClientCredentials(w http.ResponseWriter, r *http.Request)
 		azerrors.WriteOAuth(w, http.StatusBadRequest, "invalid_request", "client_id is required")
 		return
 	}
+	if assertion == "" {
+		secret := strings.TrimSpace(r.Form.Get("client_secret"))
+		if secret == "" {
+			azerrors.WriteOAuth(w, http.StatusUnauthorized, "invalid_client", "AADSTS7000218: The request body must contain the following parameter: 'client_assertion' or 'client_secret'.")
+			return
+		}
+		ok, err := s.clientSecretMatches(clientID, secret)
+		if err != nil {
+			azerrors.WriteOAuth(w, http.StatusInternalServerError, "server_error", err.Error())
+			return
+		}
+		if !ok {
+			azerrors.WriteOAuth(w, http.StatusUnauthorized, "invalid_client", "AADSTS7000215: Invalid client secret provided.")
+			return
+		}
+	}
 	s.recordServicePrincipalSignIn(r, clientID, s.tokenAudience(r))
 	s.writeToken(w, r, clientID, s.tokenAudience(r), false)
+}
+
+func (s *Service) clientSecretMatches(clientID, secret string) (bool, error) {
+	ids := []string{clientID}
+	if obj, appID, _, ok, err := s.Store.ResolveEntraApp(s.appTenant(), clientID); err != nil {
+		return false, err
+	} else if ok {
+		ids = append(ids, obj, appID)
+	}
+	if sp, ok, err := s.Store.GetServicePrincipal(clientID); err != nil {
+		return false, err
+	} else if ok {
+		ids = append(ids, sp.ID, sp.AppID)
+		if obj, appID, _, found, err := s.Store.ResolveEntraApp(s.appTenant(), sp.AppID); err != nil {
+			return false, err
+		} else if found {
+			ids = append(ids, obj, appID)
+		}
+	}
+	return s.Store.PasswordHashExists(ids, authn.HashToken(secret))
 }
 
 func (s *Service) tokenPassword(w http.ResponseWriter, r *http.Request) {

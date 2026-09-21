@@ -50,7 +50,8 @@ func (s *Service) verifyFederatedAssertion(w http.ResponseWriter, r *http.Reques
 		azerrors.WriteOAuth(w, http.StatusUnauthorized, "invalid_client", "federated assertion signature is invalid")
 		return "", false
 	}
-	fic, ok, err := s.Store.MatchFIC(iss, aud, claims)
+	appIDs := s.federatedMatchAppIDs(clientID)
+	fic, ok, err := s.Store.MatchFIC(iss, aud, claims, appIDs...)
 	if err != nil {
 		azerrors.WriteOAuth(w, http.StatusInternalServerError, "server_error", err.Error())
 		return "", false
@@ -75,6 +76,24 @@ func (s *Service) verifyFederatedAssertion(w http.ResponseWriter, r *http.Reques
 		return clientID, true
 	}
 	return fic.AppObjectID, true
+}
+
+func (s *Service) federatedMatchAppIDs(clientID string) []string {
+	clientID = strings.TrimSpace(clientID)
+	if clientID == "" {
+		return nil
+	}
+	ids := []string{clientID}
+	if obj, appID, _, ok, err := s.Store.ResolveEntraApp(s.appTenant(), clientID); err == nil && ok {
+		ids = append(ids, obj, appID)
+	}
+	if sp, ok, err := s.Store.GetServicePrincipal(clientID); err == nil && ok {
+		ids = append(ids, sp.ID, sp.AppID)
+		if obj, appID, _, found, err := s.Store.ResolveEntraApp(s.appTenant(), sp.AppID); err == nil && found {
+			ids = append(ids, obj, appID)
+		}
+	}
+	return ids
 }
 
 func (s *Service) verifyPrivateKeyJWT(w http.ResponseWriter, r *http.Request, clientID, assertion, iss, sub, aud string) (string, bool) {

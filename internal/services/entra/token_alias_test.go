@@ -30,12 +30,14 @@ func TestTokenAliasesDeviceRefreshAndWIF(t *testing.T) {
 	mux := http.NewServeMux()
 	svc.Mount(mux)
 
+	secret := addClientSecret(t, st, config.DefaultTenantID, "sp-lab-1")
+	form := "grant_type=client_credentials&client_id=sp-lab-1&client_secret=" + url.QueryEscape(secret) + "&scope=https://management.azure.com/.default"
 	for _, path := range []string{
 		"/common/oauth2/v2.0/token",
 		"/organizations/oauth2/v2.0/token",
 		"/" + config.DefaultTenantID + "/oauth2/token",
 	} {
-		rec := tokenPOST(t, mux, path, "grant_type=client_credentials&client_id=sp-lab-1&scope=https://management.azure.com/.default")
+		rec := tokenPOST(t, mux, path, form)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("%s status=%d body=%s", path, rec.Code, rec.Body.String())
 		}
