@@ -66,8 +66,8 @@ non-loopback listen.
 - Built-in GUIDs include Owner, Contributor, Reader, Log Analytics Reader,
   Monitoring Reader, Log Analytics Data Reader, AcrPull, and Event Hubs Data
   Receiver / Data Owner. Contributor cannot mutate role assignments. Reader
-  is read-only plus workspace query and Resource Graph. AcrPull does not
-  start Registry V2.
+  is read-only plus workspace query and Resource Graph. AcrPull grants
+  Registry V2 pull on `/v2/` and denies push.
 
 ## Secrets at rest
 

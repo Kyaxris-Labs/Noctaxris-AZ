@@ -42,7 +42,7 @@ Built-in GUIDs the evaluator maps (full `/providers/Microsoft.Authorization/role
 | Log Analytics Reader | `73c42c96-874c-492b-b04d-ab87d138a893` (also `73c42c96-874c-492b-b04d-ab87d988a1e9`) | same read/query set |
 | Monitoring Reader | `43d0d8ad-25c7-4714-9337-8ba259a9fe05` | `*/read` plus workspace search/query |
 | Log Analytics Data Reader | `3b03c2da-16b3-4a49-8834-0f8130efdd3b` | workspace read/query only |
-| AcrPull | `7f951dda-4ed3-4680-a7ca-43fe172d538d` | `Microsoft.ContainerRegistry/registries` read/pull. Registry V2 docker pull is not implemented |
+| AcrPull | `7f951dda-4ed3-4680-a7ca-43fe172d538d` | `Microsoft.ContainerRegistry/registries` read/pull. Registry V2 pull on `/v2/`; push denied |
 | Azure Event Hubs Data Receiver | `a638d3c7-ad44-4d07-a2c2-6d98be95d4e5` | Event Hubs receive/read data plane |
 
 ## Not implemented
@@ -51,7 +51,6 @@ Built-in GUIDs the evaluator maps (full `/providers/Microsoft.Authorization/role
 - Deny assignments
 - PIM eligible / active assignment schedules
 - Conditional Access integration
-- ACR Registry V2 `/v2/` pull (nested engine). AcrPull is stored for ARM/read mapping only
 
 ## Emulator limits
 

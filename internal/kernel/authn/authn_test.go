@@ -341,6 +341,22 @@ func TestAudienceAllowAndHashLookup(t *testing.T) {
 	if !p.AllowsARM() || p.AllowsGraph() {
 		t.Fatalf("hash lookup skipped aud: %+v", p)
 	}
+	reg := authn.Principal{ID: "u", Audiences: []string{authn.AudienceACR}}
+	if !reg.AllowsRegistry() || reg.AllowsARM() || reg.AllowsGraph() {
+		t.Fatal("acr aud")
+	}
+	if !(authn.Principal{ID: "opaque"}).AllowsRegistry() {
+		t.Fatal("opaque hashed token")
+	}
+	if (authn.Principal{ID: "u", Audiences: []string{authn.AudienceGraph}}).AllowsRegistry() {
+		t.Fatal("graph must not registry")
+	}
+	if !authn.IsRegistryDataPath("/v2/") || !authn.IsRegistryDataPath("/v2") || !authn.IsRegistryDataPath("/oauth2/token") {
+		t.Fatal("registry data path")
+	}
+	if authn.IsRegistryDataPath("/subscriptions/x") || authn.IsPublicPath("/v2/") {
+		t.Fatal("v2 is challenge-handled, not directory public")
+	}
 	if _, err := a.AuthenticateToken("not.a.jwt"); err != authn.ErrUnauthenticated {
 		t.Fatalf("unparseable jwt on hash hit: %v", err)
 	}

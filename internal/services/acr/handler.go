@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authz"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/store"
@@ -15,20 +17,33 @@ import (
 const providerKey = "Microsoft.ContainerRegistry/registries"
 const armType = "Microsoft.ContainerRegistry/registries"
 
-// Handler serves Microsoft.ContainerRegistry/registries ARM lite.
+// Handler serves Microsoft.ContainerRegistry/registries ARM lite and Registry V2.
 type Handler struct {
-	Store *store.Store
-	Auth  *authn.Authenticator
-	Authz *authz.Evaluator
+	Store          *store.Store
+	Auth           *authn.Authenticator
+	Authz          *authz.Evaluator
+	SubscriptionID string
 }
 
-// Register mounts routes.
+// Register mounts ARM CRUD and Registry V2 data-plane routes.
 func (h *Handler) Register(mux *http.ServeMux) {
 	base := "/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.ContainerRegistry/registries"
 	mux.HandleFunc("PUT "+base+"/{name}", h.put)
 	mux.HandleFunc("GET "+base+"/{name}", h.get)
 	mux.HandleFunc("DELETE "+base+"/{name}", h.del)
 	mux.HandleFunc("GET "+base, h.list)
+	mux.HandleFunc("/v2/", h.serveV2)
+	mux.HandleFunc("GET /v2", h.serveV2)
+	mux.HandleFunc("HEAD /v2", h.serveV2)
+	mux.HandleFunc("GET /oauth2/token", h.oauth2Token)
+	mux.HandleFunc("POST /oauth2/token", h.oauth2Token)
+}
+
+func (h *Handler) defaultSubscription() string {
+	if h != nil && strings.TrimSpace(h.SubscriptionID) != "" {
+		return strings.TrimSpace(h.SubscriptionID)
+	}
+	return config.DefaultSubscriptionID
 }
 
 func (h *Handler) put(w http.ResponseWriter, r *http.Request) {

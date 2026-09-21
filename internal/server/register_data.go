@@ -46,5 +46,5 @@ func (s *Server) registerData() {
 	(&azuresql.Handler{Store: s.store, Auth: s.authn, Authz: s.authz}).Register(s.mux)
 	(&postgres.Handler{Store: s.store, Auth: s.authn, Authz: s.authz}).Register(s.mux)
 	(&rediscache.Handler{Store: s.store, Auth: s.authn, Authz: s.authz}).Register(s.mux)
-	(&acr.Handler{Store: s.store, Auth: s.authn, Authz: s.authz}).Register(s.mux)
+	(&acr.Handler{Store: s.store, Auth: s.authn, Authz: s.authz, SubscriptionID: s.cfg.SubscriptionID}).Register(s.mux)
 }

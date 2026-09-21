@@ -167,8 +167,8 @@ Open the service matrix for detailed actions and gaps. Full notes and CLI smoke:
     </tr>
     <tr>
       <td>ACR</td>
-      <td>Registry ARM + connection theatre.</td>
-      <td>Registry V2 without nested engine.</td>
+      <td>Registry ARM CRUD; Registry V2 blobs/manifests on <code>:4599</code> (SQLite, no DinD); AcrPull pull-only.</td>
+      <td><code>_catalog</code>; chunked PATCH uploads; host docker.sock.</td>
     </tr>
     <tr>
       <td rowspan="3" align="center" valign="middle">Messaging</td>

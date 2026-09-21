@@ -1,6 +1,6 @@
 package store
 
-const schemaVersion = 4
+const schemaVersion = 5
 
 const schema = `
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -563,5 +563,26 @@ CREATE TABLE IF NOT EXISTS diagnostic_settings (
   name TEXT NOT NULL,
   workspace_id TEXT NOT NULL DEFAULT '',
   properties_json TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS acr_blobs (
+  digest TEXT PRIMARY KEY,
+  content BLOB NOT NULL,
+  content_type TEXT NOT NULL DEFAULT 'application/octet-stream'
+);
+
+CREATE TABLE IF NOT EXISTS acr_uploads (
+  uuid TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  content BLOB NOT NULL DEFAULT X''
+);
+
+CREATE TABLE IF NOT EXISTS acr_manifests (
+  name TEXT NOT NULL,
+  reference TEXT NOT NULL,
+  digest TEXT NOT NULL,
+  content BLOB NOT NULL,
+  media_type TEXT NOT NULL DEFAULT 'application/vnd.docker.distribution.manifest.v2+json',
+  PRIMARY KEY (name, reference)
 );
 `

@@ -15,6 +15,10 @@ const (
 	AudienceARM = "https://management.azure.com"
 	// AudienceARMLegacy is the ARM management.core resource.
 	AudienceARMLegacy = "https://management.core.windows.net"
+	// AudienceACR is the Azure Container Registry data-plane resource.
+	AudienceACR = "https://containerregistry.azure.net"
+	// AudienceACRService is the Registry V2 WWW-Authenticate service name.
+	AudienceACRService = "containerregistry.azure.net"
 )
 
 // NormalizeAudience trims space and a trailing slash for resource comparison.
@@ -30,6 +34,8 @@ func audienceKind(aud string) string {
 		return "aadgraph"
 	case NormalizeAudience(AudienceARM), NormalizeAudience(AudienceARMLegacy):
 		return "arm"
+	case NormalizeAudience(AudienceACR), NormalizeAudience(AudienceACRService):
+		return "acr"
 	default:
 		return ""
 	}
@@ -99,4 +105,27 @@ func (p Principal) AllowsARM() bool {
 		}
 	}
 	return true
+}
+
+// AllowsRegistry reports whether p may call Registry V2 / oauth2 token theatre.
+// Root skips audience. ARM directory Bearer is accepted (same token used for ARM).
+// ACR resource audiences are accepted. Opaque hashed tokens with no aud (lab
+// oauth2 mint that is not a JWT) are accepted. Graph and issuer-as-aud are denied.
+func (p Principal) AllowsRegistry() bool {
+	if p.IsRoot || p.AllowsARM() {
+		return true
+	}
+	auds := p.normalizedAudiences()
+	if len(auds) == 0 {
+		return true
+	}
+	if p.audienceMatchesIssuer() {
+		return false
+	}
+	for _, a := range auds {
+		if audienceKind(a) == "acr" {
+			return true
+		}
+	}
+	return false
 }

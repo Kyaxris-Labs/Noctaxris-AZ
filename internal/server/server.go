@@ -147,7 +147,7 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 			r.URL = &u
 		}
 
-		if authn.IsPublicPath(r.URL.Path) {
+		if authn.IsPublicPath(r.URL.Path) || authn.IsRegistryDataPath(r.URL.Path) {
 			next.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}

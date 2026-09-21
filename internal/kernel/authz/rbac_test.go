@@ -184,6 +184,12 @@ func TestEvaluateBuiltInQueryAndGraphActions(t *testing.T) {
 	if ok, err := ev.Evaluate("acr", false, "Microsoft.ContainerRegistry/registries/pull/read", scope); err != nil || !ok {
 		t.Fatal("acr pull")
 	}
+	if ok, err := ev.Evaluate("acr", false, "Microsoft.ContainerRegistry/registries/write", scope); err != nil || ok {
+		t.Fatal("acr pull must not write")
+	}
+	if ok, err := ev.Evaluate("acr", false, "Microsoft.ContainerRegistry/registries/push/write", scope); err != nil || ok {
+		t.Fatal("acr pull must not push")
+	}
 	if ok, err := ev.Evaluate("acr", false, "Microsoft.Storage/storageAccounts/read", scope); err != nil || ok {
 		t.Fatal("acr pull must not grant storage")
 	}

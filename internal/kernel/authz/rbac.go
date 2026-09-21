@@ -209,7 +209,7 @@ const (
 	RoleLogAnalyticsReader = "/providers/Microsoft.Authorization/roleDefinitions/" + guidLogAnalyticsReader
 	// RoleMonitoringReader is Microsoft.Authorization role 43d0d8ad-25c7-4714-9337-8ba259a9fe05.
 	RoleMonitoringReader = "/providers/Microsoft.Authorization/roleDefinitions/" + guidMonitoringReader
-	// RoleAcrPull is recognized for registries/read and pull/read. Registry V2 docker pull is not implemented.
+	// RoleAcrPull grants registries/read and registries/pull/read (Registry V2 pull, not push).
 	RoleAcrPull = "/providers/Microsoft.Authorization/roleDefinitions/" + guidAcrPull
 	// RoleEventHubsDataReceiver grants Event Hubs receive/read data-plane actions.
 	RoleEventHubsDataReceiver = "/providers/Microsoft.Authorization/roleDefinitions/" + guidEventHubsDataReceiver

@@ -76,3 +76,12 @@ func IsPublicPath(path string) bool {
 			jwksPath.MatchString(path)
 	}
 }
+
+// IsRegistryDataPath reports Registry V2 and ACR oauth2 token routes that issue
+// their own 401 WWW-Authenticate challenge instead of the ARM envelope.
+func IsRegistryDataPath(path string) bool {
+	if path == "/oauth2/token" {
+		return true
+	}
+	return path == "/v2" || strings.HasPrefix(path, "/v2/")
+}

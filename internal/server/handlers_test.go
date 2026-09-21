@@ -178,6 +178,17 @@ func TestNewRegistersMux(t *testing.T) {
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("ready %d", res.StatusCode)
 	}
+	v2, err := http.Get(hs.URL + "/v2/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	v2.Body.Close()
+	if v2.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("v2 unauth %d", v2.StatusCode)
+	}
+	if !strings.Contains(v2.Header.Get("WWW-Authenticate"), `service="containerregistry.azure.net"`) {
+		t.Fatalf("v2 challenge %q", v2.Header.Get("WWW-Authenticate"))
+	}
 }
 
 func TestSmokeCoreARMPaths(t *testing.T) {
