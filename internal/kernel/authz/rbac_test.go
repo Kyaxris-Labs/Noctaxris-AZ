@@ -157,11 +157,14 @@ func TestEvaluateBuiltInQueryAndGraphActions(t *testing.T) {
 	query := "Microsoft.OperationalInsights/workspaces/query/read"
 	queryAction := "Microsoft.OperationalInsights/workspaces/query/action"
 	arg := "Microsoft.ResourceGraph/resources/read"
-	if ok, err := ev.Evaluate("reader", false, query, scope); err != nil || !ok {
-		t.Fatal("reader query/read")
+	if ok, err := ev.Evaluate("reader", false, query, scope); err != nil || ok {
+		t.Fatal("reader must not query/read")
 	}
-	if ok, err := ev.Evaluate("reader", false, queryAction, scope); err != nil || !ok {
-		t.Fatal("reader query/action")
+	if ok, err := ev.Evaluate("reader", false, queryAction, scope); err != nil || ok {
+		t.Fatal("reader must not query/action")
+	}
+	if ok, err := ev.Evaluate("mon", false, query, scope); err != nil || ok {
+		t.Fatal("monitoring reader must not query")
 	}
 	if ok, err := ev.Evaluate("reader", false, arg, scope); err != nil || !ok {
 		t.Fatal("reader ARG")
@@ -198,5 +201,16 @@ func TestEvaluateBuiltInQueryAndGraphActions(t *testing.T) {
 	}
 	if ok, err := ev.Evaluate("eh", false, "Microsoft.Storage/storageAccounts/read", scope); err != nil || ok {
 		t.Fatal("event hubs receiver must not grant storage")
+	}
+	aliasStore := memStore{byScope: map[string][]authz.Assignment{
+		scope: {{
+			PrincipalID:      "eh-alias",
+			RoleDefinitionID: "/providers/Microsoft.Authorization/roleDefinitions/a638d3c7-ad44-4d07-a2c2-6d98be95d4e5",
+			Scope:            scope,
+		}},
+	}}
+	aliasEv := &authz.Evaluator{Assignments: aliasStore}
+	if ok, err := aliasEv.Evaluate("eh-alias", false, "Microsoft.EventHub/namespaces/eventhubs/receive/action", scope); err != nil || !ok {
+		t.Fatal("legacy Event Hubs Data Receiver GUID alias")
 	}
 }

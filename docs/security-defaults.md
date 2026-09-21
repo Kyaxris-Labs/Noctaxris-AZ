@@ -37,7 +37,7 @@ Noctaxris-AZ fails closed. Defaults favor a loopback lab on a single laptop.
 |---------|------------|
 | ARM / RBAC / Key Vault / Monitor / App Configuration / Functions | `Authorization: Bearer <token>` |
 | Storage blob / queue / table | Shared Key HMAC (`SharedKey <account>:<sig>`), SAS query HMAC (`sig` / `se` / `sp` against the account key), or root Bearer |
-| Event Hubs HTTP messages | Root Bearer only (send/receive). Captured-events list/get: root, or Reader / Event Hubs Data Receiver on the namespace resource group |
+| Event Hubs HTTP messages | Root Bearer only (send/receive). Captured-events list/get: root or Event Hubs Data Receiver / Data Owner |
 | Service Bus AMQP lite | Connection string / SAS |
 
 - Root token comes from `NOCTAXRIS_AZ_ROOT_ACCESS_TOKEN` and maps to `NOCTAXRIS_AZ_ROOT_CLIENT_ID`.
@@ -66,7 +66,9 @@ non-loopback listen.
 - Built-in GUIDs include Owner, Contributor, Reader, Log Analytics Reader,
   Monitoring Reader, Log Analytics Data Reader, AcrPull, and Event Hubs Data
   Receiver / Data Owner. Contributor cannot mutate role assignments. Reader
-  is read-only plus workspace query and Resource Graph. AcrPull grants
+  is ARM read-only plus Resource Graph. Workspace KQL is Log Analytics Reader
+  or Data Reader. Event Hubs captured-events require Data Receiver or Data Owner
+  (`receive/action`). AcrPull grants
   Registry V2 pull on `/v2/` and denies push.
 
 ## Secrets at rest

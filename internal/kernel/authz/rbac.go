@@ -138,11 +138,13 @@ func roleGrants(roleDefID, action string) bool {
 		return !strings.Contains(act, "authorization/roleassignments")
 	case roleHasGUID(role, guidLogAnalyticsDataReader):
 		return isWorkspaceQueryAction(act) || act == "microsoft.operationalinsights/workspaces/read"
+	case isLogAnalyticsReaderRole(role):
+		return isReadLikeAction(act) || isWorkspaceQueryAction(act)
 	case roleHasGUID(role, guidAcrPull):
 		return isAcrPullAction(act)
-	case roleHasGUID(role, guidEventHubsDataOwner):
+	case roleHasGUID(role, guidEventHubsDataOwner) || roleHasGUID(role, guidEventHubsDataOwnerAlias):
 		return strings.Contains(act, "eventhub")
-	case roleHasGUID(role, guidEventHubsDataReceiver):
+	case roleHasGUID(role, guidEventHubsDataReceiver) || roleHasGUID(role, guidEventHubsDataReceiverAlias):
 		return isEventHubsReceiveAction(act)
 	case isReaderLikeRole(role):
 		return isReadLikeAction(act)
@@ -151,24 +153,34 @@ func roleGrants(roleDefID, action string) bool {
 	}
 }
 
+func isLogAnalyticsReaderRole(role string) bool {
+	if roleHasGUID(role, guidLogAnalyticsReader) || roleHasGUID(role, guidLogAnalyticsReaderAlias) {
+		return true
+	}
+	return strings.Contains(role, "log analytics reader")
+}
+
 func isReaderLikeRole(role string) bool {
-	if roleHasGUID(role, guidReader) ||
-		roleHasGUID(role, guidLogAnalyticsReader) ||
-		roleHasGUID(role, guidLogAnalyticsReaderAlias) ||
-		roleHasGUID(role, guidMonitoringReader) {
+	if isLogAnalyticsReaderRole(role) {
+		return false
+	}
+	if roleHasGUID(role, guidReader) || roleHasGUID(role, guidMonitoringReader) {
 		return true
 	}
 	if role == "reader" || strings.HasSuffix(role, "/reader") {
 		return true
 	}
-	return strings.Contains(role, "log analytics reader") || strings.Contains(role, "monitoring reader")
+	return strings.Contains(role, "monitoring reader")
 }
 
 func isReadLikeAction(act string) bool {
+	if isWorkspaceQueryAction(act) {
+		return false
+	}
 	if strings.HasSuffix(act, "/read") || strings.Contains(act, "/read/") || strings.Contains(act, "/read") {
 		return true
 	}
-	return isWorkspaceQueryAction(act) || isResourceGraphRead(act)
+	return isResourceGraphRead(act)
 }
 
 func isWorkspaceQueryAction(act string) bool {
@@ -225,7 +237,9 @@ const (
 	guidLogAnalyticsReaderAlias = "73c42c96-874c-492b-b04d-ab87d988a1e9"
 	guidMonitoringReader        = "43d0d8ad-25c7-4714-9337-8ba259a9fe05"
 	guidLogAnalyticsDataReader  = "3b03c2da-16b3-4a49-8834-0f8130efdd3b"
-	guidAcrPull                 = "7f951dda-4ed3-4680-a7ca-43fe172d538d"
-	guidEventHubsDataOwner      = "f526a384-b744-4348-a86b-d3d1f7ce3260"
-	guidEventHubsDataReceiver   = "a638d3c7-ad44-4d07-a2c2-6d98be95d4e5"
+	guidAcrPull                      = "7f951dda-4ed3-4680-a7ca-43fe172d538d"
+	guidEventHubsDataOwner           = "f526a384-b230-433a-b45c-95f59c4a2dec"
+	guidEventHubsDataOwnerAlias      = "f526a384-b744-4348-a86b-d3d1f7ce3260"
+	guidEventHubsDataReceiver        = "a638d3c7-ab3a-418d-83e6-5f17a39d4fde"
+	guidEventHubsDataReceiverAlias   = "a638d3c7-ad44-4d07-a2c2-6d98be95d4e5"
 )

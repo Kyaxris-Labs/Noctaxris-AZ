@@ -137,14 +137,8 @@ func TestLogAnalyticsQueryWorkspaceReader(t *testing.T) {
 		bytes.NewReader([]byte(`{"query":"AzureActivity | take 5"}`)))
 	qrec := httptest.NewRecorder()
 	readerMux.ServeHTTP(qrec, q)
-	if qrec.Code != http.StatusOK {
-		t.Fatalf("reader query %d %s", qrec.Code, qrec.Body.String())
-	}
-	if !strings.Contains(qrec.Body.String(), "InjectedWrite") {
-		t.Fatalf("workspace rows missing: %s", qrec.Body.String())
-	}
-	if strings.Contains(qrec.Body.String(), "DefaultOnly") {
-		t.Fatalf("default workspace leaked: %s", qrec.Body.String())
+	if qrec.Code != http.StatusForbidden {
+		t.Fatalf("subscription Reader query expected 403, got %d %s", qrec.Code, qrec.Body.String())
 	}
 
 	denyMux := http.NewServeMux()

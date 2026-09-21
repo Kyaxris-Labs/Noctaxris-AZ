@@ -275,13 +275,33 @@ func TestEventHubsCapturedEventsAuthorizedReader(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer capRes.Body.Close()
-	if capRes.StatusCode != http.StatusOK {
-		t.Fatalf("reader capturedEvents %d", capRes.StatusCode)
+	capRes.Body.Close()
+	if capRes.StatusCode != http.StatusForbidden {
+		t.Fatalf("reader capturedEvents expected 403, got %d", capRes.StatusCode)
 	}
-	capBody, _ := io.ReadAll(capRes.Body)
+
+	if err := st.UpsertRoleAssignment(authz.Assignment{
+		ID:               "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Authorization/roleAssignments/eh-recv",
+		Scope:            "/subscriptions/s/resourceGroups/rg",
+		RoleDefinitionID: authz.RoleEventHubsDataReceiver,
+		PrincipalID:      readerID,
+		PrincipalType:    "User",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	recvReq, _ := http.NewRequest(http.MethodGet, srv.URL+"/eventhubs/ns1/hubs/hub1/capturedEvents", nil)
+	recvReq.Header.Set("Authorization", "Bearer directory-token")
+	recvRes, err := http.DefaultClient.Do(recvReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer recvRes.Body.Close()
+	if recvRes.StatusCode != http.StatusOK {
+		t.Fatalf("data receiver capturedEvents %d", recvRes.StatusCode)
+	}
+	capBody, _ := io.ReadAll(recvRes.Body)
 	if !strings.Contains(string(capBody), "captured-lab") {
-		t.Fatalf("reader capture body %s", capBody)
+		t.Fatalf("data receiver capture body %s", capBody)
 	}
 
 	outsider := &eventhubs.Handler{

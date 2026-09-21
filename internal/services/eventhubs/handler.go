@@ -212,18 +212,13 @@ func (h *Handler) requireCaptureRead(w http.ResponseWriter, r *http.Request) boo
 		return false
 	}
 	scope := "/subscriptions/" + sub + "/resourceGroups/" + rg
-	for _, action := range []string{
-		"Microsoft.EventHub/namespaces/eventhubs/read",
-		"Microsoft.EventHub/namespaces/eventhubs/receive/action",
-	} {
-		allowed, err := h.Authz.Evaluate(p.ID, p.IsRoot, action, scope)
-		if err != nil {
-			azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
-			return false
-		}
-		if allowed {
-			return true
-		}
+	allowed, err := h.Authz.Evaluate(p.ID, p.IsRoot, "Microsoft.EventHub/namespaces/eventhubs/receive/action", scope)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return false
+	}
+	if allowed {
+		return true
 	}
 	azerrors.Forbidden(w, "")
 	return false

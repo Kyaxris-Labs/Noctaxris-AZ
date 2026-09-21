@@ -80,7 +80,7 @@ This is not Azure Monitor KQL. Joins, `ago()`, `summarize`, `extend`, and the re
 - `Microsoft.Insights/eventtypes/values/read`
 - `Microsoft.Insights/metrics/read` and `.../write`
 - `Microsoft.Insights/diagnosticSettings/read`, `.../write`, `.../delete`
-- `Microsoft.OperationalInsights/workspaces/read`, `.../write`, and `.../query/read` (the lab also treats `query/action` as the same grant). Query is authorized on the workspace ARM id when that workspace exists, otherwise on the lab subscription. Injected rows are queried by the workspace name in the path, not only `default`.
+- `Microsoft.OperationalInsights/workspaces/read`, `.../write`, and `.../query/read` (the lab also treats `query/action` as the same grant). Query is Log Analytics Reader or Data Reader (or Owner/Contributor), not subscription Reader. Authorize on the workspace ARM id when that workspace exists, otherwise on the lab subscription. Injected rows are queried by the workspace name in the path, not only `default`.
 - Lab inject, clock, BulkSeed, and `POST /loganalytics/{workspace}/ingest/{table}`: env flag plus Bearer root (not RBAC). Ingest is off unless `NOCTAXRIS_AZ_LOGS_INJECT=1`.
 
 ## Detailed actions

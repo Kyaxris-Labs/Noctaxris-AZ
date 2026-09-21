@@ -27,7 +27,7 @@ All settings use the `NOCTAXRIS_AZ_*` prefix.
 
 ## HTTP auth
 
-Discovery, JWKS, token, device code, lab OIDC discovery/JWKS/token, health/ready/version, and IMDS token skip Bearer. `POST /provisioningwebservice.svc` does not; send a directory Bearer (`aud` `https://graph.microsoft.com` or `https://graph.windows.net`). Graph rejects tokens whose `aud` is ARM (`https://management.azure.com`, `https://management.core.windows.net`) or the token `iss`. ARM control-plane routes reject Graph `aud` (HTTP 403 `InvalidAuthenticationTokenAudience`). Key Vault data plane (`https://vault.azure.net`), Storage Shared Key/SAS, table/blob, Event Hubs HTTP send/receive (root Bearer) and captured-events (root or Reader), Graph, and SOAP do not require ARM `aud`. Root Bearer skips audience.
+Discovery, JWKS, token, device code, lab OIDC discovery/JWKS/token, health/ready/version, and IMDS token skip Bearer. `POST /provisioningwebservice.svc` does not; send a directory Bearer (`aud` `https://graph.microsoft.com` or `https://graph.windows.net`). Graph rejects tokens whose `aud` is ARM (`https://management.azure.com`, `https://management.core.windows.net`) or the token `iss`. ARM control-plane routes reject Graph `aud` (HTTP 403 `InvalidAuthenticationTokenAudience`). Key Vault data plane (`https://vault.azure.net`), Storage Shared Key/SAS, table/blob, Event Hubs HTTP send/receive (root Bearer) and captured-events (root or Event Hubs Data Receiver / Data Owner), Graph, and SOAP do not require ARM `aud`. Root Bearer skips audience.
 
 ## Compose
 

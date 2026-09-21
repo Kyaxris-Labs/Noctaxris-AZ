@@ -6,7 +6,7 @@ Status: **lab**
 
 - ARM namespace, hub, and consumer group routes use Bearer plus RBAC (`Microsoft.EventHub/...`)
 - HTTP `/eventhubs/{ns}/hubs/{hub}/messages` send/receive stay root Bearer. Other directory tokens get HTTP 403. Missing Bearer is 401.
-- `GET /eventhubs/{ns}/hubs/{hub}/capturedEvents` (and `.../capturedEvents/{id}`) allows root, or a principal with Reader (or Event Hubs Data Receiver) on the namespace resource group. Unauthorized directory tokens stay 403.
+- `GET /eventhubs/{ns}/hubs/{hub}/capturedEvents` (and `.../capturedEvents/{id}`) allows root or Event Hubs Data Receiver / Data Owner (`receive/action`) on the namespace resource group. Subscription Reader is denied. Unauthorized directory tokens stay 403.
 
 ## Detailed actions
 

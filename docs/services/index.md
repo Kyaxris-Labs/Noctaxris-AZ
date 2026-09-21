@@ -17,7 +17,7 @@ Implemented lab surface on `127.0.0.1:4599` (HTTP) and `127.0.0.1:5672` (AMQP li
 | Redis | lab | [rediscache.md](rediscache.md) | Cache ARM + theatre |
 | ACR | lab | [acr.md](acr.md) | Registry ARM + V2 on :4599; AcrPull pull-only |
 | Service Bus | lab | [servicebus.md](servicebus.md) | Queues/topics + AMQP lite |
-| Event Hubs | lab | [eventhubs.md](eventhubs.md) | Namespaces/hubs + HTTP messages (root); captured-events list/get for Reader |
+| Event Hubs | lab | [eventhubs.md](eventhubs.md) | Namespaces/hubs + HTTP messages (root); captured-events list/get for Data Receiver / Data Owner |
 | Event Grid | lab | [eventgrid.md](eventgrid.md) | Topics + allowlisted egress delivery |
 | Virtual Network | lab | [network.md](network.md) | VNet ARM lite |
 | NSG / NIC | lab | [nsg.md](nsg.md) / [nic.md](nic.md) | ARM lite |
@@ -28,7 +28,7 @@ Implemented lab surface on `127.0.0.1:4599` (HTTP) and `127.0.0.1:5672` (AMQP li
 | Azure Functions | lab | [functions.md](functions.md) | ARM + mock invoke |
 | App Service / Container Apps / Logic / APIM | lab | [appservice.md](appservice.md) / [containerapps.md](containerapps.md) / [logic.md](logic.md) / [apim.md](apim.md) | Control-plane lite |
 | Front Door / Email / OpenAI / SignalR | lab | [frontdoor.md](frontdoor.md) / [email.md](email.md) / [openai.md](openai.md) / [signalr.md](signalr.md) | Edge/AI theatre |
-| Monitor / Log Analytics | lab | [monitor.md](monitor.md) | Activity Log (`$top` default 1000) + workspace query for Reader + KQL subset + diagnostic settings store |
+| Monitor / Log Analytics | lab | [monitor.md](monitor.md) | Activity Log (`$top` default 1000) + workspace query for Log Analytics Reader + KQL subset + diagnostic settings store |
 
 Default tenant: `00000000-0000-0000-0000-000000000001` (`NOCTAXRIS_AZ_TENANT_ID`).
 Default subscription: `00000000-0000-0000-0000-000000000002` (`NOCTAXRIS_AZ_SUBSCRIPTION_ID`).

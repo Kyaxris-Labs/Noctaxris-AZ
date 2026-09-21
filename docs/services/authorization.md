@@ -38,12 +38,13 @@ Built-in GUIDs the evaluator maps (full `/providers/Microsoft.Authorization/role
 |------|------|-----------|
 | Owner | `8e3af657-a8ff-443c-a75c-2fe8c4bcb635` | all actions |
 | Contributor | `b24988ac-6180-42a0-ab88-20f7382dd24c` | all except roleAssignments mutate |
-| Reader | `acdd72a7-3385-48ef-bd42-f606fba81ae7` | `*/read`, workspace query, Resource Graph read |
-| Log Analytics Reader | `73c42c96-874c-492b-b04d-ab87d138a893` (also `73c42c96-874c-492b-b04d-ab87d988a1e9`) | same read/query set |
-| Monitoring Reader | `43d0d8ad-25c7-4714-9337-8ba259a9fe05` | `*/read` plus workspace search/query |
+| Reader | `acdd72a7-3385-48ef-bd42-f606fba81ae7` | ARM `*/read` and Resource Graph read. Not workspace KQL. |
+| Log Analytics Reader | `73c42c96-874c-492b-b04d-ab87d138a893` (also `73c42c96-874c-492b-b04d-ab87d988a1e9`) | ARM `*/read` plus workspace `query/read` and `query/action` |
+| Monitoring Reader | `43d0d8ad-25c7-4714-9337-8ba259a9fe05` | ARM `*/read`. Not workspace KQL. |
 | Log Analytics Data Reader | `3b03c2da-16b3-4a49-8834-0f8130efdd3b` | workspace read/query only |
 | AcrPull | `7f951dda-4ed3-4680-a7ca-43fe172d538d` | `Microsoft.ContainerRegistry/registries` read/pull. Registry V2 pull on `/v2/`; push denied |
-| Azure Event Hubs Data Receiver | `a638d3c7-ad44-4d07-a2c2-6d98be95d4e5` | Event Hubs receive/read data plane |
+| Azure Event Hubs Data Owner | `f526a384-b230-433a-b45c-95f59c4a2dec` (alias `f526a384-b744-4348-a86b-d3d1f7ce3260`) | Event Hubs control and data plane |
+| Azure Event Hubs Data Receiver | `a638d3c7-ab3a-418d-83e6-5f17a39d4fde` (alias `a638d3c7-ad44-4d07-a2c2-6d98be95d4e5`) | Event Hubs receive data plane |
 
 ## Not implemented
 

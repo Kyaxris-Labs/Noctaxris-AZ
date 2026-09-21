@@ -178,7 +178,7 @@ Open the service matrix for detailed actions and gaps. Full notes and CLI smoke:
     </tr>
     <tr>
       <td>Event Hubs</td>
-      <td>Namespaces/hubs/consumer groups; HTTP send/receive root Bearer; captured-events list/get for root or Reader.</td>
+      <td>Namespaces/hubs/consumer groups; HTTP send/receive root Bearer; captured-events list/get for root or Event Hubs Data Receiver / Data Owner.</td>
       <td>Kafka capture to Blob; Schema Registry.</td>
     </tr>
     <tr>
@@ -226,7 +226,7 @@ Open the service matrix for detailed actions and gaps. Full notes and CLI smoke:
     <tr>
       <td align="center" valign="middle">Observe</td>
       <td>Monitor / Log Analytics</td>
-      <td>Activity Log scoped to the path subscription (`$top` default 1000); metrics theatre; workspace query for Reader; ingest behind `NOCTAXRIS_AZ_LOGS_INJECT`; diagnostic settings store.</td>
+      <td>Activity Log scoped to the path subscription (`$top` default 1000); metrics theatre; workspace query for Log Analytics Reader; ingest behind `NOCTAXRIS_AZ_LOGS_INJECT`; diagnostic settings store.</td>
       <td>Diagnostic export pipeline; full KQL; alert evaluation; App Insights ingest.</td>
     </tr>
   </tbody>
