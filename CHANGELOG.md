@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.2.1
+
+Patch after 1.2.0: ROPC password check, device-code approval, Graph directory role gates, IMDS known-identity mint, Key Vault vault audience and data roles, Service Bus SAS and listKeys. Docker Hub: `kyaxris/noctaxris-az` (`1.2.1`, `1.2`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
+
 - ROPC (`grant_type=password`) checks the directory user `password_hash`. Seeded users use `LabAdmin!Pass1` / `LabUser!Pass1`. Missing or mismatched passwords return `invalid_grant` (`AADSTS50126`).
 - Device code issue stores a pending `user_code`. Token exchange returns `authorization_pending` until `POST /device` approves with a directory username and password. Exchange then mints for the approving principal.
 - Graph directory writes (role members, group members, user/device/group patch, application create, Conditional Access create) require matching directory roles (for example Global Administrator or User Administrator), not audience alone. App credential writes stay owner / Application Administrator.
