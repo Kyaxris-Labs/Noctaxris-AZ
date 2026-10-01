@@ -1,11 +1,14 @@
 package httpegress
 
 import (
+	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
+	"time"
 )
 
 const (
@@ -32,10 +35,62 @@ func Allowed(destURL string) error {
 	if !exactAllowlisted(destURL) {
 		return fmt.Errorf("egress: url not in %s", EnvHTTPAllowlist)
 	}
-	if isPrivateOrMetadata(host) {
+	if isPrivateOrMetadataHost(host) {
 		return fmt.Errorf("egress: private/metadata host denied")
 	}
 	return nil
+}
+
+// Client returns an HTTP client that denies redirects and pins dial to non-private IPs.
+func Client(timeout time.Duration) *http.Client {
+	if timeout <= 0 {
+		timeout = 5 * time.Second
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = PinnedDialContext
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: transport,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return fmt.Errorf("egress: redirects are not allowed")
+		},
+	}
+}
+
+// PinnedDialContext resolves addr, rejects unsafe IPs at dial time, and connects to a validated address.
+func PinnedDialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, fmt.Errorf("egress: dial addr: %w", err)
+	}
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		if ip := net.ParseIP(host); ip != nil {
+			ips = []net.IP{ip}
+		} else {
+			return nil, fmt.Errorf("egress: resolve dial host: %w", err)
+		}
+	}
+	if len(ips) == 0 {
+		return nil, fmt.Errorf("egress: no addresses for %s", host)
+	}
+	var dialer net.Dialer
+	var last error
+	for _, ip := range ips {
+		if ipUnsafe(ip) {
+			last = fmt.Errorf("egress: private/metadata address denied")
+			continue
+		}
+		conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
+		if err == nil {
+			return conn, nil
+		}
+		last = err
+	}
+	if last == nil {
+		last = fmt.Errorf("egress: private/metadata address denied")
+	}
+	return nil, last
 }
 
 func egressEnabled() bool {
@@ -65,15 +120,32 @@ func isLabLocal(u *url.URL) bool {
 	return false
 }
 
-func isPrivateOrMetadata(host string) bool {
+func isPrivateOrMetadataHost(host string) bool {
 	if strings.EqualFold(host, "metadata.google.internal") ||
 		strings.EqualFold(host, "169.254.169.254") ||
-		strings.EqualFold(host, "metadata") {
+		strings.EqualFold(host, "metadata") ||
+		strings.EqualFold(host, "metadata.azure.com") {
 		return true
 	}
-	ip := net.ParseIP(host)
-	if ip == nil {
+	if ip := net.ParseIP(host); ip != nil {
+		return ipUnsafe(ip)
+	}
+	ips, err := net.LookupIP(host)
+	if err != nil || len(ips) == 0 {
+		// Unresolvable names are not treated as private here; PinnedDialContext enforces at dial time.
 		return false
 	}
-	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast()
+	for _, ip := range ips {
+		if ipUnsafe(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+func ipUnsafe(ip net.IP) bool {
+	if ip == nil {
+		return true
+	}
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified()
 }

@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 1.2.2
+
+Patch after 1.2.1: exact ARM RBAC scopes, Owner GUID matching, IMDS Host gate, Graph application mutate ownership, Key Vault Secrets Officer and cert version order, Event Hubs capture scoping, Event Grid and cloud-hosts egress gates, Table SAS Create, shared data-plane Bearer audience plus RBAC, App Configuration / Cosmos / AKS data-plane gates. Docker Hub: `kyaxris/noctaxris-az` (`1.2.2`, `1.2`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
+
+- ARM RBAC scope evaluation uses exact assignment scopes along the ancestor chain (no SQL `LIKE` prefix). Sibling resource groups such as `rg` / `rg_prod` no longer share grants. Activity Log and metrics lists escape `LIKE` metacharacters and filter by subscription.
+- Built-in Owner / Contributor match role definition GUIDs only. Display names containing `owner` (for example Storage Blob Data Owner) no longer elevate to ARM Owner. Event Hubs Data Owner is data-plane send/receive/read only (not `Microsoft.EventHub/namespaces/write`).
+- IMDS token mint requires metadata `Host` (`169.254.169.254` / `metadata` / `metadata.azure.com`) for RFC1918 peers, or a loopback/link-local peer. Empty `RemoteAddr` is rejected.
+- Graph Create FIC, application `PATCH`, and application `DELETE` use the same owner / Application Administrator gate as `addPassword` / `addKey`.
+- Key Vault Secrets Officer is secrets-only (not keys/certificates). Soft-delete recover applies the non-exportable certificate private-key gate. Latest certificate version is selected by insert order (`rowid`), matching secrets/keys (not UUID string sort).
+- Event Hubs hubs/messages/capture are keyed by ARM namespace id. Capture list returns only namespaces the caller can receive on.
+- Event Grid webhook delivery denies redirects and uses a dialer that rejects private/metadata addresses after DNS resolve. `httpegress.Allowed` also rejects hostnames that resolve to those addresses.
+- Cloud-hosts TLS enforces `AllowedCloudHost` on Host and SNI.
+- Table SAS Create Table (`PUT` at table depth) requires `sp` Create (`c`) only; Add/Write alone cannot create tables.
+- Shared data-plane Bearer helper (`internal/kernel/azauth`): authenticate, check resource audience, then evaluate Azure RBAC. Wired for Service Bus HTTP messages, Event Grid publish, Cosmos documents, App Configuration KV/flags/snapshots, Functions invoke (ARM aud), Event Hubs capture, Communication email send, and OpenAI chat completions. Graph audience alone is denied.
+- App Configuration data plane requires `aud` `https://azconfig.io` plus App Configuration Data Reader / Data Owner. Classic Reader no longer receives `keyValues/read`. Store DELETE cascades snapshots, snapshot KVs, and feature flags.
+- Cosmos GET account omits `primaryMasterKey`; keys move to `POST .../listKeys`. Document Bearer paths require Cosmos (or ARM) audience plus Cosmos data roles (account key header unchanged).
+- AKS GET/list omit `kubeConfig`. Credentials return only from `listClusterAdminCredential` / `listClusterUserCredential` (Reader denied).
+
 ## 1.2.1
 
 Patch after 1.2.0: ROPC password check, device-code approval, Graph directory role gates, IMDS known-identity mint, Key Vault vault audience and data roles, Service Bus SAS and listKeys. Docker Hub: `kyaxris/noctaxris-az` (`1.2.1`, `1.2`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).

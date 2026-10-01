@@ -38,7 +38,7 @@ func (h *Handler) putSubscription(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) postTopicMessage(w http.ResponseWriter, r *http.Request) {
-	if !h.requireRootOrBearer(w, r) {
+	if !h.requireDataPlane(w, r, "Microsoft.ServiceBus/namespaces/topics/messages/send/action") {
 		return
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
@@ -54,7 +54,7 @@ func (h *Handler) postTopicMessage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) getTopicMessage(w http.ResponseWriter, r *http.Request) {
-	if !h.requireRootOrBearer(w, r) {
+	if !h.requireDataPlane(w, r, "Microsoft.ServiceBus/namespaces/topics/messages/receive/action") {
 		return
 	}
 	body, ok, err := h.Store.DequeueSBTopic(r.PathValue("ns"), r.PathValue("t"), r.PathValue("s"))

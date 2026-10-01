@@ -23,14 +23,14 @@ Optional `?label=` on KV get/put and on snapshot read. Response fields: `key`, `
 
 - ARM store CRUD: token `aud` must be `https://management.azure.com` or `https://management.core.windows.net` (Graph `aud` is HTTP 403 `InvalidAuthenticationTokenAudience`). Root Bearer skips audience.
 - `Microsoft.AppConfiguration/configurationStores/read|write|delete`
-- Data plane KV / feature flags / snapshots: `Microsoft.AppConfiguration/configurationStores/keyValues/read|write` (Bearer; ARM `aud` is not required)
+- Data plane KV / feature flags / snapshots: `aud` `https://azconfig.io` plus App Configuration Data Reader / Data Owner (`keyValues/read|write`). Classic Reader is denied. Graph `aud` is denied.
 
 ## Detailed actions
 
 - Upsert store with `location`; endpoint property points at lab data plane
 - Set and get key-values (label defaults empty)
 - List key-values for a store
-- Delete store removes KV rows
+- Delete store removes KV rows, snapshots, snapshot KVs, and feature flags
 - PUT snapshot copies every current key-value, including labels. Later live PUTs do not change that snapshot. List snapshots. Read by name (`?label=` filters the captured set) or `GET /kv?snapshot=`
 
 ## Not implemented

@@ -9,6 +9,7 @@ import (
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authz"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/azauth"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/store"
 )
 
@@ -175,7 +176,7 @@ func (h *Handler) connectionString(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) postMessage(w http.ResponseWriter, r *http.Request) {
-	if !h.requireRootOrBearer(w, r) {
+	if !h.requireDataPlane(w, r, "Microsoft.ServiceBus/namespaces/queues/messages/send/action") {
 		return
 	}
 	ns := r.PathValue("ns")
@@ -195,7 +196,7 @@ func (h *Handler) postMessage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) getMessage(w http.ResponseWriter, r *http.Request) {
-	if !h.requireRootOrBearer(w, r) {
+	if !h.requireDataPlane(w, r, "Microsoft.ServiceBus/namespaces/queues/messages/receive/action") {
 		return
 	}
 	ns := r.PathValue("ns")
@@ -223,49 +224,26 @@ func amqpEndpoint(addr string) string {
 	return "amqp://" + addr
 }
 
-func (h *Handler) requireRootOrBearer(w http.ResponseWriter, r *http.Request) bool {
-	if h.Auth == nil {
-		azerrors.Unauthenticated(w, "")
-		return false
-	}
-	if _, err := h.Auth.AuthenticateRequest(r); err != nil {
-		azerrors.Unauthenticated(w, "")
-		return false
-	}
-	return true
-}
-
-func (h *Handler) requireBearerARM(w http.ResponseWriter, r *http.Request, action, scope string) bool {
-	if h.Auth == nil {
-		azerrors.Unauthenticated(w, "")
-		return false
-	}
-	p, err := h.Auth.AuthenticateRequest(r)
-	if err != nil {
-		azerrors.Unauthenticated(w, "")
-		return false
-	}
-	if !p.AllowsARM() {
-		azerrors.InvalidAuthenticationTokenAudience(w, "")
-		return false
-	}
-	if h.Authz == nil {
-		if p.IsRoot {
-			return true
-		}
-		azerrors.Forbidden(w, "")
-		return false
-	}
-	ok, err := h.Authz.Evaluate(p.ID, p.IsRoot, action, scope)
+func (h *Handler) requireDataPlane(w http.ResponseWriter, r *http.Request, action string) bool {
+	ns := r.PathValue("ns")
+	sub, rg, _, ok, err := h.Store.GetServiceBusNamespaceByName(ns)
 	if err != nil {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
 		return false
 	}
 	if !ok {
-		azerrors.Forbidden(w, "")
+		azerrors.NotFound(w, "namespace not found")
 		return false
 	}
-	return true
+	scope := "/subscriptions/" + sub + "/resourceGroups/" + rg +
+		"/providers/Microsoft.ServiceBus/namespaces/" + ns
+	_, ok = azauth.RequireDataPlaneBearer(w, r, h.Auth, h.Authz, authn.Principal.AllowsServiceBus, action, scope)
+	return ok
+}
+
+func (h *Handler) requireBearerARM(w http.ResponseWriter, r *http.Request, action, scope string) bool {
+	_, ok := azauth.RequireARMBearer(w, r, h.Auth, h.Authz, action, scope)
+	return ok
 }
 
 func armScope(r *http.Request) string {

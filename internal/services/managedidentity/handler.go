@@ -131,8 +131,8 @@ func (h *Handler) imdsToken(w http.ResponseWriter, r *http.Request) {
 		writeIMDSError(w, http.StatusBadRequest, "bad_request_102", "Required metadata header not specified")
 		return
 	}
-	if !imdsCallerAllowed(r.RemoteAddr) {
-		writeIMDSError(w, http.StatusForbidden, "forbidden", "IMDS token mint is limited to loopback, link-local, or private nested peers")
+	if !imdsTokenMintAllowed(r) {
+		writeIMDSError(w, http.StatusForbidden, "forbidden", "IMDS token mint requires metadata Host or a loopback/link-local peer")
 		return
 	}
 	apiVersion := strings.TrimSpace(r.URL.Query().Get("api-version"))
@@ -320,19 +320,39 @@ func writeIMDSError(w http.ResponseWriter, code int, errCode, desc string) {
 	})
 }
 
-func imdsCallerAllowed(remoteAddr string) bool {
+// imdsTokenMintAllowed gates mint like Azure IMDS on a shared listener: metadata Host
+// (with a parseable nested peer) or loopback/link-local peer. Empty RemoteAddr fails closed.
+func imdsTokenMintAllowed(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	ip := imdsPeerIP(r.RemoteAddr)
+	if ip == nil {
+		return false
+	}
+	if imdsMetadataHost(r.Host) {
+		return ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsPrivate()
+	}
+	return ip.IsLoopback() || ip.IsLinkLocalUnicast()
+}
+
+func imdsMetadataHost(host string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	return host == "169.254.169.254" || host == "metadata" || host == "metadata.azure.com"
+}
+
+func imdsPeerIP(remoteAddr string) net.IP {
 	host := strings.TrimSpace(remoteAddr)
 	if host == "" {
-		return true
+		return nil
 	}
 	if h, _, err := net.SplitHostPort(host); err == nil {
 		host = h
 	}
-	ip := net.ParseIP(host)
-	if ip == nil {
-		return false
-	}
-	return ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsPrivate()
+	return net.ParseIP(host)
 }
 
 func (h *Handler) requireARM(w http.ResponseWriter, r *http.Request, action string) bool {

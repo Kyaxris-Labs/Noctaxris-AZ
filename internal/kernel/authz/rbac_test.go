@@ -214,3 +214,47 @@ func TestEvaluateBuiltInQueryAndGraphActions(t *testing.T) {
 		t.Fatal("legacy Event Hubs Data Receiver GUID alias")
 	}
 }
+
+func TestRoleDefinitionIDSubstringOwnerDoesNotElevate(t *testing.T) {
+	scope := "/subscriptions/s/resourceGroups/rg"
+	store := memStore{byScope: map[string][]authz.Assignment{
+		scope: {
+			{PrincipalID: "blob", RoleDefinitionID: "Storage Blob Data Owner", Scope: scope},
+			{PrincipalID: "eh-name", RoleDefinitionID: "Azure Event Hubs Data Owner", Scope: scope},
+			{PrincipalID: "eh-guid", RoleDefinitionID: authz.RoleEventHubsDataOwner, Scope: scope},
+		},
+	}}
+	ev := &authz.Evaluator{Assignments: store}
+	if ok, err := ev.Evaluate("blob", false, "Microsoft.Authorization/roleAssignments/write", scope); err != nil || ok {
+		t.Fatal("display-name Owner must not grant roleAssignments/write")
+	}
+	if ok, err := ev.Evaluate("eh-name", false, "Microsoft.Compute/virtualMachines/write", scope); err != nil || ok {
+		t.Fatal("display-name Event Hubs Data Owner must not grant VM write")
+	}
+	if ok, err := ev.Evaluate("eh-guid", false, "Microsoft.EventHub/namespaces/write", scope); err != nil || ok {
+		t.Fatal("Event Hubs Data Owner GUID must not grant namespace write")
+	}
+	if ok, err := ev.Evaluate("eh-guid", false, "Microsoft.EventHub/namespaces/eventhubs/receive/action", scope); err != nil || !ok {
+		t.Fatal("Event Hubs Data Owner GUID must grant receive")
+	}
+}
+
+func TestKeyVaultSecretsOfficerDoesNotGrantKeysOrCerts(t *testing.T) {
+	scope := "/subscriptions/s/resourceGroups/rg/providers/Microsoft.KeyVault/vaults/kv1"
+	store := memStore{byScope: map[string][]authz.Assignment{
+		scope: {{PrincipalID: "p", RoleDefinitionID: authz.RoleKeyVaultSecretsOfficer, Scope: scope}},
+	}}
+	ev := &authz.Evaluator{Assignments: store}
+	if ok, err := ev.Evaluate("p", false, "Microsoft.KeyVault/vaults/secrets/setSecret/action", scope); err != nil || !ok {
+		t.Fatal("secrets officer set")
+	}
+	for _, act := range []string{
+		"Microsoft.KeyVault/vaults/keys/write",
+		"Microsoft.KeyVault/vaults/keys/encrypt/action",
+		"Microsoft.KeyVault/vaults/certificates/write",
+	} {
+		if ok, err := ev.Evaluate("p", false, act, scope); err != nil || ok {
+			t.Fatalf("secrets officer must deny %s", act)
+		}
+	}
+}

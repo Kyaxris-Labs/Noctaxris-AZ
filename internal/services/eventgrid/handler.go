@@ -10,6 +10,7 @@ import (
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authz"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/azauth"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/httpegress"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/store"
 )
@@ -100,10 +101,22 @@ func (h *Handler) putSub(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) publish(w http.ResponseWriter, r *http.Request) {
-	if !h.requireRoot(w, r) {
+	topic := r.PathValue("topic")
+	sub, rg, _, ok, err := h.Store.GetEventGridTopicByName(topic)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
 		return
 	}
-	topic := r.PathValue("topic")
+	if !ok {
+		azerrors.NotFound(w, "topic not found")
+		return
+	}
+	scope := "/subscriptions/" + sub + "/resourceGroups/" + rg +
+		"/providers/Microsoft.EventGrid/topics/" + topic
+	if _, ok := azauth.RequireDataPlaneBearer(w, r, h.Auth, h.Authz, authn.Principal.AllowsEventGrid,
+		"Microsoft.EventGrid/topics/send/action", scope); !ok {
+		return
+	}
 	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
 		azerrors.BadRequest(w, err.Error())
@@ -127,7 +140,7 @@ func (h *Handler) publish(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		req.Header.Set("Content-Type", "application/json")
-		client := &http.Client{Timeout: 5 * time.Second}
+		client := httpegress.Client(5 * time.Second)
 		res, err := client.Do(req)
 		if err == nil {
 			res.Body.Close()
@@ -138,46 +151,10 @@ func (h *Handler) publish(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"delivered": delivered})
 }
 
-func (h *Handler) requireRoot(w http.ResponseWriter, r *http.Request) bool {
-	if h.Auth == nil {
-		azerrors.Unauthenticated(w, "")
-		return false
-	}
-	if _, err := h.Auth.AuthenticateRequest(r); err != nil {
-		azerrors.Unauthenticated(w, "")
-		return false
-	}
-	return true
-}
-
 func (h *Handler) require(w http.ResponseWriter, r *http.Request, action string) bool {
-	if h.Auth == nil {
-		azerrors.Unauthenticated(w, "")
-		return false
-	}
-	p, err := h.Auth.AuthenticateRequest(r)
-	if err != nil {
-		azerrors.Unauthenticated(w, "")
-		return false
-	}
-	if !p.AllowsARM() {
-		azerrors.InvalidAuthenticationTokenAudience(w, "")
-		return false
-	}
 	scope := "/subscriptions/" + r.PathValue("sub") + "/resourceGroups/" + r.PathValue("rg")
-	if h.Authz == nil {
-		return p.IsRoot
-	}
-	ok, err := h.Authz.Evaluate(p.ID, p.IsRoot, action, scope)
-	if err != nil {
-		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
-		return false
-	}
-	if !ok {
-		azerrors.Forbidden(w, "")
-		return false
-	}
-	return true
+	_, ok := azauth.RequireARMBearer(w, r, h.Auth, h.Authz, action, scope)
+	return ok
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

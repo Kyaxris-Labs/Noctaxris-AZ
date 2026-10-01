@@ -2,8 +2,22 @@ package store
 
 import (
 	"database/sql"
+	"strings"
 	"time"
 )
+
+// EventHubNamespaceKey is the durable data-plane key for hubs/messages/capture (ARM resource id).
+func EventHubNamespaceKey(sub, rg, name string) string {
+	return "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.EventHub/namespaces/" + name
+}
+
+// EventHubsNamespaceRow is an ARM namespace coordinate.
+type EventHubsNamespaceRow struct {
+	SubscriptionID string
+	ResourceGroup  string
+	Name           string
+	Location       string
+}
 
 // UpsertEventHubsNamespace creates an Event Hubs namespace.
 func (s *Store) UpsertEventHubsNamespace(sub, rg, name, location string) error {
@@ -18,18 +32,37 @@ ON CONFLICT(subscription_id, resource_group, name) DO UPDATE SET location=exclud
 	return err
 }
 
-// GetEventHubsNamespaceByName loads ARM coordinates for a namespace name.
-func (s *Store) GetEventHubsNamespaceByName(name string) (sub, rg, location string, ok bool, err error) {
-	err = s.db.QueryRow(`
-SELECT subscription_id, resource_group, location FROM eventhubs_namespaces WHERE name = ? LIMIT 1`, name).
-		Scan(&sub, &rg, &location)
-	if err == sql.ErrNoRows {
-		return "", "", "", false, nil
-	}
+// ListEventHubsNamespacesByName lists all ARM namespaces with the given name.
+func (s *Store) ListEventHubsNamespacesByName(name string) ([]EventHubsNamespaceRow, error) {
+	rows, err := s.db.Query(`
+SELECT subscription_id, resource_group, name, location FROM eventhubs_namespaces
+WHERE name = ? ORDER BY subscription_id, resource_group`, name)
 	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []EventHubsNamespaceRow
+	for rows.Next() {
+		var row EventHubsNamespaceRow
+		if err := rows.Scan(&row.SubscriptionID, &row.ResourceGroup, &row.Name, &row.Location); err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	if out == nil {
+		out = []EventHubsNamespaceRow{}
+	}
+	return out, rows.Err()
+}
+
+// GetEventHubsNamespaceByName loads ARM coordinates for a namespace name.
+// When multiple resource groups share the name, returns the first row (prefer ListEventHubsNamespacesByName).
+func (s *Store) GetEventHubsNamespaceByName(name string) (sub, rg, location string, ok bool, err error) {
+	list, err := s.ListEventHubsNamespacesByName(name)
+	if err != nil || len(list) == 0 {
 		return "", "", "", false, err
 	}
-	return sub, rg, location, true, nil
+	return list[0].SubscriptionID, list[0].ResourceGroup, list[0].Location, true, nil
 }
 
 // GetEventHubsNamespace loads a namespace location.
@@ -46,7 +79,7 @@ WHERE subscription_id = ? AND resource_group = ? AND name = ?`, sub, rg, name).S
 	return location, true, nil
 }
 
-// CreateEventHub creates a hub under a namespace.
+// CreateEventHub creates a hub under a namespace key (prefer EventHubNamespaceKey).
 func (s *Store) CreateEventHub(namespace, name string, partitions int) error {
 	if partitions <= 0 {
 		partitions = 2
@@ -100,9 +133,26 @@ type EventHubCapturedEvent struct {
 
 // ListEventHubCaptured lists captured events without dequeuing live messages.
 func (s *Store) ListEventHubCaptured(namespace, hub string) ([]EventHubCapturedEvent, error) {
-	rows, err := s.db.Query(`
+	return s.ListEventHubCapturedForNamespaces([]string{namespace}, hub)
+}
+
+// ListEventHubCapturedForNamespaces lists captured events for any of the namespace keys.
+func (s *Store) ListEventHubCapturedForNamespaces(namespaces []string, hub string) ([]EventHubCapturedEvent, error) {
+	namespaces = trimNonEmpty(namespaces)
+	if len(namespaces) == 0 {
+		return []EventHubCapturedEvent{}, nil
+	}
+	args := make([]any, 0, len(namespaces)+1)
+	placeholders := make([]string, 0, len(namespaces))
+	for _, ns := range namespaces {
+		placeholders = append(placeholders, "?")
+		args = append(args, ns)
+	}
+	args = append(args, hub)
+	q := `
 SELECT id, partition_id, body, inserted_at FROM eventhubs_captured
-WHERE namespace = ? AND hub = ? ORDER BY id ASC`, namespace, hub)
+WHERE namespace IN (` + strings.Join(placeholders, ",") + `) AND hub = ? ORDER BY id ASC`
+	rows, err := s.db.Query(q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -123,10 +173,26 @@ WHERE namespace = ? AND hub = ? ORDER BY id ASC`, namespace, hub)
 
 // GetEventHubCaptured loads one captured event.
 func (s *Store) GetEventHubCaptured(namespace, hub string, id int64) (EventHubCapturedEvent, bool, error) {
+	return s.GetEventHubCapturedForNamespaces([]string{namespace}, hub, id)
+}
+
+// GetEventHubCapturedForNamespaces loads one captured event under any authorized namespace key.
+func (s *Store) GetEventHubCapturedForNamespaces(namespaces []string, hub string, id int64) (EventHubCapturedEvent, bool, error) {
+	namespaces = trimNonEmpty(namespaces)
+	if len(namespaces) == 0 {
+		return EventHubCapturedEvent{}, false, nil
+	}
+	args := make([]any, 0, len(namespaces)+2)
+	placeholders := make([]string, 0, len(namespaces))
+	for _, ns := range namespaces {
+		placeholders = append(placeholders, "?")
+		args = append(args, ns)
+	}
+	args = append(args, hub, id)
 	var ev EventHubCapturedEvent
 	err := s.db.QueryRow(`
 SELECT id, partition_id, body, inserted_at FROM eventhubs_captured
-WHERE namespace = ? AND hub = ? AND id = ?`, namespace, hub, id).
+WHERE namespace IN (`+strings.Join(placeholders, ",")+`) AND hub = ? AND id = ?`, args...).
 		Scan(&ev.ID, &ev.PartitionID, &ev.Body, &ev.InsertedAt)
 	if err == sql.ErrNoRows {
 		return EventHubCapturedEvent{}, false, nil
@@ -170,4 +236,15 @@ ORDER BY id ASC LIMIT 1`, namespace, hub).Scan(&id, &body)
 		return nil, false, err
 	}
 	return body, true, nil
+}
+
+func trimNonEmpty(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }

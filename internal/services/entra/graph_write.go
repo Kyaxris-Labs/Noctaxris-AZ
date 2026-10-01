@@ -410,9 +410,6 @@ func (s *Service) handleListFIC(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleCreateFIC(w http.ResponseWriter, r *http.Request) {
-	if !s.requireGraph(w, r) {
-		return
-	}
 	var body struct {
 		Name                     string          `json:"name"`
 		Issuer                   string          `json:"issuer"`
@@ -424,6 +421,9 @@ func (s *Service) handleCreateFIC(w http.ResponseWriter, r *http.Request) {
 	obj, _, _, ok, _ := s.Store.ResolveEntraApp(s.appTenant(), r.PathValue("appId"))
 	if !ok {
 		azerrors.WriteGraph(w, http.StatusNotFound, "Request_ResourceNotFound", "application not found")
+		return
+	}
+	if !s.requireGraphAppWrite(w, r, obj) {
 		return
 	}
 	expr := encodeFICExpression(body.ClaimsMatchingExpression)

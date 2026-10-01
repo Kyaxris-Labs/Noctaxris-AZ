@@ -9,6 +9,8 @@ Status: **lab**
 ## Detailed actions
 
 - ARM CRUD for `Microsoft.ContainerService/managedClusters` (lab)
+- GET/list return metadata only (no `kubeConfig`)
+- `POST .../listClusterAdminCredential` and `.../listClusterUserCredential` return theatre kubeconfig (Reader denied; Owner/Contributor/root succeed)
 - Properties stored as JSON theatre
 
 ## Not implemented

@@ -159,11 +159,12 @@ func SASPermits(sp, method, path string) bool {
 			return has("r")
 		case http.MethodPut:
 			if depth <= 3 {
-				return has("caw")
+				// Create Table requires account/service SAS Create (c), not Add/Write.
+				return has("c")
 			}
-			return has("uw")
+			return has("u")
 		case "MERGE":
-			return has("uw")
+			return has("u")
 		case http.MethodPost:
 			return has("a")
 		case http.MethodDelete:

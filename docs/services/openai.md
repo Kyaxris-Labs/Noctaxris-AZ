@@ -2,9 +2,15 @@
 
 Status: **lab**
 
+## Authz / authn
+
+- ARM CRUD: ARM `aud` plus RBAC
+- `POST /openai/{name}/chat/completions`: Cognitive `aud` (`https://cognitiveservices.azure.com`) plus OpenAI User data action (or root). Graph alone is denied.
+
 ## Detailed actions
 
 - ARM CRUD for `Microsoft.CognitiveServices/accounts` (lab)
+- Allowlisted canned chat completions on the data plane
 - Properties stored as JSON theatre
 
 ## Not implemented

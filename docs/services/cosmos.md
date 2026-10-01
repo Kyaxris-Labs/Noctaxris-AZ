@@ -4,10 +4,10 @@ Status: **lab**
 
 ## Detailed actions
 
-- ARM `Microsoft.DocumentDB/databaseAccounts`
+- ARM `Microsoft.DocumentDB/databaseAccounts` (GET omits keys; `POST .../listKeys` returns `primaryMasterKey`)
 - Data plane under `/cosmos/{account}/dbs/...` (database, container, point read, id equality query)
 - `GET /cosmos/{account}/dbs/{db}/colls/{coll}/changefeed` returns current container documents as `"Documents"` (latest-version lite; no per-write history table)
-- Bearer or `x-ms-cosmos-account-key` for data plane
+- Data plane: `x-ms-cosmos-account-key`, or Bearer with Cosmos/ARM `aud` plus Cosmos data roles (Graph denied)
 
 ## Not implemented
 

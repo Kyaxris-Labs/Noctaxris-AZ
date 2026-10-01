@@ -62,6 +62,13 @@ func (h *Handler) require(p authn.Principal, action, scope string) error {
 	return h.requireAction(p, action, scope)
 }
 
+func (h *Handler) requireDataPlane(p authn.Principal, action, scope string) error {
+	if !p.AllowsAppConfig() {
+		return errAudience
+	}
+	return h.requireAction(p, action, scope)
+}
+
 func (h *Handler) requireAction(p authn.Principal, action, scope string) error {
 	ok, err := h.Authz.Evaluate(p.ID, p.IsRoot, action, scope)
 	if err != nil {
@@ -207,7 +214,7 @@ func (h *Handler) putKV(w http.ResponseWriter, r *http.Request, p authn.Principa
 		return
 	}
 	scope := storeResourceID(st.SubscriptionID, st.ResourceGroup, st.Name)
-	if err := h.requireAction(p, "Microsoft.AppConfiguration/configurationStores/keyValues/write", scope); err != nil {
+	if err := h.requireDataPlane(p, "Microsoft.AppConfiguration/configurationStores/keyValues/write", scope); err != nil {
 		writeAuthz(w, err)
 		return
 	}
@@ -243,7 +250,7 @@ func (h *Handler) getKV(w http.ResponseWriter, r *http.Request, p authn.Principa
 		return
 	}
 	scope := storeResourceID(st.SubscriptionID, st.ResourceGroup, st.Name)
-	if err := h.requireAction(p, "Microsoft.AppConfiguration/configurationStores/keyValues/read", scope); err != nil {
+	if err := h.requireDataPlane(p, "Microsoft.AppConfiguration/configurationStores/keyValues/read", scope); err != nil {
 		writeAuthz(w, err)
 		return
 	}
@@ -272,7 +279,7 @@ func (h *Handler) listKV(w http.ResponseWriter, r *http.Request, p authn.Princip
 		return
 	}
 	scope := storeResourceID(st.SubscriptionID, st.ResourceGroup, st.Name)
-	if err := h.requireAction(p, "Microsoft.AppConfiguration/configurationStores/keyValues/read", scope); err != nil {
+	if err := h.requireDataPlane(p, "Microsoft.AppConfiguration/configurationStores/keyValues/read", scope); err != nil {
 		writeAuthz(w, err)
 		return
 	}

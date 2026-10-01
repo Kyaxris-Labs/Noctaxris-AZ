@@ -204,7 +204,7 @@ func (h *Handler) invoke(w http.ResponseWriter, r *http.Request, p authn.Princip
 		return
 	}
 	scope := siteResourceID(row.SubscriptionID, row.ResourceGroup, row.Name)
-	if err := h.requireAction(p, "Microsoft.Web/sites/functions/write", scope); err != nil {
+	if err := h.require(p, "Microsoft.Web/sites/functions/write", scope); err != nil {
 		writeAuthz(w, err)
 		return
 	}

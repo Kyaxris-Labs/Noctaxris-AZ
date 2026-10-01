@@ -31,7 +31,7 @@ func (s *Store) GetKeyVaultCertificate(vault, name string) (version string, pem 
 	var sealed []byte
 	err = s.db.QueryRow(`
 SELECT version, cert_pem_sealed, policy_json FROM keyvault_certificates
-WHERE vault = ? AND name = ? ORDER BY version DESC LIMIT 1`, vault, name).
+WHERE vault = ? AND name = ? ORDER BY rowid DESC LIMIT 1`, vault, name).
 		Scan(&version, &sealed, &policyJSON)
 	if err == sql.ErrNoRows {
 		return "", nil, "", false, nil

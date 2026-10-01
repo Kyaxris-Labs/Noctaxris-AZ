@@ -210,7 +210,7 @@ func (h *Handler) listMetrics(w http.ResponseWriter, r *http.Request, p authn.Pr
 			limit = n
 		}
 	}
-	rows, err := h.Store.ListMetrics(name, limit)
+	rows, err := h.Store.ListMetricsForSubscription(sub, name, limit)
 	if err != nil {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
 		return

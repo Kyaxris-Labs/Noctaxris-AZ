@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -217,9 +218,22 @@ func (s *Server) ListenAndServeContext(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		tlsCfg.GetConfigForClient = func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
+			if hello != nil && hello.ServerName != "" && !tlsutil.AllowedCloudHost(hello.ServerName) {
+				return nil, fmt.Errorf("cloud-hosts: SNI %q not allowed", hello.ServerName)
+			}
+			return nil, nil
+		}
+		cloudHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !tlsutil.AllowedCloudHost(r.Host) {
+				azerrors.WriteARM(w, http.StatusBadRequest, "InvalidHost", "Host is not an allowed AzureCloud lab hostname")
+				return
+			}
+			handler.ServeHTTP(w, r)
+		})
 		cloud = &http.Server{
 			Addr:              s.cfg.CloudHostsListen,
-			Handler:           handler,
+			Handler:           cloudHandler,
 			TLSConfig:         tlsCfg,
 			ReadHeaderTimeout: 10 * time.Second,
 		}

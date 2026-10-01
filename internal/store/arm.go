@@ -8,10 +8,11 @@ import (
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authz"
 )
 
-// ListRoleAssignmentsForScope implements authz.AssignmentStore with exact scope match
-// plus parent subscription scope when listing under a resource group.
+// ListRoleAssignmentsForScope implements authz.AssignmentStore with exact scope match.
+// Parent scopes are walked by authz.Evaluator.scopeChain; do not use SQL LIKE prefixes
+// (sibling resource group names and LIKE wildcards would otherwise collide).
 func (s *Store) ListRoleAssignmentsForScope(scope string) ([]authz.Assignment, error) {
-	rows, err := s.db.Query(`SELECT id, scope, role_definition_id, principal_id, principal_type FROM role_assignments WHERE scope = ? OR ? LIKE scope || '%'`, scope, scope)
+	rows, err := s.db.Query(`SELECT id, scope, role_definition_id, principal_id, principal_type FROM role_assignments WHERE scope = ?`, scope)
 	if err != nil {
 		return nil, err
 	}

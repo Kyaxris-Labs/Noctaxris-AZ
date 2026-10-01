@@ -96,13 +96,22 @@ WHERE subscription_id = ? AND resource_group = ? ORDER BY name`, subID, rg)
 	return out, rows.Err()
 }
 
-// DeleteAppConfig removes a store and its key-values.
+// DeleteAppConfig removes a store and cascaded KV, snapshots, and feature flags.
 func (s *Store) DeleteAppConfig(subID, rg, name string) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(`DELETE FROM appconfig_snapshot_kvs WHERE store = ?`, name); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM appconfig_snapshots WHERE store = ?`, name); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM appconfig_feature_flags WHERE store = ?`, name); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(`DELETE FROM appconfig_kvs WHERE store = ?`, name); err != nil {
 		return err
 	}
@@ -359,8 +368,8 @@ func (s *Store) ListActivityLogForSubscription(subscriptionID string, limit int)
 	rows, err := s.db.Query(`
 SELECT timestamp, caller, operation, resource_id, status, message, client_ip, identity_json
 FROM activity_log
-WHERE resource_id = ? OR resource_id LIKE ? || '/%'
-ORDER BY id DESC LIMIT ?`, prefix, prefix, limit)
+WHERE resource_id = ? OR resource_id LIKE ? ESCAPE '\'
+ORDER BY id DESC LIMIT ?`, prefix, likePrefixChildren(prefix), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -390,14 +399,31 @@ func (s *Store) WriteMetric(name string, value float64, resourceID string) error
 	return err
 }
 
-// ListMetrics lists recent metrics by name (empty name = all).
+// ListMetrics lists recent metrics by name (empty name = all). Prefer ListMetricsForSubscription.
 func (s *Store) ListMetrics(name string, limit int) ([]map[string]any, error) {
+	return s.ListMetricsForSubscription("", name, limit)
+}
+
+// ListMetricsForSubscription lists metrics whose resource_id is under the subscription (or all when subscriptionID is empty).
+func (s *Store) ListMetricsForSubscription(subscriptionID, name string, limit int) ([]map[string]any, error) {
 	if limit <= 0 {
 		limit = 50
 	}
-	rows, err := s.db.Query(`
+	subscriptionID = strings.TrimSpace(subscriptionID)
+	var rows *sql.Rows
+	var err error
+	if subscriptionID == "" {
+		rows, err = s.db.Query(`
 SELECT name, value, timestamp, resource_id FROM metrics
 WHERE (? = '' OR name = ?) ORDER BY id DESC LIMIT ?`, name, name, limit)
+	} else {
+		prefix := "/subscriptions/" + subscriptionID
+		rows, err = s.db.Query(`
+SELECT name, value, timestamp, resource_id FROM metrics
+WHERE (? = '' OR name = ?)
+  AND (resource_id = ? OR resource_id LIKE ? ESCAPE '\')
+ORDER BY id DESC LIMIT ?`, name, name, prefix, likePrefixChildren(prefix), limit)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -410,6 +436,9 @@ WHERE (? = '' OR name = ?) ORDER BY id DESC LIMIT ?`, name, name, limit)
 			return nil, err
 		}
 		out = append(out, map[string]any{"name": n, "value": v, "timestamp": ts, "resourceId": rid})
+	}
+	if out == nil {
+		out = []map[string]any{}
 	}
 	return out, rows.Err()
 }

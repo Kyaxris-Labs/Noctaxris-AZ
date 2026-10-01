@@ -19,6 +19,7 @@ ARM namespace / queue lite plus AMQP 1.0 send/receive for `azservicebus` clients
 - ARM Bearer + RBAC
 - `GET .../namespaces/{name}/connectionString` requires `Microsoft.ServiceBus/namespaces/authorizationRules/listKeys/action` (not namespace `read`). Reader is denied; Owner / Contributor / root succeed.
 - AMQP attach requires `SharedAccessKey` matching the namespace sealed key (omit or mismatch fails closed)
+- HTTP `/servicebus/.../messages` requires Service Bus `aud` (`https://servicebus.azure.net`) plus Service Bus data roles (or root). Graph or any-Bearer alone is denied.
 
 ## Detailed actions
 

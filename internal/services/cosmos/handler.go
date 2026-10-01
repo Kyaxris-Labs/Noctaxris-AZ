@@ -9,7 +9,14 @@ import (
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authz"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/azauth"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/store"
+)
+
+const (
+	actionItemsRead  = "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/items/read"
+	actionItemsWrite = "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/items/write"
+	actionListKeys   = "Microsoft.DocumentDB/databaseAccounts/listKeys/action"
 )
 
 // Handler serves Cosmos DB NoSQL lab.
@@ -24,6 +31,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	base := "/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.DocumentDB/databaseAccounts"
 	mux.HandleFunc("PUT "+base+"/{name}", h.putAccount)
 	mux.HandleFunc("GET "+base+"/{name}", h.getAccount)
+	mux.HandleFunc("POST "+base+"/{name}/listKeys", h.listKeys)
 	mux.HandleFunc("PUT /cosmos/{account}/dbs/{db}", h.putDB)
 	mux.HandleFunc("PUT /cosmos/{account}/dbs/{db}/colls/{coll}", h.putColl)
 	mux.HandleFunc("PUT /cosmos/{account}/dbs/{db}/colls/{coll}/docs/{id}", h.putDoc)
@@ -66,7 +74,7 @@ func (h *Handler) getAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sub, rg, name := r.PathValue("sub"), r.PathValue("rg"), r.PathValue("name")
-	location, key, ok, err := h.Store.GetCosmosAccount(sub, rg, name)
+	location, _, ok, err := h.Store.GetCosmosAccount(sub, rg, name)
 	if err != nil {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
 		return
@@ -78,12 +86,34 @@ func (h *Handler) getAccount(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id":   "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.DocumentDB/databaseAccounts/" + name,
 		"name": name, "type": "Microsoft.DocumentDB/databaseAccounts", "location": location,
-		"properties": map[string]any{"provisioningState": "Succeeded", "documentEndpoint": "/cosmos/" + name, "primaryMasterKey": key},
+		"properties": map[string]any{"provisioningState": "Succeeded", "documentEndpoint": "/cosmos/" + name},
+	})
+}
+
+func (h *Handler) listKeys(w http.ResponseWriter, r *http.Request) {
+	if !h.require(w, r, actionListKeys) {
+		return
+	}
+	sub, rg, name := r.PathValue("sub"), r.PathValue("rg"), r.PathValue("name")
+	_, key, ok, err := h.Store.GetCosmosAccount(sub, rg, name)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	}
+	if !ok {
+		azerrors.NotFound(w, "account not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"primaryMasterKey":   key,
+		"secondaryMasterKey": key,
+		"primaryReadonlyMasterKey":   key,
+		"secondaryReadonlyMasterKey": key,
 	})
 }
 
 func (h *Handler) putDB(w http.ResponseWriter, r *http.Request) {
-	if !h.authData(w, r) {
+	if !h.authData(w, r, actionItemsWrite) {
 		return
 	}
 	if err := h.Store.CreateCosmosDatabase(r.PathValue("account"), r.PathValue("db")); err != nil {
@@ -94,7 +124,7 @@ func (h *Handler) putDB(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) putColl(w http.ResponseWriter, r *http.Request) {
-	if !h.authData(w, r) {
+	if !h.authData(w, r, actionItemsWrite) {
 		return
 	}
 	var body struct {
@@ -109,7 +139,7 @@ func (h *Handler) putColl(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) putDoc(w http.ResponseWriter, r *http.Request) {
-	if !h.authData(w, r) {
+	if !h.authData(w, r, actionItemsWrite) {
 		return
 	}
 	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
@@ -132,7 +162,7 @@ func (h *Handler) putDoc(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) getDoc(w http.ResponseWriter, r *http.Request) {
-	if !h.authData(w, r) {
+	if !h.authData(w, r, actionItemsRead) {
 		return
 	}
 	id := r.PathValue("id")
@@ -155,13 +185,12 @@ func (h *Handler) getDoc(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) queryDocs(w http.ResponseWriter, r *http.Request) {
-	if !h.authData(w, r) {
+	if !h.authData(w, r, actionItemsRead) {
 		return
 	}
 	q := r.URL.Query().Get("query")
 	id := ""
 	if strings.Contains(strings.ToLower(q), "id") {
-		// lab: extract quoted id
 		for _, p := range strings.Split(q, "'") {
 			if len(p) > 0 && !strings.Contains(strings.ToLower(p), "select") && !strings.Contains(p, "=") {
 				id = p
@@ -185,7 +214,7 @@ func (h *Handler) queryDocs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) changeFeed(w http.ResponseWriter, r *http.Request) {
-	if !h.authData(w, r) {
+	if !h.authData(w, r, actionItemsRead) {
 		return
 	}
 	docs, err := h.Store.ListCosmosItems(r.PathValue("account"), r.PathValue("db"), r.PathValue("coll"))
@@ -205,9 +234,9 @@ func (h *Handler) changeFeed(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"Documents": items})
 }
 
-func (h *Handler) authData(w http.ResponseWriter, r *http.Request) bool {
+func (h *Handler) authData(w http.ResponseWriter, r *http.Request, action string) bool {
 	account := r.PathValue("account")
-	_, _, _, key, ok, err := h.Store.GetCosmosAccountByName(account)
+	sub, rg, _, key, ok, err := h.Store.GetCosmosAccountByName(account)
 	if err != nil || !ok {
 		azerrors.NotFound(w, "account not found")
 		return false
@@ -219,45 +248,16 @@ func (h *Handler) authData(w http.ResponseWriter, r *http.Request) bool {
 		azerrors.Unauthenticated(w, "")
 		return false
 	}
-	if h.Auth == nil {
-		azerrors.Unauthenticated(w, "")
-		return false
-	}
-	if _, err := h.Auth.AuthenticateRequest(r); err != nil {
-		azerrors.Unauthenticated(w, "")
-		return false
-	}
-	return true
+	scope := "/subscriptions/" + sub + "/resourceGroups/" + rg +
+		"/providers/Microsoft.DocumentDB/databaseAccounts/" + account
+	_, ok = azauth.RequireDataPlaneBearer(w, r, h.Auth, h.Authz, authn.Principal.AllowsCosmos, action, scope)
+	return ok
 }
 
 func (h *Handler) require(w http.ResponseWriter, r *http.Request, action string) bool {
-	if h.Auth == nil {
-		azerrors.Unauthenticated(w, "")
-		return false
-	}
-	p, err := h.Auth.AuthenticateRequest(r)
-	if err != nil {
-		azerrors.Unauthenticated(w, "")
-		return false
-	}
-	if !p.AllowsARM() {
-		azerrors.InvalidAuthenticationTokenAudience(w, "")
-		return false
-	}
 	scope := "/subscriptions/" + r.PathValue("sub") + "/resourceGroups/" + r.PathValue("rg")
-	if h.Authz == nil {
-		return p.IsRoot
-	}
-	ok, err := h.Authz.Evaluate(p.ID, p.IsRoot, action, scope)
-	if err != nil {
-		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
-		return false
-	}
-	if !ok {
-		azerrors.Forbidden(w, "")
-		return false
-	}
-	return true
+	_, ok := azauth.RequireARMBearer(w, r, h.Auth, h.Authz, action, scope)
+	return ok
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

@@ -132,11 +132,11 @@ func roleGrants(roleDefID, action string) bool {
 		return false
 	}
 	switch {
-	case roleHasGUID(role, guidOwner) || strings.Contains(role, "owner"):
-		// Owner covers ARM control plane. Key Vault data-plane actions stay on Key Vault data roles.
-		return !isKeyVaultDataPlaneAction(act)
-	case roleHasGUID(role, guidContributor) || strings.Contains(role, "contributor"):
-		return !strings.Contains(act, "authorization/roleassignments") && !isKeyVaultDataPlaneAction(act)
+	case roleHasGUID(role, guidOwner):
+		// Owner covers ARM control plane. Dedicated data-plane actions stay on data roles.
+		return !isDedicatedDataPlaneAction(act)
+	case roleHasGUID(role, guidContributor):
+		return !strings.Contains(act, "authorization/roleassignments") && !isDedicatedDataPlaneAction(act)
 	case roleHasGUID(role, guidLogAnalyticsDataReader):
 		return isWorkspaceQueryAction(act) || act == "microsoft.operationalinsights/workspaces/read"
 	case isLogAnalyticsReaderRole(role):
@@ -144,9 +144,29 @@ func roleGrants(roleDefID, action string) bool {
 	case roleHasGUID(role, guidAcrPull):
 		return isAcrPullAction(act)
 	case roleHasGUID(role, guidEventHubsDataOwner) || roleHasGUID(role, guidEventHubsDataOwnerAlias):
-		return strings.Contains(act, "eventhub")
+		return isEventHubsDataPlaneAction(act)
 	case roleHasGUID(role, guidEventHubsDataReceiver) || roleHasGUID(role, guidEventHubsDataReceiverAlias):
 		return isEventHubsReceiveAction(act)
+	case roleHasGUID(role, guidServiceBusDataOwner):
+		return isServiceBusDataAction(act)
+	case roleHasGUID(role, guidServiceBusDataSender):
+		return isServiceBusSendAction(act)
+	case roleHasGUID(role, guidServiceBusDataReceiver):
+		return isServiceBusReceiveAction(act)
+	case roleHasGUID(role, guidEventGridDataSender):
+		return isEventGridSendAction(act)
+	case roleHasGUID(role, guidAppConfigDataOwner):
+		return isAppConfigDataPlaneAction(act)
+	case roleHasGUID(role, guidAppConfigDataReader):
+		return isAppConfigDataReadAction(act)
+	case roleHasGUID(role, guidCosmosDataContributor) || roleHasGUID(role, guidCosmosDataContributorAlias):
+		return isCosmosDataPlaneAction(act)
+	case roleHasGUID(role, guidCosmosDataReader) || roleHasGUID(role, guidCosmosDataReaderAlias):
+		return isCosmosDataReadAction(act)
+	case roleHasGUID(role, guidCognitiveOpenAIUser):
+		return isCognitiveDataPlaneAction(act)
+	case roleHasGUID(role, guidAKSClusterAdmin) || roleHasGUID(role, guidAKSClusterUser):
+		return isAKSCredentialAction(act)
 	case roleHasGUID(role, guidKeyVaultAdministrator):
 		return strings.Contains(act, "microsoft.keyvault/")
 	case roleHasGUID(role, guidKeyVaultSecretsOfficer):
@@ -196,13 +216,83 @@ func isReadLikeAction(act string) bool {
 func isSecretDisclosureAction(act string) bool {
 	return strings.Contains(act, "/listkeys") ||
 		strings.Contains(act, "/listconnectionstrings") ||
-		strings.Contains(act, "authorizationrules/listkeys")
+		strings.Contains(act, "authorizationrules/listkeys") ||
+		isAKSCredentialAction(act) ||
+		isAppConfigDataPlaneAction(act)
+}
+
+func isDedicatedDataPlaneAction(act string) bool {
+	// AKS listCluster*Credential stays on Owner/Contributor (like listKeys); Reader is blocked via isSecretDisclosureAction.
+	return isKeyVaultDataPlaneAction(act) ||
+		isAppConfigDataPlaneAction(act) ||
+		isCosmosDataPlaneAction(act) ||
+		isServiceBusDataAction(act) ||
+		isEventGridSendAction(act) ||
+		isCognitiveDataPlaneAction(act)
 }
 
 func isKeyVaultDataPlaneAction(act string) bool {
 	return strings.Contains(act, "microsoft.keyvault/vaults/secrets/") ||
 		strings.Contains(act, "microsoft.keyvault/vaults/keys/") ||
 		strings.Contains(act, "microsoft.keyvault/vaults/certificates/")
+}
+
+func isAppConfigDataPlaneAction(act string) bool {
+	return strings.Contains(act, "microsoft.appconfiguration/configurationstores/keyvalues/") ||
+		strings.Contains(act, "microsoft.appconfiguration/configurationstores/featureflags/") ||
+		strings.Contains(act, "microsoft.appconfiguration/configurationstores/snapshots/")
+}
+
+func isAppConfigDataReadAction(act string) bool {
+	if !isAppConfigDataPlaneAction(act) {
+		return false
+	}
+	return strings.Contains(act, "/read") || strings.HasSuffix(act, "/get")
+}
+
+func isCosmosDataPlaneAction(act string) bool {
+	return strings.Contains(act, "microsoft.documentdb/databaseaccounts/sqldatabases/") ||
+		strings.Contains(act, "microsoft.documentdb/databaseaccounts/docs/") ||
+		(strings.Contains(act, "microsoft.documentdb/databaseaccounts/") &&
+			(strings.Contains(act, "/items/") || strings.Contains(act, "/dbs/") || strings.Contains(act, "/colls/")))
+}
+
+func isCosmosDataReadAction(act string) bool {
+	if !isCosmosDataPlaneAction(act) {
+		return false
+	}
+	return strings.Contains(act, "/read") || strings.Contains(act, "/query") || strings.Contains(act, "/changefeed")
+}
+
+func isServiceBusDataAction(act string) bool {
+	return strings.Contains(act, "microsoft.servicebus/") &&
+		(strings.Contains(act, "/messages/") || strings.Contains(act, "/send") || strings.Contains(act, "/receive") ||
+			strings.Contains(act, "queues/messages") || strings.Contains(act, "topics/messages"))
+}
+
+func isServiceBusSendAction(act string) bool {
+	return isServiceBusDataAction(act) && (strings.Contains(act, "/send") || strings.Contains(act, "/write"))
+}
+
+func isServiceBusReceiveAction(act string) bool {
+	return isServiceBusDataAction(act) && (strings.Contains(act, "/receive") || strings.Contains(act, "/read"))
+}
+
+func isEventGridSendAction(act string) bool {
+	return strings.Contains(act, "microsoft.eventgrid/") &&
+		(strings.Contains(act, "/events/send") || strings.Contains(act, "/eventsubscriptions/write") ||
+			strings.Contains(act, "topics/send") || strings.HasSuffix(act, "/send/action"))
+}
+
+func isCognitiveDataPlaneAction(act string) bool {
+	return strings.Contains(act, "microsoft.cognitiveservices/accounts/") &&
+		(strings.Contains(act, "/openai/") || strings.Contains(act, "/deployments/") ||
+			strings.Contains(act, "chat/completions") || strings.Contains(act, "/inference"))
+}
+
+func isAKSCredentialAction(act string) bool {
+	return strings.Contains(act, "microsoft.containerservice/managedclusters/listclusteradmincredential") ||
+		strings.Contains(act, "microsoft.containerservice/managedclusters/listclusterusercredential")
 }
 
 func isKeyVaultSecretsReadAction(act string) bool {
@@ -218,9 +308,7 @@ func isKeyVaultSecretsWriteAction(act string) bool {
 		strings.Contains(act, "microsoft.keyvault/vaults/secrets/backup") ||
 		strings.Contains(act, "microsoft.keyvault/vaults/secrets/restore") ||
 		strings.Contains(act, "microsoft.keyvault/vaults/secrets/purge") ||
-		strings.Contains(act, "microsoft.keyvault/vaults/secrets/recover") ||
-		strings.Contains(act, "microsoft.keyvault/vaults/keys/") ||
-		strings.Contains(act, "microsoft.keyvault/vaults/certificates/")
+		strings.Contains(act, "microsoft.keyvault/vaults/secrets/recover")
 }
 
 func isWorkspaceQueryAction(act string) bool {
@@ -244,7 +332,34 @@ func isEventHubsReceiveAction(act string) bool {
 	if !strings.Contains(act, "eventhub") {
 		return false
 	}
+	if isEventHubsControlPlaneAction(act) {
+		return false
+	}
 	return strings.Contains(act, "/receive") || strings.HasSuffix(act, "/read") || strings.Contains(act, "/read")
+}
+
+// isEventHubsDataPlaneAction is Azure Event Hubs Data Owner: send/receive/read on hubs, not ARM namespace CRUD.
+func isEventHubsDataPlaneAction(act string) bool {
+	if !strings.Contains(act, "eventhub") {
+		return false
+	}
+	if isEventHubsControlPlaneAction(act) {
+		return false
+	}
+	return strings.Contains(act, "/receive") ||
+		strings.Contains(act, "/send") ||
+		strings.HasSuffix(act, "/read") ||
+		strings.Contains(act, "/read") ||
+		strings.Contains(act, "/action")
+}
+
+func isEventHubsControlPlaneAction(act string) bool {
+	return strings.Contains(act, "namespaces/write") ||
+		strings.Contains(act, "namespaces/delete") ||
+		strings.Contains(act, "eventhubs/write") ||
+		strings.Contains(act, "eventhubs/delete") ||
+		strings.Contains(act, "consumergroups/write") ||
+		strings.Contains(act, "consumergroups/delete")
 }
 
 func roleHasGUID(role, guid string) bool {
@@ -265,6 +380,8 @@ const (
 	RoleAcrPull = "/providers/Microsoft.Authorization/roleDefinitions/" + guidAcrPull
 	// RoleEventHubsDataReceiver grants Event Hubs receive/read data-plane actions.
 	RoleEventHubsDataReceiver = "/providers/Microsoft.Authorization/roleDefinitions/" + guidEventHubsDataReceiver
+	// RoleEventHubsDataOwner grants Event Hubs send/receive/read data-plane actions (not ARM namespace write).
+	RoleEventHubsDataOwner = "/providers/Microsoft.Authorization/roleDefinitions/" + guidEventHubsDataOwner
 	// RoleLogAnalyticsDataReader is the narrower workspace query role (3b03c2da-...).
 	RoleLogAnalyticsDataReader = "/providers/Microsoft.Authorization/roleDefinitions/" + guidLogAnalyticsDataReader
 	// RoleKeyVaultSecretsUser grants Key Vault secret get on the data plane.
@@ -273,6 +390,28 @@ const (
 	RoleKeyVaultSecretsOfficer = "/providers/Microsoft.Authorization/roleDefinitions/" + guidKeyVaultSecretsOfficer
 	// RoleKeyVaultAdministrator grants Key Vault data-plane administration.
 	RoleKeyVaultAdministrator = "/providers/Microsoft.Authorization/roleDefinitions/" + guidKeyVaultAdministrator
+	// RoleAppConfigDataReader grants App Configuration keyValues/snapshots/featureFlags read.
+	RoleAppConfigDataReader = "/providers/Microsoft.Authorization/roleDefinitions/" + guidAppConfigDataReader
+	// RoleAppConfigDataOwner grants App Configuration data-plane read/write.
+	RoleAppConfigDataOwner = "/providers/Microsoft.Authorization/roleDefinitions/" + guidAppConfigDataOwner
+	// RoleCosmosDataReader grants Cosmos document read/query/changefeed.
+	RoleCosmosDataReader = "/providers/Microsoft.Authorization/roleDefinitions/" + guidCosmosDataReader
+	// RoleCosmosDataContributor grants Cosmos document read/write.
+	RoleCosmosDataContributor = "/providers/Microsoft.Authorization/roleDefinitions/" + guidCosmosDataContributor
+	// RoleServiceBusDataOwner grants Service Bus HTTP send and receive.
+	RoleServiceBusDataOwner = "/providers/Microsoft.Authorization/roleDefinitions/" + guidServiceBusDataOwner
+	// RoleServiceBusDataSender grants Service Bus HTTP send.
+	RoleServiceBusDataSender = "/providers/Microsoft.Authorization/roleDefinitions/" + guidServiceBusDataSender
+	// RoleServiceBusDataReceiver grants Service Bus HTTP receive.
+	RoleServiceBusDataReceiver = "/providers/Microsoft.Authorization/roleDefinitions/" + guidServiceBusDataReceiver
+	// RoleEventGridDataSender grants Event Grid topic publish.
+	RoleEventGridDataSender = "/providers/Microsoft.Authorization/roleDefinitions/" + guidEventGridDataSender
+	// RoleCognitiveOpenAIUser grants OpenAI chat completions theatre.
+	RoleCognitiveOpenAIUser = "/providers/Microsoft.Authorization/roleDefinitions/" + guidCognitiveOpenAIUser
+	// RoleAKSClusterAdminCredential grants listClusterAdminCredential.
+	RoleAKSClusterAdminCredential = "/providers/Microsoft.Authorization/roleDefinitions/" + guidAKSClusterAdmin
+	// RoleAKSClusterUserCredential grants listClusterUserCredential.
+	RoleAKSClusterUserCredential = "/providers/Microsoft.Authorization/roleDefinitions/" + guidAKSClusterUser
 )
 
 const (
@@ -291,4 +430,18 @@ const (
 	guidKeyVaultAdministrator      = "00482a5a-887f-4fb3-b363-3b7fe8e74483"
 	guidKeyVaultSecretsOfficer     = "b86a8fe4-44ce-4948-aee5-eccb2c155cd7"
 	guidKeyVaultSecretsUser        = "4633458b-17de-408a-b874-0445c86b69e6"
+	guidAppConfigDataReader        = "516239f1-5089-44ab-abfb-13939bcf7854"
+	guidAppConfigDataOwner         = "5ae67dd6-50cb-40e7-96ff-dc2bfa4b2122"
+	// Cosmos SQL RBAC built-in data roles (account-level ids reused as theatre GUIDs).
+	guidCosmosDataReader           = "00000000-0000-0000-0000-000000000001"
+	guidCosmosDataReaderAlias      = "fbdf93bf-df7d-467e-a4d2-9458aa1360c8"
+	guidCosmosDataContributor      = "00000000-0000-0000-0000-000000000002"
+	guidCosmosDataContributorAlias = "230815da-be43-4aae-9cb4-875f7bd000aa"
+	guidServiceBusDataOwner        = "090c5cfd-751d-490a-894a-3ce6f1109419"
+	guidServiceBusDataSender       = "69a216fc-b8fb-44d8-bc22-1f3c2cd27a39"
+	guidServiceBusDataReceiver     = "4f6d3b9b-027b-4f4c-9142-0e5a2a2247e0"
+	guidEventGridDataSender        = "d5a91429-5739-47e2-a06b-3470a27159e7"
+	guidCognitiveOpenAIUser = "5e0bd9bd-7b93-4f28-af87-19fc36ad61bd"
+	guidAKSClusterAdmin     = "0ab0b1a8-8aac-4efd-b8c2-3ee1fb270be8"
+	guidAKSClusterUser      = "4abbcc35-e782-43d8-92c5-2d3b4bd8b1c0"
 )

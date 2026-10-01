@@ -189,6 +189,15 @@ func (h *Handler) recoverSecret(w http.ResponseWriter, r *http.Request) {
 	}
 	vault := r.PathValue("vault")
 	name := r.PathValue("name")
+	blocked, err := h.certificateSecretBlocked(vault, name)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	}
+	if blocked {
+		azerrors.Forbidden(w, "Certificate private key is not exportable.")
+		return
+	}
 	version, ok, err := h.Store.RecoverSecret(vault, name)
 	if err != nil {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())

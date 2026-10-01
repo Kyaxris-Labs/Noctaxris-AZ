@@ -319,6 +319,18 @@ func TestAudienceAllowAndHashLookup(t *testing.T) {
 	if !(authn.Principal{ID: "root", IsRoot: true}).AllowsGraph() || !(authn.Principal{ID: "root", IsRoot: true}).AllowsARM() {
 		t.Fatal("root")
 	}
+	vault := authn.Principal{ID: "u", Audiences: []string{authn.AudienceVault}}
+	if !vault.AllowsVault() || vault.AllowsAppConfig() || vault.AllowsCosmos() {
+		t.Fatal("vault aud")
+	}
+	cfg := authn.Principal{ID: "u", Audiences: []string{authn.AudienceAppConfig}}
+	if !cfg.AllowsAppConfig() || cfg.AllowsARM() {
+		t.Fatal("appconfig aud")
+	}
+	cosmos := authn.Principal{ID: "u", Audiences: []string{authn.AudienceARM}}
+	if !cosmos.AllowsCosmos() || cosmos.AllowsAppConfig() {
+		t.Fatal("cosmos accepts ARM theatre")
+	}
 
 	key, err := rsa.GenerateKey(rand.Reader, 1024)
 	if err != nil {

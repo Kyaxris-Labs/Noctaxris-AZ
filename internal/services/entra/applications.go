@@ -126,9 +126,6 @@ func (s *Service) handleGetApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handlePatchApp(w http.ResponseWriter, r *http.Request) {
-	if !s.requireGraph(w, r) {
-		return
-	}
 	var body struct {
 		DisplayName    string           `json:"displayName"`
 		KeyCredentials []map[string]any `json:"keyCredentials"`
@@ -144,6 +141,9 @@ func (s *Service) handlePatchApp(w http.ResponseWriter, r *http.Request) {
 	obj := row.ObjectID
 	if obj == "" {
 		obj = row.AppID
+	}
+	if !s.requireGraphAppWrite(w, r, obj) {
+		return
 	}
 	addingKeys := false
 	for _, kc := range body.KeyCredentials {
@@ -185,13 +185,13 @@ func (s *Service) handlePatchApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleDeleteApp(w http.ResponseWriter, r *http.Request) {
-	if !s.requireGraph(w, r) {
-		return
-	}
 	id := r.PathValue("appId")
 	row, ok, err := s.Store.GetEntraApp(s.appTenant(), id)
 	if err != nil || !ok || row.ObjectID == "" || row.ObjectID != id {
 		azerrors.WriteGraph(w, http.StatusNotFound, "Request_ResourceNotFound", "application not found")
+		return
+	}
+	if !s.requireGraphAppWrite(w, r, row.ObjectID) {
 		return
 	}
 	if err := s.Store.DeleteEntraApp(s.appTenant(), row.ObjectID); err != nil {

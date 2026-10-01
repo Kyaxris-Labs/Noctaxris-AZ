@@ -2,9 +2,15 @@
 
 Status: **lab**
 
+## Authz / authn
+
+- ARM CRUD: ARM `aud` plus RBAC
+- `POST /emails:send`: Communication `aud` (`https://communication.azure.com`) plus `emailServices/write` (or root). Graph alone is denied.
+
 ## Detailed actions
 
 - ARM CRUD for `Microsoft.Communication/emailServices` (lab)
+- `POST /emails:send` captures recipient/subject/body in SQLite
 - Properties stored as JSON theatre
 
 ## Not implemented

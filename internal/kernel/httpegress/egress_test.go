@@ -39,3 +39,13 @@ func TestAllowedLabLocalAndDeny(t *testing.T) {
 		t.Fatal("private")
 	}
 }
+
+func TestAllowedDeniesHostnameResolvingPrivate(t *testing.T) {
+	t.Setenv(httpegress.EnvHTTPEgress, "1")
+	// localhost resolves to loopback; allowlist the exact URL then deny via private DNS check.
+	dest := "http://localhost/hook"
+	t.Setenv(httpegress.EnvHTTPAllowlist, dest)
+	if err := httpegress.Allowed(dest); err == nil {
+		t.Fatal("hostname resolving to loopback must be denied")
+	}
+}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authz"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/services/entra"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/services/eventhubs"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/store"
 )
@@ -217,13 +218,18 @@ func TestEventHubsCapturedEventsAuthorizedReader(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer st.Close()
+	if err := st.EnsureRoot("00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002", "root"); err != nil {
+		t.Fatal(err)
+	}
 	readerID := "eh-reader"
+	es := &entra.Service{Store: st, TenantID: "00000000-0000-0000-0000-000000000001", PublicBase: "http://127.0.0.1:4599"}
 	h := &eventhubs.Handler{
 		Store: st,
 		Auth: &authn.Authenticator{
 			RootClientID:    "r",
 			RootAccessToken: "tok",
-			Tokens:          directoryTokens{id: readerID},
+			Tokens:          st,
+			JWT:            es,
 		},
 		Authz: &authz.Evaluator{Assignments: st},
 	}
@@ -269,8 +275,16 @@ func TestEventHubsCapturedEventsAuthorizedReader(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	readerTok, _, err := es.MintAccessToken(readerID, authn.AudienceARM)
+	if err != nil {
+		t.Fatal(err)
+	}
+	graphTok, _, err := es.MintAccessToken(readerID, authn.AudienceGraph)
+	if err != nil {
+		t.Fatal(err)
+	}
 	capReq, _ := http.NewRequest(http.MethodGet, srv.URL+"/eventhubs/ns1/hubs/hub1/capturedEvents", nil)
-	capReq.Header.Set("Authorization", "Bearer directory-token")
+	capReq.Header.Set("Authorization", "Bearer "+readerTok)
 	capRes, err := http.DefaultClient.Do(capReq)
 	if err != nil {
 		t.Fatal(err)
@@ -278,6 +292,16 @@ func TestEventHubsCapturedEventsAuthorizedReader(t *testing.T) {
 	capRes.Body.Close()
 	if capRes.StatusCode != http.StatusForbidden {
 		t.Fatalf("reader capturedEvents expected 403, got %d", capRes.StatusCode)
+	}
+	graphReq, _ := http.NewRequest(http.MethodGet, srv.URL+"/eventhubs/ns1/hubs/hub1/capturedEvents", nil)
+	graphReq.Header.Set("Authorization", "Bearer "+graphTok)
+	graphRes, err := http.DefaultClient.Do(graphReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	graphRes.Body.Close()
+	if graphRes.StatusCode != http.StatusForbidden {
+		t.Fatalf("graph capture expected audience deny, got %d", graphRes.StatusCode)
 	}
 
 	if err := st.UpsertRoleAssignment(authz.Assignment{
@@ -290,7 +314,7 @@ func TestEventHubsCapturedEventsAuthorizedReader(t *testing.T) {
 		t.Fatal(err)
 	}
 	recvReq, _ := http.NewRequest(http.MethodGet, srv.URL+"/eventhubs/ns1/hubs/hub1/capturedEvents", nil)
-	recvReq.Header.Set("Authorization", "Bearer directory-token")
+	recvReq.Header.Set("Authorization", "Bearer "+readerTok)
 	recvRes, err := http.DefaultClient.Do(recvReq)
 	if err != nil {
 		t.Fatal(err)
@@ -304,21 +328,12 @@ func TestEventHubsCapturedEventsAuthorizedReader(t *testing.T) {
 		t.Fatalf("data receiver capture body %s", capBody)
 	}
 
-	outsider := &eventhubs.Handler{
-		Store: st,
-		Auth: &authn.Authenticator{
-			RootClientID:    "r",
-			RootAccessToken: "tok",
-			Tokens:          directoryTokens{id: "not-assigned"},
-		},
-		Authz: &authz.Evaluator{Assignments: st},
+	outsiderTok, _, err := es.MintAccessToken("not-assigned", authn.AudienceARM)
+	if err != nil {
+		t.Fatal(err)
 	}
-	denyMux := http.NewServeMux()
-	outsider.Register(denyMux)
-	denySrv := httptest.NewServer(denyMux)
-	defer denySrv.Close()
-	bad, _ := http.NewRequest(http.MethodGet, denySrv.URL+"/eventhubs/ns1/hubs/hub1/capturedEvents", nil)
-	bad.Header.Set("Authorization", "Bearer directory-token")
+	bad, _ := http.NewRequest(http.MethodGet, srv.URL+"/eventhubs/ns1/hubs/hub1/capturedEvents", nil)
+	bad.Header.Set("Authorization", "Bearer "+outsiderTok)
 	br, err := http.DefaultClient.Do(bad)
 	if err != nil {
 		t.Fatal(err)

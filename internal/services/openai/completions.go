@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/azauth"
 )
 
 var allowedModels = map[string]struct{}{
@@ -16,17 +18,16 @@ var allowedModels = map[string]struct{}{
 }
 
 func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
-	if h.Auth == nil {
-		azerrors.Unauthenticated(w, "")
-		return
-	}
-	if _, err := h.Auth.AuthenticateRequest(r); err != nil {
-		azerrors.Unauthenticated(w, "")
-		return
-	}
 	name := r.PathValue("name")
-	if _, ok, err := h.Store.GetProviderResourceByName(providerKey, name); err != nil || !ok {
+	row, ok, err := h.Store.GetProviderResourceByName(providerKey, name)
+	if err != nil || !ok {
 		azerrors.NotFound(w, "account not found")
+		return
+	}
+	scope := "/subscriptions/" + row.SubscriptionID + "/resourceGroups/" + row.ResourceGroup +
+		"/providers/Microsoft.CognitiveServices/accounts/" + name
+	if _, ok := azauth.RequireDataPlaneBearer(w, r, h.Auth, h.Authz, authn.Principal.AllowsCognitive,
+		"Microsoft.CognitiveServices/accounts/deployments/chat/completions/action", scope); !ok {
 		return
 	}
 	var body struct {

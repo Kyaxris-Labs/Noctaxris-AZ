@@ -218,8 +218,8 @@ SELECT client_id, name FROM managed_identities WHERE principal_id = ? LIMIT 1`, 
 func (s *Store) ListRoleAssignmentsByScopePrefix(prefix string) ([]authz.Assignment, error) {
 	rows, err := s.db.Query(`
 SELECT id, scope, role_definition_id, principal_id, principal_type FROM role_assignments
-WHERE scope = ? OR scope LIKE ? || '/%'
-ORDER BY id`, prefix, prefix)
+WHERE scope = ? OR scope LIKE ? ESCAPE '\'
+ORDER BY id`, prefix, likePrefixChildren(prefix))
 	if err != nil {
 		return nil, err
 	}

@@ -5,7 +5,7 @@ Implemented lab surface on `127.0.0.1:4599` (HTTP) and `127.0.0.1:5672` (AMQP li
 | Service | Status | Doc | Protocol |
 |---------|--------|-----|----------|
 | Microsoft Entra ID | lab | [entra.md](entra.md) | OIDC/JWKS; v1/v2 token on tenant/`common`/`organizations`; lab OIDC token mint; Graph directory lists and `POST /servicePrincipals`; ROPC password hash; device code with `/device` approval; WIF vs private_key_jwt with FIC bound to `client_id`; Conditional Access at token mint (`AADSTS53003`, include-list scoped); `client_credentials` requires secret or assertion; Graph directory writes gated by directory roles; `addPassword` / `addKey` / owners gated by owner or Application Administrator (`directoryScopeId`) |
-| Managed Identity | lab | [managedidentity.md](managedidentity.md) | User + system-assigned ARM; IMDS mint for known identities from nested/private peers |
+| Managed Identity | lab | [managedidentity.md](managedidentity.md) | User + system-assigned ARM; IMDS mint for known identities with metadata Host or loopback/link-local peers |
 | Subscriptions / resource groups | lab | [subscriptions.md](subscriptions.md) | ARM list/get subscriptions, tenants, MGs, ARG, subscription-scope LISTs |
 | Authorization (RBAC) | lab | [authorization.md](authorization.md) | Role assignments PUT/GET/LIST/DELETE; group expansion; extra built-in GUIDs |
 | Key Vault | lab | [keyvault.md](keyvault.md) | Secrets/keys/certificates (exportable PKCS#8 as same-name secret) + soft-delete; data plane vault `aud` + RBAC |

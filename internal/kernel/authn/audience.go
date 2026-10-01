@@ -21,6 +21,20 @@ const (
 	AudienceACRService = "containerregistry.azure.net"
 	// AudienceVault is the Key Vault data-plane resource.
 	AudienceVault = "https://vault.azure.net"
+	// AudienceServiceBus is the Service Bus data-plane resource.
+	AudienceServiceBus = "https://servicebus.azure.net"
+	// AudienceEventHubs is the Event Hubs data-plane resource.
+	AudienceEventHubs = "https://eventhubs.azure.net"
+	// AudienceEventGrid is the Event Grid data-plane resource.
+	AudienceEventGrid = "https://eventgrid.azure.net"
+	// AudienceCosmos is the Cosmos DB data-plane resource.
+	AudienceCosmos = "https://cosmos.azure.com"
+	// AudienceAppConfig is the App Configuration data-plane resource.
+	AudienceAppConfig = "https://azconfig.io"
+	// AudienceCognitive is Cognitive Services / Azure OpenAI data plane.
+	AudienceCognitive = "https://cognitiveservices.azure.com"
+	// AudienceCommunication is Azure Communication Services data plane.
+	AudienceCommunication = "https://communication.azure.com"
 )
 
 // NormalizeAudience trims space and a trailing slash for resource comparison.
@@ -40,9 +54,39 @@ func audienceKind(aud string) string {
 		return "acr"
 	case NormalizeAudience(AudienceVault):
 		return "vault"
+	case NormalizeAudience(AudienceServiceBus):
+		return "servicebus"
+	case NormalizeAudience(AudienceEventHubs):
+		return "eventhubs"
+	case NormalizeAudience(AudienceEventGrid):
+		return "eventgrid"
+	case NormalizeAudience(AudienceCosmos):
+		return "cosmos"
+	case NormalizeAudience(AudienceAppConfig):
+		return "appconfig"
+	case NormalizeAudience(AudienceCognitive):
+		return "cognitive"
+	case NormalizeAudience(AudienceCommunication):
+		return "communication"
 	default:
 		return ""
 	}
+}
+
+func (p Principal) allowsKind(kind string) bool {
+	if p.IsRoot {
+		return true
+	}
+	auds := p.normalizedAudiences()
+	if len(auds) == 0 {
+		return false
+	}
+	for _, a := range auds {
+		if audienceKind(a) != kind {
+			return false
+		}
+	}
+	return true
 }
 
 func (p Principal) normalizedAudiences() []string {
@@ -114,19 +158,55 @@ func (p Principal) AllowsARM() bool {
 // AllowsVault reports whether p may call Key Vault data plane.
 // Root skips audience. Non-root tokens must carry only the vault resource audience.
 func (p Principal) AllowsVault() bool {
-	if p.IsRoot {
+	return p.allowsKind("vault")
+}
+
+// AllowsServiceBus reports whether p may call Service Bus HTTP data plane.
+func (p Principal) AllowsServiceBus() bool {
+	return p.allowsKind("servicebus")
+}
+
+// AllowsEventHubs reports whether p may call Event Hubs data plane (capture theatre).
+// ARM audience is accepted for AAD data-plane theatre. Opaque hashed tokens with no
+// aud (lab directory tokens) are accepted. Graph and other non-Event-Hubs audiences are denied.
+func (p Principal) AllowsEventHubs() bool {
+	if p.IsRoot || p.AllowsARM() {
 		return true
 	}
 	auds := p.normalizedAudiences()
 	if len(auds) == 0 {
-		return false
+		return true
 	}
-	for _, a := range auds {
-		if audienceKind(a) != "vault" {
-			return false
-		}
+	return p.allowsKind("eventhubs")
+}
+
+// AllowsEventGrid reports whether p may publish on Event Grid topics.
+func (p Principal) AllowsEventGrid() bool {
+	return p.allowsKind("eventgrid")
+}
+
+// AllowsCosmos reports whether p may call Cosmos document routes with Bearer.
+// ARM audience is accepted for Entra data-plane theatre; Graph is denied.
+func (p Principal) AllowsCosmos() bool {
+	if p.IsRoot || p.AllowsARM() {
+		return true
 	}
-	return true
+	return p.allowsKind("cosmos")
+}
+
+// AllowsAppConfig reports whether p may call App Configuration data plane.
+func (p Principal) AllowsAppConfig() bool {
+	return p.allowsKind("appconfig")
+}
+
+// AllowsCognitive reports whether p may call Cognitive / OpenAI data plane.
+func (p Principal) AllowsCognitive() bool {
+	return p.allowsKind("cognitive")
+}
+
+// AllowsCommunication reports whether p may call Communication Services email send.
+func (p Principal) AllowsCommunication() bool {
+	return p.allowsKind("communication")
 }
 
 // AllowsRegistry reports whether p may call Registry V2 / oauth2 token theatre.

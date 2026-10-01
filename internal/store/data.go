@@ -451,6 +451,20 @@ WHERE subscription_id = ? AND resource_group = ? AND name = ?`, subID, rg, name)
 	return location, true, nil
 }
 
+// GetServiceBusNamespaceByName loads subscription and resource group for a namespace name.
+func (s *Store) GetServiceBusNamespaceByName(name string) (sub, rg, location string, ok bool, err error) {
+	err = s.db.QueryRow(`
+SELECT subscription_id, resource_group, location FROM servicebus_namespaces WHERE name = ? LIMIT 1`, name).
+		Scan(&sub, &rg, &location)
+	if err == sql.ErrNoRows {
+		return "", "", "", false, nil
+	}
+	if err != nil {
+		return "", "", "", false, err
+	}
+	return sub, rg, location, true, nil
+}
+
 // GetSBNamespaceKey unseals the namespace SAS key.
 func (s *Store) GetSBNamespaceKey(namespace string) (string, bool, error) {
 	var sealed []byte

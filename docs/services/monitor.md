@@ -28,7 +28,7 @@ Activity Log list shaped like Microsoft.Insights eventtypes, metrics write/list 
 
 Activity Log supports `$top` (and `top`). Omitted `$top` defaults to 1000 (not 50). Values above 10000 are capped at 10000. List returns events whose `resourceId` is `/subscriptions/{sub}` or a child of that subscription. `subscriptionId` on each event is the path subscription.
 
-Metrics POST body: `{"name","value","resourceId"}`. Metrics GET accepts `metricnames` or `name`.
+Metrics POST body: `{"name","value","resourceId"}`. Metrics GET accepts `metricnames` or `name` and returns samples whose `resourceId` is under the path subscription (same prefix rule as Activity Log, with `LIKE` metacharacters escaped).
 
 Diagnostic settings follow ARM `Microsoft.Insights/diagnosticSettings` with api-version `2021-05-01-preview`. PUT body properties used: `workspaceId`, `storageAccountId`, `eventHubAuthorizationRuleId`, `eventHubName`, `logs[]`, `metrics[]`. Nested resource paths cover one provider/type/name segment (not child resources such as `blobServices`). Settings are stored; logs and metrics are not shipped to a workspace, storage account, or Event Hub.
 

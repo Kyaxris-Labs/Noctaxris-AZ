@@ -81,8 +81,16 @@ func (h *Handler) putHub(w http.ResponseWriter, r *http.Request) {
 	if !h.require(w, r, "Microsoft.EventHub/namespaces/eventhubs/write") {
 		return
 	}
-	ns, hub := r.PathValue("ns"), r.PathValue("hub")
-	if err := h.Store.CreateEventHub(ns, hub, 2); err != nil {
+	sub, rg, ns, hub := r.PathValue("sub"), r.PathValue("rg"), r.PathValue("ns"), r.PathValue("hub")
+	if _, ok, err := h.Store.GetEventHubsNamespace(sub, rg, ns); err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	} else if !ok {
+		azerrors.NotFound(w, "namespace not found")
+		return
+	}
+	key := store.EventHubNamespaceKey(sub, rg, ns)
+	if err := h.Store.CreateEventHub(key, hub, 2); err != nil {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
 		return
 	}
@@ -96,7 +104,16 @@ func (h *Handler) putCG(w http.ResponseWriter, r *http.Request) {
 	if !h.require(w, r, "Microsoft.EventHub/namespaces/eventhubs/consumergroups/write") {
 		return
 	}
-	if err := h.Store.CreateEventHubConsumerGroup(r.PathValue("ns"), r.PathValue("hub"), r.PathValue("cg")); err != nil {
+	sub, rg, ns := r.PathValue("sub"), r.PathValue("rg"), r.PathValue("ns")
+	if _, ok, err := h.Store.GetEventHubsNamespace(sub, rg, ns); err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	} else if !ok {
+		azerrors.NotFound(w, "namespace not found")
+		return
+	}
+	key := store.EventHubNamespaceKey(sub, rg, ns)
+	if err := h.Store.CreateEventHubConsumerGroup(key, r.PathValue("hub"), r.PathValue("cg")); err != nil {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
 		return
 	}
@@ -107,13 +124,22 @@ func (h *Handler) postMsg(w http.ResponseWriter, r *http.Request) {
 	if !h.requireRoot(w, r) {
 		return
 	}
+	key, ok, err := h.resolveNamespaceKey(r.PathValue("ns"))
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	}
+	if !ok {
+		azerrors.NotFound(w, "namespace not found")
+		return
+	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
 		azerrors.BadRequest(w, err.Error())
 		return
 	}
 	part := r.URL.Query().Get("partition")
-	if err := h.Store.EnqueueEventHub(r.PathValue("ns"), r.PathValue("hub"), part, body); err != nil {
+	if err := h.Store.EnqueueEventHub(key, r.PathValue("hub"), part, body); err != nil {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
 		return
 	}
@@ -124,12 +150,21 @@ func (h *Handler) getMsg(w http.ResponseWriter, r *http.Request) {
 	if !h.requireRoot(w, r) {
 		return
 	}
-	body, ok, err := h.Store.DequeueEventHub(r.PathValue("ns"), r.PathValue("hub"), r.URL.Query().Get("partition"))
+	key, foundNS, err := h.resolveNamespaceKey(r.PathValue("ns"))
 	if err != nil {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
 		return
 	}
-	if !ok {
+	if !foundNS {
+		azerrors.NotFound(w, "namespace not found")
+		return
+	}
+	body, found, err := h.Store.DequeueEventHub(key, r.PathValue("hub"), r.URL.Query().Get("partition"))
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	}
+	if !found {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
@@ -139,10 +174,11 @@ func (h *Handler) getMsg(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) capturedEvents(w http.ResponseWriter, r *http.Request) {
-	if !h.requireCaptureRead(w, r) {
+	keys, ok := h.requireCaptureRead(w, r)
+	if !ok {
 		return
 	}
-	list, err := h.Store.ListEventHubCaptured(r.PathValue("ns"), r.PathValue("hub"))
+	list, err := h.Store.ListEventHubCapturedForNamespaces(keys, r.PathValue("hub"))
 	if err != nil {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
 		return
@@ -155,7 +191,8 @@ func (h *Handler) capturedEvents(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) getCapturedEvent(w http.ResponseWriter, r *http.Request) {
-	if !h.requireCaptureRead(w, r) {
+	keys, ok := h.requireCaptureRead(w, r)
+	if !ok {
 		return
 	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
@@ -163,12 +200,12 @@ func (h *Handler) getCapturedEvent(w http.ResponseWriter, r *http.Request) {
 		azerrors.BadRequest(w, "captured event id must be a positive integer")
 		return
 	}
-	ev, ok, err := h.Store.GetEventHubCaptured(r.PathValue("ns"), r.PathValue("hub"), id)
+	ev, found, err := h.Store.GetEventHubCapturedForNamespaces(keys, r.PathValue("hub"), id)
 	if err != nil {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
 		return
 	}
-	if !ok {
+	if !found {
 		azerrors.NotFound(w, "captured event not found")
 		return
 	}
@@ -184,44 +221,74 @@ func capturedEventJSON(ev store.EventHubCapturedEvent) map[string]any {
 	}
 }
 
-func (h *Handler) requireCaptureRead(w http.ResponseWriter, r *http.Request) bool {
+func (h *Handler) requireCaptureRead(w http.ResponseWriter, r *http.Request) ([]string, bool) {
+	// Authenticate and audience before namespace lookup so missing Bearer stays 401.
 	if h.Auth == nil {
 		azerrors.Unauthenticated(w, "")
-		return false
+		return nil, false
 	}
 	p, err := h.Auth.AuthenticateRequest(r)
 	if err != nil {
 		azerrors.Unauthenticated(w, "")
-		return false
+		return nil, false
+	}
+	if !p.AllowsEventHubs() {
+		azerrors.InvalidAuthenticationTokenAudience(w, "")
+		return nil, false
+	}
+	ns := r.PathValue("ns")
+	rows, err := h.Store.ListEventHubsNamespacesByName(ns)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return nil, false
+	}
+	if len(rows) == 0 {
+		azerrors.Forbidden(w, "")
+		return nil, false
 	}
 	if p.IsRoot {
-		return true
+		keys := make([]string, 0, len(rows))
+		for _, row := range rows {
+			keys = append(keys, store.EventHubNamespaceKey(row.SubscriptionID, row.ResourceGroup, row.Name))
+		}
+		return keys, true
 	}
 	if h.Authz == nil {
 		azerrors.Forbidden(w, "")
-		return false
+		return nil, false
 	}
-	ns := r.PathValue("ns")
-	sub, rg, _, ok, err := h.Store.GetEventHubsNamespaceByName(ns)
-	if err != nil {
-		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
-		return false
+	keys := make([]string, 0, len(rows))
+	for _, row := range rows {
+		rowScope := "/subscriptions/" + row.SubscriptionID + "/resourceGroups/" + row.ResourceGroup
+		allowed, err := h.Authz.Evaluate(p.ID, p.IsRoot, "Microsoft.EventHub/namespaces/eventhubs/receive/action", rowScope)
+		if err != nil {
+			azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+			return nil, false
+		}
+		if allowed {
+			keys = append(keys, store.EventHubNamespaceKey(row.SubscriptionID, row.ResourceGroup, row.Name))
+		}
 	}
-	if !ok {
+	if len(keys) == 0 {
 		azerrors.Forbidden(w, "")
-		return false
+		return nil, false
 	}
-	scope := "/subscriptions/" + sub + "/resourceGroups/" + rg
-	allowed, err := h.Authz.Evaluate(p.ID, p.IsRoot, "Microsoft.EventHub/namespaces/eventhubs/receive/action", scope)
+	return keys, true
+}
+
+func (h *Handler) resolveNamespaceKey(name string) (string, bool, error) {
+	rows, err := h.Store.ListEventHubsNamespacesByName(name)
 	if err != nil {
-		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
-		return false
+		return "", false, err
 	}
-	if allowed {
-		return true
+	if len(rows) == 0 {
+		return "", false, nil
 	}
-	azerrors.Forbidden(w, "")
-	return false
+	if len(rows) > 1 {
+		// Bare HTTP paths are ambiguous when the same namespace name exists in multiple RGs.
+		return "", false, nil
+	}
+	return store.EventHubNamespaceKey(rows[0].SubscriptionID, rows[0].ResourceGroup, rows[0].Name), true, nil
 }
 
 func (h *Handler) requireRoot(w http.ResponseWriter, r *http.Request) bool {

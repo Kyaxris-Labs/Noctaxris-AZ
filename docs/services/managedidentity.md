@@ -21,13 +21,14 @@ mint requires exactly one system-assigned identity.
 Tokens are RS256 lab JWTs accepted as ARM Bearer. Response fields follow the
 IMDS shape (`expires_in`/`expires_on`/`not_before` as strings).
 
-Path is on the API listener. Callers must be loopback, link-local, or RFC1918 private
-(nested / bridge peers). Other remote addresses receive HTTP 403.
+Path is on the API listener. Mint allows loopback or link-local peers, or an RFC1918
+peer when `Host` is `169.254.169.254` (or `metadata` / `metadata.azure.com`). Empty
+`RemoteAddr` fails closed. Other remote addresses receive HTTP 403.
 
 ## Authz / authn
 
 - ARM routes: Bearer + RBAC (`Microsoft.ManagedIdentity/...`)
-- IMDS: no Bearer; Metadata header; known identity; nested/private peer addresses
+- IMDS: no Bearer; Metadata header; known identity; metadata Host or loopback/link-local peer
 
 ## Detailed actions
 
@@ -43,7 +44,7 @@ Path is on the API listener. Callers must be loopback, link-local, or RFC1918 pr
 
 ## Emulator limits
 
-- IMDS shares the ARM HTTP port; mint is limited to nested/private peers and known identities
+- IMDS shares the ARM HTTP port; mint is limited to metadata Host / loopback / link-local peers and known identities
 - Soft-delete / recover not applicable
 
 ## Deferred depth

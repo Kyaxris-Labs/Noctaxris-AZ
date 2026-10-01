@@ -20,15 +20,15 @@ Bearer required on data plane (WWW-Authenticate on 401). Data plane resource / t
 
 - ARM vault CRUD: token `aud` must be `https://management.azure.com` or `https://management.core.windows.net` (Graph `aud` is HTTP 403 `InvalidAuthenticationTokenAudience`). Root Bearer skips audience.
 - `Microsoft.KeyVault/vaults/read|write`
-- Data plane: vault `aud` plus Azure RBAC on the vault scope. Key Vault Secrets User can get secrets; Secrets Officer / Administrator cover set/delete and keys/certificates. Control-plane Owner / Contributor / Reader alone do not grant data-plane secret access. Root Bearer still succeeds.
+- Data plane: vault `aud` plus Azure RBAC on the vault scope. Key Vault Secrets User can get secrets; Secrets Officer covers secret set/delete/recover; keys and certificates require Key Vault Administrator (or root). Control-plane Owner / Contributor / Reader alone do not grant data-plane secret access. Root Bearer still succeeds.
 
 ## Detailed actions
 
 - Create vault metadata
 - Set/get secret versions (sealed)
-- Soft-delete and recover secrets (timers are immediate in lab)
+- Soft-delete and recover secrets (timers are immediate in lab). Recover applies the same non-exportable certificate gate as GET secret.
 - Create/get key material (sealed)
-- PUT/GET certificates. GET certificate returns public `cer` only. When policy `key_props.exportable` (or `keyProperties.exportable`) is true, the private key is stored as the addressable secret of the same name (PKCS#8 PEM). GET secret without an exportable policy is denied. The exported PEM can be registered with Graph `addKey` and used as `private_key_jwt`.
+- PUT/GET certificates. GET certificate returns public `cer` only. When policy `key_props.exportable` (or `keyProperties.exportable`) is true, the private key is stored as the addressable secret of the same name (PKCS#8 PEM). GET secret and recover without an exportable policy are denied. The exported PEM can be registered with Graph `addKey` and used as `private_key_jwt`.
 
 ## Not implemented
 
