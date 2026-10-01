@@ -46,13 +46,12 @@ func TestHandleConnOpenAttachTransferFlowDeliver(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// open with hostname + connection-string props via map is hard; use hostname field
 	if err := writePerformative(c1, 0, perfOpen, []any{
 		"client",
 		"ns1.servicebus.windows.net",
 		uint32(65536),
 		uint16(1),
-		nil,
+		map[string]string{"SharedAccessKey": sas},
 	}); err != nil {
 		t.Fatal(err)
 	}

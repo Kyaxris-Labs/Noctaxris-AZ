@@ -2,7 +2,6 @@ package keyvault_test
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -58,8 +57,21 @@ func TestKeyVaultARMRejectsGraphAudience(t *testing.T) {
 	put.Header.Set("Content-Type", "application/json")
 	prec := httptest.NewRecorder()
 	mux.ServeHTTP(prec, put)
-	if prec.Code != http.StatusOK {
-		b, _ := io.ReadAll(prec.Body)
-		t.Fatalf("data plane Graph aud %d: %s", prec.Code, b)
+	if prec.Code == http.StatusOK {
+		t.Fatalf("data plane Graph aud unexpectedly allowed")
+	}
+	vaultTok, _, err := es.MintAccessToken("sp-lab-1", authn.AudienceVault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	put2, _ := http.NewRequest(http.MethodPut, "/keyvault/kv1/secrets/s1?api-version=7.4",
+		strings.NewReader(`{"value":"from-vault-aud"}`))
+	put2.Header.Set("Authorization", "Bearer "+vaultTok)
+	put2.Header.Set("Content-Type", "application/json")
+	h.Authz = nil
+	prec2 := httptest.NewRecorder()
+	mux.ServeHTTP(prec2, put2)
+	if prec2.Code == http.StatusOK {
+		t.Fatalf("vault aud without RBAC unexpectedly allowed")
 	}
 }

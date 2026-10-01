@@ -19,6 +19,8 @@ const (
 	AudienceACR = "https://containerregistry.azure.net"
 	// AudienceACRService is the Registry V2 WWW-Authenticate service name.
 	AudienceACRService = "containerregistry.azure.net"
+	// AudienceVault is the Key Vault data-plane resource.
+	AudienceVault = "https://vault.azure.net"
 )
 
 // NormalizeAudience trims space and a trailing slash for resource comparison.
@@ -36,6 +38,8 @@ func audienceKind(aud string) string {
 		return "arm"
 	case NormalizeAudience(AudienceACR), NormalizeAudience(AudienceACRService):
 		return "acr"
+	case NormalizeAudience(AudienceVault):
+		return "vault"
 	default:
 		return ""
 	}
@@ -101,6 +105,24 @@ func (p Principal) AllowsARM() bool {
 	}
 	for _, a := range auds {
 		if audienceKind(a) != "arm" {
+			return false
+		}
+	}
+	return true
+}
+
+// AllowsVault reports whether p may call Key Vault data plane.
+// Root skips audience. Non-root tokens must carry only the vault resource audience.
+func (p Principal) AllowsVault() bool {
+	if p.IsRoot {
+		return true
+	}
+	auds := p.normalizedAudiences()
+	if len(auds) == 0 {
+		return false
+	}
+	for _, a := range auds {
+		if audienceKind(a) != "vault" {
 			return false
 		}
 	}

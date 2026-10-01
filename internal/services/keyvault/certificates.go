@@ -16,7 +16,7 @@ import (
 )
 
 func (h *Handler) putCertificate(w http.ResponseWriter, r *http.Request) {
-	if !h.requireDataPlaneBearer(w, r) {
+	if !h.requireDataPlaneBearer(w, r, "Microsoft.KeyVault/vaults/certificates/write") {
 		return
 	}
 	vault, name := r.PathValue("vault"), r.PathValue("name")
@@ -57,7 +57,7 @@ func (h *Handler) putCertificate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) getCertificate(w http.ResponseWriter, r *http.Request) {
-	if !h.requireDataPlaneBearer(w, r) {
+	if !h.requireDataPlaneBearer(w, r, "Microsoft.KeyVault/vaults/certificates/read") {
 		return
 	}
 	version, pem, _, ok, err := h.Store.GetKeyVaultCertificate(r.PathValue("vault"), r.PathValue("name"))

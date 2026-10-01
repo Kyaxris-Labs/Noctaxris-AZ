@@ -66,6 +66,7 @@ func TestAuthenticateRootTokenAndPublicPaths(t *testing.T) {
 		"/_noctaxris-az/ready",
 		"/_noctaxris-az/version",
 		"/metadata/identity/oauth2/token",
+		"/device",
 		"/tenant/oauth2/v2.0/token",
 		"/tenant/oauth2/token",
 		"/common/oauth2/v2.0/token",

@@ -144,7 +144,7 @@ func TestLabClockNonRootDenied(t *testing.T) {
 	_ = cfg
 	req := httptest.NewRequest(http.MethodPost,
 		"/"+config.DefaultTenantID+"/oauth2/v2.0/token",
-		strings.NewReader("grant_type=password&username=lab-admin@lab.local&password=unused"))
+		strings.NewReader("grant_type=password&username=lab-admin@lab.local&password=LabAdmin!Pass1"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
 	st.Handler().ServeHTTP(rec, req)
@@ -178,7 +178,7 @@ func TestAuthExpiryIgnoresLabClock(t *testing.T) {
 	}
 	tokReq := httptest.NewRequest(http.MethodPost,
 		"/"+config.DefaultTenantID+"/oauth2/v2.0/token",
-		strings.NewReader("grant_type=password&username=lab-admin@lab.local&password=unused&scope=https://graph.microsoft.com/.default"))
+		strings.NewReader("grant_type=password&username=lab-admin@lab.local&password=LabAdmin!Pass1&scope=https://graph.microsoft.com/.default"))
 	tokReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec = httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, tokReq)

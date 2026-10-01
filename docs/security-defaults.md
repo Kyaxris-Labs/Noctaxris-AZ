@@ -38,14 +38,16 @@ Noctaxris-AZ fails closed. Defaults favor a loopback lab on a single laptop.
 | ARM / RBAC / Key Vault / Monitor / App Configuration / Functions | `Authorization: Bearer <token>` |
 | Storage blob / queue / table | Shared Key HMAC (`SharedKey <account>:<sig>`), SAS query HMAC (`sig` / `se` / `sp` against the account key), or root Bearer |
 | Event Hubs HTTP messages | Root Bearer only (send/receive). Captured-events list/get: root or Event Hubs Data Receiver / Data Owner |
-| Service Bus AMQP lite | Connection string / SAS |
+| Service Bus AMQP lite | Connection string / SAS (SharedAccessKey required on attach) |
+| Key Vault data plane | Bearer with vault `aud` plus Key Vault data RBAC |
 
 - Root token comes from `NOCTAXRIS_AZ_ROOT_ACCESS_TOKEN` and maps to `NOCTAXRIS_AZ_ROOT_CLIENT_ID`.
 - Other tokens are SHA-256 hashed and looked up in `access_tokens`.
 - Missing or invalid Bearer credentials return Azure ARM `AuthenticationFailed` (HTTP 401).
 - Storage SAS that fails HMAC, expiry, or `sp` checks returns HTTP 403 `AuthenticationFailed`. Shared Key with a missing account stays HTTP 404 `AccountNotFound`.
 - Public paths: `/_noctaxris-az/health`, `/_noctaxris-az/ready`, `/_noctaxris-az/version`,
-  Entra token/OIDC discovery/JWKS, and IMDS `/metadata/identity/oauth2/token`.
+  Entra token/OIDC discovery/JWKS, `POST /device`, and IMDS `/metadata/identity/oauth2/token`
+  (IMDS still requires Metadata, a known identity, and a loopback/link-local/private peer).
 - Nested image pulls fail closed unless allowlisted (`NOCTAXRIS_AZ_IMAGE_PULL_ALLOWLIST`).
 
 ## Example root refusal

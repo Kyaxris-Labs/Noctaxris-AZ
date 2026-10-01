@@ -22,15 +22,15 @@ import (
 var protocolHeader = []byte{'A', 'M', 'Q', 'P', 0, 1, 0, 0}
 
 const (
-	perfOpen         = 0x10
-	perfBegin        = 0x11
-	perfAttach       = 0x12
-	perfFlow         = 0x13
-	perfTransfer     = 0x14
-	perfDisposition  = 0x15
-	perfDetach       = 0x16
-	perfEnd          = 0x17
-	perfClose        = 0x18
+	perfOpen        = 0x10
+	perfBegin       = 0x11
+	perfAttach      = 0x12
+	perfFlow        = 0x13
+	perfTransfer    = 0x14
+	perfDisposition = 0x15
+	perfDetach      = 0x16
+	perfEnd         = 0x17
+	perfClose       = 0x18
 )
 
 // Start listens for AMQP 1.0 lite connections until ctx is cancelled.
@@ -146,10 +146,10 @@ type link struct {
 }
 
 type session struct {
-	store     *store.Store
-	namespace string
-	sasKey    string
-	links     map[uint32]*link
+	store        *store.Store
+	namespace    string
+	sasKey       string
+	links        map[uint32]*link
 	nextDelivery uint32
 }
 
@@ -184,10 +184,10 @@ func (s *session) onFrame(c net.Conn, f frame) error {
 		})
 	case perfBegin:
 		return writePerformative(c, f.channel, perfBegin, []any{
-			uint16(0),     // remote-channel
-			uint32(0),     // next-outgoing-id
-			uint32(2048),  // incoming-window
-			uint32(2048),  // outgoing-window
+			uint16(0),    // remote-channel
+			uint32(0),    // next-outgoing-id
+			uint32(2048), // incoming-window
+			uint32(2048), // outgoing-window
 		})
 	case perfAttach:
 		name := fieldString(fields, 0)
@@ -210,11 +210,21 @@ func (s *session) onFrame(c net.Conn, f frame) error {
 			ns = queue[:i]
 			queue = queue[i+1:]
 		}
-		if s.sasKey != "" && ns != "" {
-			want, ok, err := s.store.GetSBNamespaceKey(ns)
-			if err == nil && ok && want != s.sasKey {
-				return fmt.Errorf("sas key mismatch")
-			}
+		if ns == "" {
+			return fmt.Errorf("namespace required for attach")
+		}
+		want, ok, err := s.store.GetSBNamespaceKey(ns)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("unknown namespace")
+		}
+		if s.sasKey == "" {
+			return fmt.Errorf("SharedAccessKey required")
+		}
+		if want != s.sasKey {
+			return fmt.Errorf("sas key mismatch")
 		}
 		s.links[handle] = &link{
 			name:      name,
@@ -483,6 +493,28 @@ func encodeValue(v any) []byte {
 		binary.BigEndian.PutUint32(tmp, uint32(len(t)))
 		out = append(out, tmp...)
 		out = append(out, t...)
+		return out
+	case map[string]string:
+		var items []byte
+		for k, val := range t {
+			items = append(items, encodeValue(k)...)
+			items = append(items, encodeValue(val)...)
+		}
+		count := len(t) * 2
+		if len(items)+1 < 256 {
+			out := make([]byte, 0, 3+len(items))
+			out = append(out, 0xc1, byte(len(items)+1), byte(count))
+			out = append(out, items...)
+			return out
+		}
+		out := make([]byte, 0, 9+len(items))
+		out = append(out, 0xd1)
+		tmp := make([]byte, 4)
+		binary.BigEndian.PutUint32(tmp, uint32(len(items)+4))
+		out = append(out, tmp...)
+		binary.BigEndian.PutUint32(tmp, uint32(count))
+		out = append(out, tmp...)
+		out = append(out, items...)
 		return out
 	default:
 		return []byte{0x40}

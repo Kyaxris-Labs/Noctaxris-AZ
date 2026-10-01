@@ -62,6 +62,7 @@ func TestManagedIdentityIMDSToken(t *testing.T) {
 	imds := httptest.NewRequest(http.MethodGet,
 		"/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/&client_id="+clientID, nil)
 	imds.Header.Set("Metadata", "true")
+	imds.RemoteAddr = "127.0.0.1:9"
 	irec := httptest.NewRecorder()
 	mux.ServeHTTP(irec, imds)
 	if irec.Code != http.StatusOK {

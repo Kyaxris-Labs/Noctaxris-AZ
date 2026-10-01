@@ -106,7 +106,7 @@ func (h *Handler) getVault(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) putSecret(w http.ResponseWriter, r *http.Request) {
-	if !h.requireDataPlaneBearer(w, r) {
+	if !h.requireDataPlaneBearer(w, r, "Microsoft.KeyVault/vaults/secrets/setSecret/action") {
 		return
 	}
 	vault := r.PathValue("vault")
@@ -134,7 +134,7 @@ func (h *Handler) putSecret(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) getSecret(w http.ResponseWriter, r *http.Request) {
-	if !h.requireDataPlaneBearer(w, r) {
+	if !h.requireDataPlaneBearer(w, r, "Microsoft.KeyVault/vaults/secrets/getSecret/action") {
 		return
 	}
 	vault := r.PathValue("vault")
@@ -161,7 +161,7 @@ func (h *Handler) getSecret(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) deleteSecret(w http.ResponseWriter, r *http.Request) {
-	if !h.requireDataPlaneBearer(w, r) {
+	if !h.requireDataPlaneBearer(w, r, "Microsoft.KeyVault/vaults/secrets/delete") {
 		return
 	}
 	vault := r.PathValue("vault")
@@ -184,7 +184,7 @@ func (h *Handler) deleteSecret(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) recoverSecret(w http.ResponseWriter, r *http.Request) {
-	if !h.requireDataPlaneBearer(w, r) {
+	if !h.requireDataPlaneBearer(w, r, "Microsoft.KeyVault/vaults/secrets/recover/action") {
 		return
 	}
 	vault := r.PathValue("vault")
@@ -212,7 +212,7 @@ func (h *Handler) recoverSecret(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) putKey(w http.ResponseWriter, r *http.Request) {
-	if !h.requireDataPlaneBearer(w, r) {
+	if !h.requireDataPlaneBearer(w, r, "Microsoft.KeyVault/vaults/keys/write") {
 		return
 	}
 	vault := r.PathValue("vault")
@@ -244,7 +244,7 @@ func (h *Handler) putKey(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) getKey(w http.ResponseWriter, r *http.Request) {
-	if !h.requireDataPlaneBearer(w, r) {
+	if !h.requireDataPlaneBearer(w, r, "Microsoft.KeyVault/vaults/keys/read") {
 		return
 	}
 	vault := r.PathValue("vault")
@@ -268,7 +268,7 @@ func (h *Handler) getKey(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) encrypt(w http.ResponseWriter, r *http.Request) {
-	if !h.requireDataPlaneBearer(w, r) {
+	if !h.requireDataPlaneBearer(w, r, "Microsoft.KeyVault/vaults/keys/encrypt/action") {
 		return
 	}
 	vault := r.PathValue("vault")
@@ -312,7 +312,7 @@ func (h *Handler) encrypt(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) decrypt(w http.ResponseWriter, r *http.Request) {
-	if !h.requireDataPlaneBearer(w, r) {
+	if !h.requireDataPlaneBearer(w, r, "Microsoft.KeyVault/vaults/keys/decrypt/action") {
 		return
 	}
 	vault := r.PathValue("vault")
@@ -378,14 +378,14 @@ func secretResponse(vault, name, version, value string) map[string]any {
 	}
 }
 
-func (h *Handler) requireDataPlaneBearer(w http.ResponseWriter, r *http.Request) bool {
+func (h *Handler) requireDataPlaneBearer(w http.ResponseWriter, r *http.Request, action string) bool {
 	authzURL := h.AuthorizationURL
 	if authzURL == "" {
 		authzURL = "http://127.0.0.1:4599"
 	}
 	resource := h.Resource
 	if resource == "" {
-		resource = "https://vault.azure.net"
+		resource = authn.AudienceVault
 	}
 	raw := r.Header.Get("Authorization")
 	if !strings.HasPrefix(raw, "Bearer ") {
@@ -396,8 +396,39 @@ func (h *Handler) requireDataPlaneBearer(w http.ResponseWriter, r *http.Request)
 		azerrors.KeyVaultUnauthenticated(w, authzURL, resource)
 		return false
 	}
-	if _, err := h.Auth.AuthenticateRequest(r); err != nil {
+	p, err := h.Auth.AuthenticateRequest(r)
+	if err != nil {
 		azerrors.KeyVaultUnauthenticated(w, authzURL, resource)
+		return false
+	}
+	if !p.AllowsVault() {
+		azerrors.KeyVaultUnauthenticated(w, authzURL, resource)
+		return false
+	}
+	if p.IsRoot {
+		return true
+	}
+	vault := r.PathValue("vault")
+	scope, ok, err := h.Store.LookupKeyVaultScope(vault)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return false
+	}
+	if !ok {
+		azerrors.NotFound(w, "vault not found")
+		return false
+	}
+	if h.Authz == nil {
+		azerrors.Forbidden(w, "")
+		return false
+	}
+	allowed, err := h.Authz.Evaluate(p.ID, p.IsRoot, action, scope)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return false
+	}
+	if !allowed {
+		azerrors.Forbidden(w, "")
 		return false
 	}
 	_ = r.URL.Query().Get("api-version")

@@ -13,7 +13,7 @@ import (
 )
 
 func (s *Service) handlePatchUser(w http.ResponseWriter, r *http.Request) {
-	if !s.requireGraph(w, r) {
+	if !s.requireGraphDirectoryWrite(w, r, "Global Administrator", "User Administrator") {
 		return
 	}
 	var body struct {
@@ -36,7 +36,7 @@ func (s *Service) handlePatchUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handlePatchDevice(w http.ResponseWriter, r *http.Request) {
-	if !s.requireGraph(w, r) {
+	if !s.requireGraphDirectoryWrite(w, r, "Global Administrator", "Cloud Device Administrator") {
 		return
 	}
 	var body struct {
@@ -58,7 +58,7 @@ func (s *Service) handlePatchDevice(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handlePatchGroup(w http.ResponseWriter, r *http.Request) {
-	if !s.requireGraph(w, r) {
+	if !s.requireGraphDirectoryWrite(w, r, "Global Administrator", "Groups Administrator", "User Administrator") {
 		return
 	}
 	var body struct {
@@ -111,7 +111,7 @@ func (s *Service) handleAddOwner(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleAddRoleMember(w http.ResponseWriter, r *http.Request) {
-	if !s.requireGraph(w, r) {
+	if !s.requireGraphDirectoryWrite(w, r, "Global Administrator", "Privileged Role Administrator") {
 		return
 	}
 	var body struct {
@@ -138,7 +138,7 @@ func (s *Service) handleAddRoleMember(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleAddGroupMember(w http.ResponseWriter, r *http.Request) {
-	if !s.requireGraph(w, r) {
+	if !s.requireGraphDirectoryWrite(w, r, "Global Administrator", "Groups Administrator", "User Administrator") {
 		return
 	}
 	var body struct {

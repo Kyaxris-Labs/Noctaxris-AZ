@@ -17,13 +17,14 @@ ARM namespace / queue lite plus AMQP 1.0 send/receive for `azservicebus` clients
 ## Authz / authn
 
 - ARM Bearer + RBAC
-- Data plane connection string / SAS (key sealed at rest)
+- `GET .../namespaces/{name}/connectionString` requires `Microsoft.ServiceBus/namespaces/authorizationRules/listKeys/action` (not namespace `read`). Reader is denied; Owner / Contributor / root succeed.
+- AMQP attach requires `SharedAccessKey` matching the namespace sealed key (omit or mismatch fails closed)
 
 ## Detailed actions
 
 - Create namespace (sealed SAS key)
 - Create queue
-- AMQP send and receive with lock theatre
+- AMQP send and receive with lock theatre (SAS required on attach)
 
 ## Not implemented
 

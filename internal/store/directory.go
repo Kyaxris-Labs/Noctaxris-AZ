@@ -25,6 +25,11 @@ func opaqueHash(s string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// HashUserPassword returns the SHA-256 hex digest stored in entra_users.password_hash.
+func HashUserPassword(password string) string {
+	return opaqueHash(password)
+}
+
 // DirectoryUser is a Graph user row.
 type DirectoryUser struct {
 	ID                string
@@ -88,6 +93,12 @@ type FederatedIdentityCredential struct {
 	ClaimsMatchingExpression string
 }
 
+// Seeded directory user passwords (hashed into entra_users.password_hash).
+const (
+	SeededLabAdminPassword = "LabAdmin!Pass1"
+	SeededLabUserPassword  = "LabUser!Pass1"
+)
+
 // SeedDirectory writes a small lab graph if users are empty.
 func (s *Store) SeedDirectory(tenantID string) error {
 	var n int
@@ -107,11 +118,14 @@ func (s *Store) SeedDirectory(tenantID string) error {
 	spID := "77777777-7777-7777-7777-777777777777"
 	gaRole := "88888888-8888-8888-8888-888888888888"
 	aaRole := "99999999-9999-9999-9999-999999999999"
+	uaRole := "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 	mgID := SeededManagementGroupID
-	if _, err := s.db.Exec(`INSERT INTO entra_users (id, tenant_id, user_principal_name, display_name, mail, department, job_title, created_at)
-VALUES (?,?,?,?,?,?,?,?), (?,?,?,?,?,?,?,?)`,
-		adminID, tenantID, "lab-admin@lab.local", "Lab Admin", "lab-admin@lab.local", "IT", "Administrator", now,
-		userID, tenantID, "lab-user@lab.local", "Lab User", "lab-user@lab.local", "Engineering", "Engineer", now); err != nil {
+	adminHash := HashUserPassword(SeededLabAdminPassword)
+	userHash := HashUserPassword(SeededLabUserPassword)
+	if _, err := s.db.Exec(`INSERT INTO entra_users (id, tenant_id, user_principal_name, display_name, mail, department, job_title, password_hash, created_at)
+VALUES (?,?,?,?,?,?,?,?,?), (?,?,?,?,?,?,?,?,?)`,
+		adminID, tenantID, "lab-admin@lab.local", "Lab Admin", "lab-admin@lab.local", "IT", "Administrator", adminHash, now,
+		userID, tenantID, "lab-user@lab.local", "Lab User", "lab-user@lab.local", "Engineering", "Engineer", userHash, now); err != nil {
 		return err
 	}
 	if _, err := s.db.Exec(`INSERT INTO entra_groups (id, tenant_id, display_name, mail, security_enabled, membership_rule, membership_rule_processing_state, created_at)
@@ -133,9 +147,10 @@ VALUES (?,?,?,?,1,'','',?), (?,?,?,?,1,'','On',?)`,
 		return err
 	}
 	if _, err := s.db.Exec(`INSERT INTO entra_directory_roles (id, tenant_id, display_name, template_id, created_at)
-VALUES (?,?,?,?,?), (?,?,?,?,?)`,
+VALUES (?,?,?,?,?), (?,?,?,?,?), (?,?,?,?,?)`,
 		gaRole, tenantID, "Global Administrator", "62e90394-69f5-4237-9190-012177145e10", now,
-		aaRole, tenantID, "Application Administrator", "9b895d92-2cd3-44c7-9d02-a6ac2d5ea5c3", now); err != nil {
+		aaRole, tenantID, "Application Administrator", "9b895d92-2cd3-44c7-9d02-a6ac2d5ea5c3", now,
+		uaRole, tenantID, "User Administrator", "fe930be7-5e62-47db-91af-98c3a49a38b1", now); err != nil {
 		return err
 	}
 	if _, err := s.db.Exec(`INSERT INTO entra_directory_role_members (role_id, member_id) VALUES (?,?)`, gaRole, adminID); err != nil {
@@ -186,6 +201,37 @@ func (s *Store) PatchDirectoryUser(id, department, jobTitle string) error {
 	_, err := s.db.Exec(`UPDATE entra_users SET department = CASE WHEN ? = '' THEN department ELSE ? END, job_title = CASE WHEN ? = '' THEN job_title ELSE ? END WHERE id = ?`,
 		department, department, jobTitle, jobTitle, id)
 	return err
+}
+
+// SetUserPasswordHash stores the password hash for a directory user (id or UPN).
+func (s *Store) SetUserPasswordHash(idOrUPN, passwordHash string) error {
+	res, err := s.db.Exec(`UPDATE entra_users SET password_hash = ? WHERE id = ? OR user_principal_name = ?`,
+		passwordHash, idOrUPN, idOrUPN)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("user not found")
+	}
+	return nil
+}
+
+// UserPasswordMatches reports whether passwordHash matches the stored hash for id or UPN.
+// Users with an empty password_hash never match.
+func (s *Store) UserPasswordMatches(idOrUPN, passwordHash string) (bool, error) {
+	if passwordHash == "" {
+		return false, nil
+	}
+	var stored string
+	err := s.db.QueryRow(`SELECT password_hash FROM entra_users WHERE id = ? OR user_principal_name = ?`, idOrUPN, idOrUPN).Scan(&stored)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return stored != "" && stored == passwordHash, nil
 }
 
 func (s *Store) ListDirectoryGroups(tenantID string) ([]DirectoryGroup, error) {
@@ -670,27 +716,45 @@ func (s *Store) LookupRefreshToken(tokenHash string, now time.Time) (string, boo
 	return id, true, nil
 }
 
-func (s *Store) PutDeviceCode(code, principalID string, exp time.Time) error {
-	_, err := s.db.Exec(`INSERT INTO device_codes (device_code, principal_id, expires_at) VALUES (?,?,?)
-ON CONFLICT(device_code) DO UPDATE SET principal_id=excluded.principal_id, expires_at=excluded.expires_at`,
-		opaqueHash(code), principalID, exp.UTC().Format(time.RFC3339))
+func (s *Store) PutDeviceCode(code, userCode string, exp time.Time) error {
+	_, err := s.db.Exec(`INSERT INTO device_codes (device_code, principal_id, user_code, approved, expires_at) VALUES (?,?,?,?,?)
+ON CONFLICT(device_code) DO UPDATE SET principal_id='', user_code=excluded.user_code, approved=0, expires_at=excluded.expires_at`,
+		opaqueHash(code), "", strings.ToUpper(strings.TrimSpace(userCode)), 0, exp.UTC().Format(time.RFC3339))
 	return err
 }
 
-func (s *Store) LookupDeviceCode(code string, now time.Time) (string, bool, error) {
+// ApproveDeviceCode binds a principal to a pending user_code.
+func (s *Store) ApproveDeviceCode(userCode, principalID string, now time.Time) (bool, error) {
+	userCode = strings.ToUpper(strings.TrimSpace(userCode))
+	principalID = strings.TrimSpace(principalID)
+	if userCode == "" || principalID == "" {
+		return false, nil
+	}
+	res, err := s.db.Exec(`UPDATE device_codes SET principal_id = ?, approved = 1
+WHERE user_code = ? AND approved = 0 AND expires_at > ?`,
+		principalID, userCode, now.UTC().Format(time.RFC3339))
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+func (s *Store) LookupDeviceCode(code string, now time.Time) (principalID string, approved bool, ok bool, err error) {
 	var id, exp string
-	err := s.db.QueryRow(`SELECT principal_id, expires_at FROM device_codes WHERE device_code = ?`, opaqueHash(code)).Scan(&id, &exp)
+	var appr int
+	err = s.db.QueryRow(`SELECT principal_id, approved, expires_at FROM device_codes WHERE device_code = ?`, opaqueHash(code)).Scan(&id, &appr, &exp)
 	if err == sql.ErrNoRows {
-		return "", false, nil
+		return "", false, false, nil
 	}
 	if err != nil {
-		return "", false, err
+		return "", false, false, err
 	}
 	t, perr := time.Parse(time.RFC3339, exp)
 	if perr == nil && now.After(t) {
-		return "", false, nil
+		return "", false, false, nil
 	}
-	return id, true, nil
+	return id, appr != 0, true, nil
 }
 
 func (s *Store) ListCAPolicies() ([]map[string]any, error) {

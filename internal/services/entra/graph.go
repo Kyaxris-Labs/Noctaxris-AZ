@@ -74,6 +74,122 @@ func (s *Service) requireGraph(w http.ResponseWriter, r *http.Request) bool {
 
 const applicationAdministratorTemplateID = "9b895d92-2cd3-44c7-9d02-a6ac2d5ea5c3"
 const seededApplicationAdministratorRoleID = "99999999-9999-9999-9999-999999999999"
+const globalAdministratorTemplateID = "62e90394-69f5-4237-9190-012177145e10"
+const seededGlobalAdministratorRoleID = "88888888-8888-8888-8888-888888888888"
+const userAdministratorTemplateID = "fe930be7-5e62-47db-91af-98c3a49a38b1"
+const seededUserAdministratorRoleID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+const privilegedRoleAdministratorTemplateID = "e8611ab8-c189-46e8-94e1-60213ab1f814"
+
+// requireGraphDirectoryWrite allows root or membership in one of the named directory roles.
+func (s *Service) requireGraphDirectoryWrite(w http.ResponseWriter, r *http.Request, roleNames ...string) bool {
+	if !s.requireGraph(w, r) {
+		return false
+	}
+	p, ok := authn.PrincipalFromContext(r.Context())
+	if !ok {
+		azerrors.WriteGraph(w, http.StatusUnauthorized, "InvalidAuthenticationToken", "Access token is empty or invalid.")
+		return false
+	}
+	if p.IsRoot {
+		return true
+	}
+	if s.principalHasDirectoryRole(p.ID, roleNames...) {
+		return true
+	}
+	azerrors.WriteGraph(w, http.StatusForbidden, "Authorization_RequestDenied", "Insufficient privileges to complete the operation.")
+	return false
+}
+
+func (s *Service) principalHasDirectoryRole(principalID string, roleNames ...string) bool {
+	if principalID == "" || len(roleNames) == 0 {
+		return false
+	}
+	want := map[string]struct{}{}
+	for _, name := range roleNames {
+		want[strings.ToLower(strings.TrimSpace(name))] = struct{}{}
+	}
+	roles, err := s.Store.ListDirectoryRoles(s.appTenant())
+	if err != nil {
+		return false
+	}
+	candidates := s.directoryPrincipalIDs(principalID)
+	for _, role := range roles {
+		if !directoryRoleNameMatches(role, want) {
+			continue
+		}
+		members, err := s.Store.ListDirectoryRoleMembers(role.ID)
+		if err != nil {
+			continue
+		}
+		for _, mid := range members {
+			for _, cid := range candidates {
+				if mid == cid {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func directoryRoleNameMatches(role store.DirectoryRole, want map[string]struct{}) bool {
+	name := strings.ToLower(strings.TrimSpace(role.DisplayName))
+	if _, ok := want[name]; ok {
+		return true
+	}
+	switch role.TemplateID {
+	case globalAdministratorTemplateID, seededGlobalAdministratorRoleID:
+		_, ok := want["global administrator"]
+		return ok
+	case applicationAdministratorTemplateID, seededApplicationAdministratorRoleID:
+		_, ok := want["application administrator"]
+		return ok
+	case userAdministratorTemplateID, seededUserAdministratorRoleID:
+		_, ok := want["user administrator"]
+		return ok
+	case privilegedRoleAdministratorTemplateID:
+		_, ok := want["privileged role administrator"]
+		return ok
+	}
+	if role.ID == seededGlobalAdministratorRoleID {
+		_, ok := want["global administrator"]
+		return ok
+	}
+	if role.ID == seededApplicationAdministratorRoleID {
+		_, ok := want["application administrator"]
+		return ok
+	}
+	if role.ID == seededUserAdministratorRoleID {
+		_, ok := want["user administrator"]
+		return ok
+	}
+	return false
+}
+
+func (s *Service) directoryPrincipalIDs(principalID string) []string {
+	seen := map[string]struct{}{principalID: {}}
+	out := []string{principalID}
+	add := func(id string) {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			return
+		}
+		if _, ok := seen[id]; ok {
+			return
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	if sp, ok, err := s.Store.GetServicePrincipal(principalID); err == nil && ok {
+		add(sp.ID)
+		add(sp.AppID)
+	}
+	if obj, appID, _, ok, err := s.Store.ResolveEntraApp(s.appTenant(), principalID); err == nil && ok {
+		add(obj)
+		add(appID)
+	}
+	return out
+}
 
 // requireGraphAppWrite allows root, application owners, and Application Administrator.
 func (s *Service) requireGraphAppWrite(w http.ResponseWriter, r *http.Request, resourceID string) bool {

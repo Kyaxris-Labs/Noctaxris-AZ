@@ -14,22 +14,25 @@ User-assigned Managed Identity ARM lite plus IMDS token theatre on the lab liste
 | List | `GET .../userAssignedIdentities` |
 | IMDS theatre | `GET /metadata/identity/oauth2/token?api-version=...&resource=...&client_id=...` |
 
-IMDS is public (no Bearer). `Metadata: true` (exact lowercase) is required, plus
-`api-version` (>= `2018-02-01`) and `resource`. Optional `client_id` / `object_id`.
+IMDS skips Bearer. `Metadata: true` (exact lowercase) is required, plus
+`api-version` (>= `2018-02-01`) and `resource`. `client_id` / `object_id` must resolve to a
+stored user-assigned or system-assigned identity (unknown ids are rejected). When omitted,
+mint requires exactly one system-assigned identity.
 Tokens are RS256 lab JWTs accepted as ARM Bearer. Response fields follow the
 IMDS shape (`expires_in`/`expires_on`/`not_before` as strings).
 
-Lab path is on the API listener (not a real link-local `169.254.169.254`).
+Path is on the API listener. Callers must be loopback, link-local, or RFC1918 private
+(nested / bridge peers). Other remote addresses receive HTTP 403.
 
 ## Authz / authn
 
 - ARM routes: Bearer + RBAC (`Microsoft.ManagedIdentity/...`)
-- IMDS: unauthenticated lab path on the API listener (not a real link-local `169.254.169.254` interface)
+- IMDS: no Bearer; Metadata header; known identity; nested/private peer addresses
 
 ## Detailed actions
 
 - Create / get / delete / list user-assigned identities
-- Mint access token for a `resource` audience, optionally scoped by `client_id`
+- Mint access token for a `resource` audience for a resolved managed identity
 - IMDS mint appends a row to Log Analytics table `AADManagedIdentitySignInLogs` on workspace `default` (no secrets). `TimeGenerated` follows the lab clock when freeze/set is on. `expires_on` / `not_before` stay wall clock.
 
 ## Not implemented
@@ -40,7 +43,7 @@ Lab path is on the API listener (not a real link-local `169.254.169.254`).
 
 ## Emulator limits
 
-- IMDS lives on the same loopback HTTP port as ARM (documented theatre path)
+- IMDS shares the ARM HTTP port; mint is limited to nested/private peers and known identities
 - Soft-delete / recover not applicable
 
 ## Deferred depth

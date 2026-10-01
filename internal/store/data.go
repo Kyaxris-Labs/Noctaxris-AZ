@@ -317,6 +317,19 @@ func (s *Store) KeyVaultExists(name string) (bool, error) {
 	return n > 0, err
 }
 
+// LookupKeyVaultScope returns the ARM resource id for a vault name.
+func (s *Store) LookupKeyVaultScope(name string) (scope string, ok bool, err error) {
+	var sub, rg string
+	err = s.db.QueryRow(`SELECT subscription_id, resource_group FROM keyvaults WHERE name = ? LIMIT 1`, name).Scan(&sub, &rg)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.KeyVault/vaults/" + name, true, nil
+}
+
 // PutSecret seals and stores a secret value (new version).
 func (s *Store) PutSecret(vault, name, value string) (version string, err error) {
 	version = uuid.NewString()

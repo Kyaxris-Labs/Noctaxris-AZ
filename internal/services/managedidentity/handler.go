@@ -3,6 +3,7 @@ package managedidentity
 import (
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -130,6 +131,10 @@ func (h *Handler) imdsToken(w http.ResponseWriter, r *http.Request) {
 		writeIMDSError(w, http.StatusBadRequest, "bad_request_102", "Required metadata header not specified")
 		return
 	}
+	if !imdsCallerAllowed(r.RemoteAddr) {
+		writeIMDSError(w, http.StatusForbidden, "forbidden", "IMDS token mint is limited to loopback, link-local, or private nested peers")
+		return
+	}
 	apiVersion := strings.TrimSpace(r.URL.Query().Get("api-version"))
 	if apiVersion == "" {
 		writeIMDSError(w, http.StatusBadRequest, "bad_request", "api-version is required (use 2018-02-01 or later)")
@@ -142,7 +147,7 @@ func (h *Handler) imdsToken(w http.ResponseWriter, r *http.Request) {
 	}
 	clientID := strings.TrimSpace(r.URL.Query().Get("client_id"))
 	objectID := strings.TrimSpace(r.URL.Query().Get("object_id"))
-	principalID := "managed-identity"
+	principalID := ""
 	resolvedClientID := clientID
 
 	switch {
@@ -153,30 +158,55 @@ func (h *Handler) imdsToken(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if ok {
-			principalID = p
-		} else {
-			principalID = clientID
+			principalID, resolvedClientID = p, clientID
+			break
 		}
+		sp, sc, sok, serr := h.Store.FindSystemAssignedByClientID(clientID)
+		if serr != nil {
+			azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", serr.Error())
+			return
+		}
+		if !sok {
+			writeIMDSError(w, http.StatusBadRequest, "invalid_request", "Identity not found")
+			return
+		}
+		principalID, resolvedClientID = sp, sc
 	case objectID != "":
 		c, _, ok, err := h.Store.FindManagedIdentityByPrincipalID(objectID)
 		if err != nil {
 			azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
 			return
 		}
+		if ok {
+			principalID, resolvedClientID = objectID, c
+			break
+		}
+		sc, sok, serr := h.Store.FindSystemAssignedByPrincipalID(objectID)
+		if serr != nil {
+			azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", serr.Error())
+			return
+		}
+		if !sok {
+			writeIMDSError(w, http.StatusBadRequest, "invalid_request", "Identity not found")
+			return
+		}
+		principalID, resolvedClientID = objectID, sc
+	default:
+		n, err := h.Store.CountSystemAssignedIdentities()
+		if err != nil {
+			azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+			return
+		}
+		if n != 1 {
+			writeIMDSError(w, http.StatusBadRequest, "invalid_request", "client_id or object_id is required when multiple identities exist")
+			return
+		}
+		p, c, ok, _ := h.Store.FirstSystemAssignedIdentity()
 		if !ok {
 			writeIMDSError(w, http.StatusBadRequest, "invalid_request", "Identity not found")
 			return
 		}
-		principalID = objectID
-		resolvedClientID = c
-	default:
-		n, err := h.Store.CountSystemAssignedIdentities()
-		if err == nil && n == 1 {
-			p, c, ok, _ := h.Store.FirstSystemAssignedIdentity()
-			if ok {
-				principalID, resolvedClientID = p, c
-			}
-		}
+		principalID, resolvedClientID = p, c
 	}
 
 	if h.Entra == nil {
@@ -288,6 +318,21 @@ func writeIMDSError(w http.ResponseWriter, code int, errCode, desc string) {
 		"error":             errCode,
 		"error_description": desc,
 	})
+}
+
+func imdsCallerAllowed(remoteAddr string) bool {
+	host := strings.TrimSpace(remoteAddr)
+	if host == "" {
+		return true
+	}
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	return ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsPrivate()
 }
 
 func (h *Handler) requireARM(w http.ResponseWriter, r *http.Request, action string) bool {

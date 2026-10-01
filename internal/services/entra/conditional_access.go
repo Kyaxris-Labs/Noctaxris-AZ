@@ -12,7 +12,7 @@ import (
 const caBlockedDescription = "AADSTS53003: Access has been blocked by Conditional Access policies. The access policy does not allow token issuance. BlockedByConditionalAccess."
 
 func (s *Service) handleCreateCAPolicy(w http.ResponseWriter, r *http.Request) {
-	if !s.requireGraph(w, r) {
+	if !s.requireGraphDirectoryWrite(w, r, "Global Administrator", "Conditional Access Administrator") {
 		return
 	}
 	var body map[string]any

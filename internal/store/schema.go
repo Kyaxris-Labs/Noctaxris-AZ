@@ -535,7 +535,9 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
 
 CREATE TABLE IF NOT EXISTS device_codes (
   device_code TEXT PRIMARY KEY,
-  principal_id TEXT NOT NULL,
+  principal_id TEXT NOT NULL DEFAULT '',
+  user_code TEXT NOT NULL DEFAULT '',
+  approved INTEGER NOT NULL DEFAULT 0,
   expires_at TEXT NOT NULL
 );
 

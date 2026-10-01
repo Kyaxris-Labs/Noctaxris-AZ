@@ -159,11 +159,25 @@ func (s *Service) tokenPassword(w http.ResponseWriter, r *http.Request) {
 		azerrors.WriteOAuth(w, http.StatusBadRequest, "invalid_grant", "username and password are required")
 		return
 	}
-	principal := username
-	if u, ok, err := s.Store.GetDirectoryUser(username); err == nil && ok {
-		principal = u.ID
+	u, ok, err := s.Store.GetDirectoryUser(username)
+	if err != nil {
+		azerrors.WriteOAuth(w, http.StatusInternalServerError, "server_error", err.Error())
+		return
 	}
-	s.writeToken(w, r, principal, s.tokenAudience(r), true)
+	if !ok {
+		azerrors.WriteOAuth(w, http.StatusUnauthorized, "invalid_grant", "AADSTS50126: Invalid username or password.")
+		return
+	}
+	match, err := s.Store.UserPasswordMatches(u.ID, store.HashUserPassword(password))
+	if err != nil {
+		azerrors.WriteOAuth(w, http.StatusInternalServerError, "server_error", err.Error())
+		return
+	}
+	if !match {
+		azerrors.WriteOAuth(w, http.StatusUnauthorized, "invalid_grant", "AADSTS50126: Invalid username or password.")
+		return
+	}
+	s.writeToken(w, r, u.ID, s.tokenAudience(r), true)
 }
 
 func (s *Service) tokenRefresh(w http.ResponseWriter, r *http.Request) {
@@ -191,8 +205,7 @@ func (s *Service) handleDeviceCode(w http.ResponseWriter, r *http.Request) {
 	}
 	code := store.RandomToken(24)
 	userCode := strings.ToUpper(store.RandomToken(4) + "-" + store.RandomToken(4))
-	principal := "11111111-1111-1111-1111-111111111111"
-	if err := s.Store.PutDeviceCode(code, principal, s.now().Add(deviceTTL)); err != nil {
+	if err := s.Store.PutDeviceCode(code, userCode, s.now().Add(deviceTTL)); err != nil {
 		azerrors.WriteOAuth(w, http.StatusInternalServerError, "server_error", err.Error())
 		return
 	}
@@ -202,7 +215,52 @@ func (s *Service) handleDeviceCode(w http.ResponseWriter, r *http.Request) {
 		"verification_uri": s.base() + "/device",
 		"expires_in":       int(deviceTTL.Seconds()),
 		"interval":         5,
-		"message":          "lab device code auto-succeeds on token exchange",
+		"message":          "Enter the user_code at " + s.base() + "/device and approve with a directory user password before exchanging the device_code.",
+	})
+}
+
+func (s *Service) handleDeviceApprove(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		azerrors.WriteOAuth(w, http.StatusBadRequest, "invalid_request", "invalid form body")
+		return
+	}
+	userCode := strings.TrimSpace(r.Form.Get("user_code"))
+	username := strings.TrimSpace(r.Form.Get("username"))
+	password := strings.TrimSpace(r.Form.Get("password"))
+	if userCode == "" || username == "" || password == "" {
+		azerrors.WriteOAuth(w, http.StatusBadRequest, "invalid_request", "user_code, username, and password are required")
+		return
+	}
+	u, ok, err := s.Store.GetDirectoryUser(username)
+	if err != nil {
+		azerrors.WriteOAuth(w, http.StatusInternalServerError, "server_error", err.Error())
+		return
+	}
+	if !ok {
+		azerrors.WriteOAuth(w, http.StatusUnauthorized, "invalid_grant", "AADSTS50126: Invalid username or password.")
+		return
+	}
+	match, err := s.Store.UserPasswordMatches(u.ID, store.HashUserPassword(password))
+	if err != nil {
+		azerrors.WriteOAuth(w, http.StatusInternalServerError, "server_error", err.Error())
+		return
+	}
+	if !match {
+		azerrors.WriteOAuth(w, http.StatusUnauthorized, "invalid_grant", "AADSTS50126: Invalid username or password.")
+		return
+	}
+	approved, err := s.Store.ApproveDeviceCode(userCode, u.ID, s.now())
+	if err != nil {
+		azerrors.WriteOAuth(w, http.StatusInternalServerError, "server_error", err.Error())
+		return
+	}
+	if !approved {
+		azerrors.WriteOAuth(w, http.StatusBadRequest, "invalid_grant", "user_code is invalid, expired, or already approved")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":  "approved",
+		"message": "device code approved; complete token exchange with the device_code",
 	})
 }
 
@@ -212,13 +270,17 @@ func (s *Service) tokenDeviceCode(w http.ResponseWriter, r *http.Request) {
 		azerrors.WriteOAuth(w, http.StatusBadRequest, "invalid_request", "device_code is required")
 		return
 	}
-	id, ok, err := s.Store.LookupDeviceCode(code, s.now())
+	id, approved, ok, err := s.Store.LookupDeviceCode(code, s.now())
 	if err != nil {
 		azerrors.WriteOAuth(w, http.StatusInternalServerError, "server_error", err.Error())
 		return
 	}
 	if !ok {
 		azerrors.WriteOAuth(w, http.StatusBadRequest, "invalid_grant", "device_code is invalid or expired")
+		return
+	}
+	if !approved || id == "" {
+		azerrors.WriteOAuth(w, http.StatusBadRequest, "authorization_pending", "AADSTS70016: Pending end-user authorization.")
 		return
 	}
 	s.writeToken(w, r, id, s.tokenAudience(r), true)

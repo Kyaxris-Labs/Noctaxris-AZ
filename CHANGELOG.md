@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- ROPC (`grant_type=password`) checks the directory user `password_hash`. Seeded users use `LabAdmin!Pass1` / `LabUser!Pass1`. Missing or mismatched passwords return `invalid_grant` (`AADSTS50126`).
+- Device code issue stores a pending `user_code`. Token exchange returns `authorization_pending` until `POST /device` approves with a directory username and password. Exchange then mints for the approving principal.
+- Graph directory writes (role members, group members, user/device/group patch, application create, Conditional Access create) require matching directory roles (for example Global Administrator or User Administrator), not audience alone. App credential writes stay owner / Application Administrator.
+- IMDS `GET /metadata/identity/oauth2/token` mints only for known user-assigned or system-assigned identities, and only from loopback, link-local, or private peer addresses.
+- Key Vault data plane requires `aud` `https://vault.azure.net` plus Azure RBAC data roles (Key Vault Secrets User / Officer / Administrator). Graph or ARM audiences alone are denied.
+- Service Bus AMQP attach requires a matching `SharedAccessKey` for the namespace. `GET .../namespaces/{name}/connectionString` uses `authorizationRules/listKeys/action` (Reader no longer receives manage keys).
+
 ## 1.2.0
 
 Minor after 1.1.0: Entra group RBAC, extra built-in GUIDs, Container Registry V2, Log Analytics and ARG scoping, Event Hubs capture, Cosmos change-feed, Activity Log page size, Graph and OIDC mint gates. Docker Hub: `kyaxris/noctaxris-az` (`1.2.0`, `1.2`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).

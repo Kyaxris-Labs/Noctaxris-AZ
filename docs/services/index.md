@@ -4,11 +4,11 @@ Implemented lab surface on `127.0.0.1:4599` (HTTP) and `127.0.0.1:5672` (AMQP li
 
 | Service | Status | Doc | Protocol |
 |---------|--------|-----|----------|
-| Microsoft Entra ID | lab | [entra.md](entra.md) | OIDC/JWKS; v1/v2 token on tenant/`common`/`organizations`; lab OIDC token mint; Graph directory lists and `POST /servicePrincipals`; device code lite; WIF vs private_key_jwt with FIC bound to `client_id`; Conditional Access at token mint (`AADSTS53003`, include-list scoped); `client_credentials` requires secret or assertion; Graph `addPassword` / `addKey` / owners gated by owner or Application Administrator (`directoryScopeId`) |
-| Managed Identity | lab | [managedidentity.md](managedidentity.md) | User + system-assigned ARM; IMDS theatre |
+| Microsoft Entra ID | lab | [entra.md](entra.md) | OIDC/JWKS; v1/v2 token on tenant/`common`/`organizations`; lab OIDC token mint; Graph directory lists and `POST /servicePrincipals`; ROPC password hash; device code with `/device` approval; WIF vs private_key_jwt with FIC bound to `client_id`; Conditional Access at token mint (`AADSTS53003`, include-list scoped); `client_credentials` requires secret or assertion; Graph directory writes gated by directory roles; `addPassword` / `addKey` / owners gated by owner or Application Administrator (`directoryScopeId`) |
+| Managed Identity | lab | [managedidentity.md](managedidentity.md) | User + system-assigned ARM; IMDS mint for known identities from nested/private peers |
 | Subscriptions / resource groups | lab | [subscriptions.md](subscriptions.md) | ARM list/get subscriptions, tenants, MGs, ARG, subscription-scope LISTs |
 | Authorization (RBAC) | lab | [authorization.md](authorization.md) | Role assignments PUT/GET/LIST/DELETE; group expansion; extra built-in GUIDs |
-| Key Vault | lab | [keyvault.md](keyvault.md) | Secrets/keys/certificates (exportable PKCS#8 as same-name secret) + soft-delete theatre |
+| Key Vault | lab | [keyvault.md](keyvault.md) | Secrets/keys/certificates (exportable PKCS#8 as same-name secret) + soft-delete; data plane vault `aud` + RBAC |
 | Storage | lab | [storage.md](storage.md) | Blob + queue Shared Key HMAC / SAS HMAC |
 | Table Storage | lab | [table.md](table.md) | Entity CRUD + OData lite |
 | Cosmos DB | lab | [cosmos.md](cosmos.md) | NoSQL in-process point read/query; change-feed current documents |
@@ -16,7 +16,7 @@ Implemented lab surface on `127.0.0.1:4599` (HTTP) and `127.0.0.1:5672` (AMQP li
 | PostgreSQL | lab | [postgres.md](postgres.md) | Flexible server ARM + theatre |
 | Redis | lab | [rediscache.md](rediscache.md) | Cache ARM + theatre |
 | ACR | lab | [acr.md](acr.md) | Registry ARM + V2 on :4599; AcrPull pull-only |
-| Service Bus | lab | [servicebus.md](servicebus.md) | Queues/topics + AMQP lite |
+| Service Bus | lab | [servicebus.md](servicebus.md) | Queues/topics + AMQP lite (SAS required); connectionString via listKeys |
 | Event Hubs | lab | [eventhubs.md](eventhubs.md) | Namespaces/hubs + HTTP messages (root); captured-events list/get for Data Receiver / Data Owner |
 | Event Grid | lab | [eventgrid.md](eventgrid.md) | Topics + allowlisted egress delivery |
 | Virtual Network | lab | [network.md](network.md) | VNet ARM lite |
@@ -37,7 +37,7 @@ Default subscription: `00000000-0000-0000-0000-000000000002` (`NOCTAXRIS_AZ_SUBS
 
 Per-service deferred depth lives on each page. Shared gaps:
 
-- Bearer required on ARM and Graph (health/ready/version, Entra token/discovery/JWKS, lab OIDC `/_noctaxris-az/oidc-lab`, and IMDS token are public). SOAP `/provisioningwebservice.svc` is not public. ARM control-plane `aud` must be `https://management.azure.com` or `https://management.core.windows.net`. Key Vault data plane, Storage Shared Key/SAS, table/blob, Event Hubs HTTP data plane, and ACR Registry V2 (`/v2/`, `/oauth2/token`) do not require that ARM `aud` (V2 still accepts an ARM directory Bearer).
+- Bearer required on ARM and Graph (health/ready/version, Entra token/discovery/JWKS, `POST /device`, lab OIDC `/_noctaxris-az/oidc-lab`, and IMDS token skip Bearer). IMDS still gates on Metadata, known identity, and peer address. SOAP `/provisioningwebservice.svc` is not public. ARM control-plane `aud` must be `https://management.azure.com` or `https://management.core.windows.net`. Key Vault data plane needs vault `aud` plus data RBAC. Storage Shared Key/SAS, table/blob, Event Hubs HTTP data plane, and ACR Registry V2 (`/v2/`, `/oauth2/token`) do not require that ARM `aud` (V2 still accepts an ARM directory Bearer).
 - Root principal bypasses RBAC evaluation (lab operator)
 - No host `docker.sock`; nested DinD opt-in via `compose.engine.yaml`
 - AMQP is Service Bus queue send/receive lite (not full broker parity)

@@ -133,9 +133,10 @@ func roleGrants(roleDefID, action string) bool {
 	}
 	switch {
 	case roleHasGUID(role, guidOwner) || strings.Contains(role, "owner"):
-		return true
+		// Owner covers ARM control plane. Key Vault data-plane actions stay on Key Vault data roles.
+		return !isKeyVaultDataPlaneAction(act)
 	case roleHasGUID(role, guidContributor) || strings.Contains(role, "contributor"):
-		return !strings.Contains(act, "authorization/roleassignments")
+		return !strings.Contains(act, "authorization/roleassignments") && !isKeyVaultDataPlaneAction(act)
 	case roleHasGUID(role, guidLogAnalyticsDataReader):
 		return isWorkspaceQueryAction(act) || act == "microsoft.operationalinsights/workspaces/read"
 	case isLogAnalyticsReaderRole(role):
@@ -146,8 +147,14 @@ func roleGrants(roleDefID, action string) bool {
 		return strings.Contains(act, "eventhub")
 	case roleHasGUID(role, guidEventHubsDataReceiver) || roleHasGUID(role, guidEventHubsDataReceiverAlias):
 		return isEventHubsReceiveAction(act)
+	case roleHasGUID(role, guidKeyVaultAdministrator):
+		return strings.Contains(act, "microsoft.keyvault/")
+	case roleHasGUID(role, guidKeyVaultSecretsOfficer):
+		return isKeyVaultSecretsWriteAction(act) || isKeyVaultSecretsReadAction(act)
+	case roleHasGUID(role, guidKeyVaultSecretsUser):
+		return isKeyVaultSecretsReadAction(act)
 	case isReaderLikeRole(role):
-		return isReadLikeAction(act)
+		return isReadLikeAction(act) && !isSecretDisclosureAction(act)
 	default:
 		return false
 	}
@@ -177,10 +184,43 @@ func isReadLikeAction(act string) bool {
 	if isWorkspaceQueryAction(act) {
 		return false
 	}
+	if isSecretDisclosureAction(act) {
+		return false
+	}
 	if strings.HasSuffix(act, "/read") || strings.Contains(act, "/read/") || strings.Contains(act, "/read") {
 		return true
 	}
 	return isResourceGraphRead(act)
+}
+
+func isSecretDisclosureAction(act string) bool {
+	return strings.Contains(act, "/listkeys") ||
+		strings.Contains(act, "/listconnectionstrings") ||
+		strings.Contains(act, "authorizationrules/listkeys")
+}
+
+func isKeyVaultDataPlaneAction(act string) bool {
+	return strings.Contains(act, "microsoft.keyvault/vaults/secrets/") ||
+		strings.Contains(act, "microsoft.keyvault/vaults/keys/") ||
+		strings.Contains(act, "microsoft.keyvault/vaults/certificates/")
+}
+
+func isKeyVaultSecretsReadAction(act string) bool {
+	return strings.Contains(act, "microsoft.keyvault/vaults/secrets/get") ||
+		strings.Contains(act, "microsoft.keyvault/vaults/secrets/read") ||
+		act == "microsoft.keyvault/vaults/secrets/getsecret/action"
+}
+
+func isKeyVaultSecretsWriteAction(act string) bool {
+	return strings.Contains(act, "microsoft.keyvault/vaults/secrets/set") ||
+		strings.Contains(act, "microsoft.keyvault/vaults/secrets/write") ||
+		strings.Contains(act, "microsoft.keyvault/vaults/secrets/delete") ||
+		strings.Contains(act, "microsoft.keyvault/vaults/secrets/backup") ||
+		strings.Contains(act, "microsoft.keyvault/vaults/secrets/restore") ||
+		strings.Contains(act, "microsoft.keyvault/vaults/secrets/purge") ||
+		strings.Contains(act, "microsoft.keyvault/vaults/secrets/recover") ||
+		strings.Contains(act, "microsoft.keyvault/vaults/keys/") ||
+		strings.Contains(act, "microsoft.keyvault/vaults/certificates/")
 }
 
 func isWorkspaceQueryAction(act string) bool {
@@ -227,19 +267,28 @@ const (
 	RoleEventHubsDataReceiver = "/providers/Microsoft.Authorization/roleDefinitions/" + guidEventHubsDataReceiver
 	// RoleLogAnalyticsDataReader is the narrower workspace query role (3b03c2da-...).
 	RoleLogAnalyticsDataReader = "/providers/Microsoft.Authorization/roleDefinitions/" + guidLogAnalyticsDataReader
+	// RoleKeyVaultSecretsUser grants Key Vault secret get on the data plane.
+	RoleKeyVaultSecretsUser = "/providers/Microsoft.Authorization/roleDefinitions/" + guidKeyVaultSecretsUser
+	// RoleKeyVaultSecretsOfficer grants Key Vault secret get/set/delete on the data plane.
+	RoleKeyVaultSecretsOfficer = "/providers/Microsoft.Authorization/roleDefinitions/" + guidKeyVaultSecretsOfficer
+	// RoleKeyVaultAdministrator grants Key Vault data-plane administration.
+	RoleKeyVaultAdministrator = "/providers/Microsoft.Authorization/roleDefinitions/" + guidKeyVaultAdministrator
 )
 
 const (
-	guidOwner                   = "8e3af657-a8ff-443c-a75c-2fe8c4bcb635"
-	guidContributor             = "b24988ac-6180-42a0-ab88-20f7382dd24c"
-	guidReader                  = "acdd72a7-3385-48ef-bd42-f606fba81ae7"
-	guidLogAnalyticsReader      = "73c42c96-874c-492b-b04d-ab87d138a893"
-	guidLogAnalyticsReaderAlias = "73c42c96-874c-492b-b04d-ab87d988a1e9"
-	guidMonitoringReader        = "43d0d8ad-25c7-4714-9337-8ba259a9fe05"
-	guidLogAnalyticsDataReader  = "3b03c2da-16b3-4a49-8834-0f8130efdd3b"
-	guidAcrPull                      = "7f951dda-4ed3-4680-a7ca-43fe172d538d"
-	guidEventHubsDataOwner           = "f526a384-b230-433a-b45c-95f59c4a2dec"
-	guidEventHubsDataOwnerAlias      = "f526a384-b744-4348-a86b-d3d1f7ce3260"
-	guidEventHubsDataReceiver        = "a638d3c7-ab3a-418d-83e6-5f17a39d4fde"
-	guidEventHubsDataReceiverAlias   = "a638d3c7-ad44-4d07-a2c2-6d98be95d4e5"
+	guidOwner                      = "8e3af657-a8ff-443c-a75c-2fe8c4bcb635"
+	guidContributor                = "b24988ac-6180-42a0-ab88-20f7382dd24c"
+	guidReader                     = "acdd72a7-3385-48ef-bd42-f606fba81ae7"
+	guidLogAnalyticsReader         = "73c42c96-874c-492b-b04d-ab87d138a893"
+	guidLogAnalyticsReaderAlias    = "73c42c96-874c-492b-b04d-ab87d988a1e9"
+	guidMonitoringReader           = "43d0d8ad-25c7-4714-9337-8ba259a9fe05"
+	guidLogAnalyticsDataReader     = "3b03c2da-16b3-4a49-8834-0f8130efdd3b"
+	guidAcrPull                    = "7f951dda-4ed3-4680-a7ca-43fe172d538d"
+	guidEventHubsDataOwner         = "f526a384-b230-433a-b45c-95f59c4a2dec"
+	guidEventHubsDataOwnerAlias    = "f526a384-b744-4348-a86b-d3d1f7ce3260"
+	guidEventHubsDataReceiver      = "a638d3c7-ab3a-418d-83e6-5f17a39d4fde"
+	guidEventHubsDataReceiverAlias = "a638d3c7-ad44-4d07-a2c2-6d98be95d4e5"
+	guidKeyVaultAdministrator      = "00482a5a-887f-4fb3-b363-3b7fe8e74483"
+	guidKeyVaultSecretsOfficer     = "b86a8fe4-44ce-4948-aee5-eccb2c155cd7"
+	guidKeyVaultSecretsUser        = "4633458b-17de-408a-b874-0445c86b69e6"
 )

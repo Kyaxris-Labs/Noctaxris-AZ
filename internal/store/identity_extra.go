@@ -390,3 +390,29 @@ func (s *Store) FirstSystemAssignedIdentity() (principalID, clientID string, ok 
 	}
 	return principalID, clientID, true, nil
 }
+
+// FindSystemAssignedByClientID resolves a system-assigned client id.
+func (s *Store) FindSystemAssignedByClientID(clientID string) (principalID, clientIDOut string, ok bool, err error) {
+	err = s.db.QueryRow(`SELECT principal_id, client_id FROM system_assigned_identities WHERE client_id = ? LIMIT 1`, clientID).
+		Scan(&principalID, &clientIDOut)
+	if err == sql.ErrNoRows {
+		return "", "", false, nil
+	}
+	if err != nil {
+		return "", "", false, err
+	}
+	return principalID, clientIDOut, true, nil
+}
+
+// FindSystemAssignedByPrincipalID resolves a system-assigned principal/object id.
+func (s *Store) FindSystemAssignedByPrincipalID(principalID string) (clientID string, ok bool, err error) {
+	err = s.db.QueryRow(`SELECT client_id FROM system_assigned_identities WHERE principal_id = ? LIMIT 1`, principalID).
+		Scan(&clientID)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return clientID, true, nil
+}

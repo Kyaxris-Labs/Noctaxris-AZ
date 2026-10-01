@@ -150,7 +150,7 @@ func (h *Handler) getQueue(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) connectionString(w http.ResponseWriter, r *http.Request) {
-	if !h.requireBearerARM(w, r, "Microsoft.ServiceBus/namespaces/read", armScope(r)) {
+	if !h.requireBearerARM(w, r, "Microsoft.ServiceBus/namespaces/authorizationRules/listKeys/action", armScope(r)) {
 		return
 	}
 	name := r.PathValue("name")

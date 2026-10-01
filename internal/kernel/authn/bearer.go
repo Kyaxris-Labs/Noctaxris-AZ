@@ -64,7 +64,8 @@ func HashToken(token string) string {
 func IsPublicPath(path string) bool {
 	switch path {
 	case "/_noctaxris-az/health", "/_noctaxris-az/ready", "/_noctaxris-az/version",
-		"/metadata/identity/oauth2/token":
+		"/metadata/identity/oauth2/token",
+		"/device":
 		return true
 	default:
 		if strings.HasPrefix(strings.ToLower(path), "/_noctaxris-az/oidc-lab") {

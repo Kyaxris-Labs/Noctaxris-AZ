@@ -84,8 +84,24 @@ func TestTokenAliasesDeviceRefreshAndWIF(t *testing.T) {
 	var dcBody map[string]any
 	_ = json.Unmarshal(dc.Body.Bytes(), &dcBody)
 	code, _ := dcBody["device_code"].(string)
-	if code == "" {
+	userCode, _ := dcBody["user_code"].(string)
+	if code == "" || userCode == "" {
 		t.Fatalf("device_code missing: %#v", dcBody)
+	}
+	pending := tokenPOST(t, mux, "/common/oauth2/v2.0/token",
+		"grant_type="+url.QueryEscape("urn:ietf:params:oauth:grant-type:device_code")+"&device_code="+url.QueryEscape(code))
+	if pending.Code != http.StatusBadRequest {
+		t.Fatalf("pending device exchange status=%d body=%s", pending.Code, pending.Body.String())
+	}
+	var pendingBody map[string]any
+	_ = json.Unmarshal(pending.Body.Bytes(), &pendingBody)
+	if pendingBody["error"] != "authorization_pending" {
+		t.Fatalf("pending error=%#v", pendingBody)
+	}
+	approve := tokenPOST(t, mux, "/device",
+		"user_code="+url.QueryEscape(userCode)+"&username=lab-admin@lab.local&password="+url.QueryEscape(store.SeededLabAdminPassword))
+	if approve.Code != http.StatusOK {
+		t.Fatalf("device approve status=%d body=%s", approve.Code, approve.Body.String())
 	}
 	ex := tokenPOST(t, mux, "/common/oauth2/v2.0/token",
 		"grant_type="+url.QueryEscape("urn:ietf:params:oauth:grant-type:device_code")+"&device_code="+url.QueryEscape(code))
@@ -93,8 +109,13 @@ func TestTokenAliasesDeviceRefreshAndWIF(t *testing.T) {
 		t.Fatalf("device exchange status=%d body=%s", ex.Code, ex.Body.String())
 	}
 
-	pw := tokenPOST(t, mux, "/"+config.DefaultTenantID+"/oauth2/v2.0/token",
+	badPW := tokenPOST(t, mux, "/"+config.DefaultTenantID+"/oauth2/v2.0/token",
 		"grant_type=password&username=lab-admin@lab.local&password=unused")
+	if badPW.Code != http.StatusUnauthorized {
+		t.Fatalf("bad password status=%d body=%s", badPW.Code, badPW.Body.String())
+	}
+	pw := tokenPOST(t, mux, "/"+config.DefaultTenantID+"/oauth2/v2.0/token",
+		"grant_type=password&username=lab-admin@lab.local&password="+url.QueryEscape(store.SeededLabAdminPassword))
 	if pw.Code != http.StatusOK {
 		t.Fatalf("password status=%d body=%s", pw.Code, pw.Body.String())
 	}
