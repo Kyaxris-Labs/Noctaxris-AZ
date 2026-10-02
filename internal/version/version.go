@@ -4,5 +4,5 @@ package version
 // Version is the Noctaxris-AZ release semver.
 // Override at link time:
 //
-//	-ldflags "-X github.com/Kyaxris-Labs/Noctaxris-AZ/internal/version.Version=1.2.2"
-var Version = "1.2.2"
+//	-ldflags "-X github.com/Kyaxris-Labs/Noctaxris-AZ/internal/version.Version=1.3.0"
+var Version = "1.3.0"

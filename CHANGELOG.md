@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 1.3.0
+
+Minor after 1.2.2: data-plane authz tightening across Event Hubs, Storage, Service Bus, and related ARM paths, JWT verify via go-jose, plus more tests and service docs. Docker Hub: `kyaxris/noctaxris-az` (`1.3.0`, `1.3`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
+
+- Authz: Event Hubs message data plane requires SAS or directory Bearer with data roles; Storage / Service Bus / shared data-plane helpers stay audience-plus-RBAC fail-closed; RBAC data-role coverage expanded
+- Authn: Bearer JWT verify uses go-jose
+- Tests and docs: expanded require-authz coverage tests; security-defaults and Event Hubs / Storage / Service Bus pages aligned with the wire paths
+
 ## 1.2.2
 
 Patch after 1.2.1: exact ARM RBAC scopes, Owner GUID matching, IMDS Host gate, Graph application mutate ownership, Key Vault Secrets Officer and cert version order, Event Hubs capture scoping, Event Grid and cloud-hosts egress gates, Table SAS Create, shared data-plane Bearer audience plus RBAC, App Configuration / Cosmos / AKS data-plane gates. Docker Hub: `kyaxris/noctaxris-az` (`1.2.2`, `1.2`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
