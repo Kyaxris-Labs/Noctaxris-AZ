@@ -68,7 +68,7 @@ curl -H "Authorization: Bearer $ROOT_TOKEN" \
   "http://127.0.0.1:4599/subscriptions/$SUB?api-version=2022-12-01"
 ```
 
-When Compose files are present, copy `docker/.env.example` to `docker/.env`, replace both root values with unique lab credentials, then `docker compose -f docker/compose.yaml --env-file docker/.env up --build`. Default host publish is `127.0.0.1:4599` (AMQP optional). Per-service smoke: [docs/services/](docs/services/index.md).
+When Compose files are present, copy `docker/.env.example` to `docker/.env`, replace both root values with unique lab credentials, then `docker compose -f docker/compose.yaml --env-file docker/.env up --build`. Default host publish is `127.0.0.1:4599` and `127.0.0.1:5672` (AMQP lite). Per-service smoke: [docs/services/](docs/services/index.md).
 
 ## Client environments
 

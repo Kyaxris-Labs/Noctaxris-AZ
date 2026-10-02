@@ -54,6 +54,7 @@ func (s *Store) migrate() error {
 	_, _ = s.db.Exec(`ALTER TABLE cosmos_items ADD COLUMN etag TEXT NOT NULL DEFAULT ''`)
 	_, _ = s.db.Exec(`ALTER TABLE device_codes ADD COLUMN user_code TEXT NOT NULL DEFAULT ''`)
 	_, _ = s.db.Exec(`ALTER TABLE device_codes ADD COLUMN approved INTEGER NOT NULL DEFAULT 0`)
+	_, _ = s.db.Exec(`ALTER TABLE refresh_tokens ADD COLUMN audience TEXT NOT NULL DEFAULT ''`)
 	var n int
 	if err := s.db.QueryRow(`SELECT COUNT(1) FROM schema_version`).Scan(&n); err != nil {
 		return err

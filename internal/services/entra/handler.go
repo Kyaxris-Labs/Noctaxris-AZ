@@ -68,13 +68,9 @@ func (s *Service) ensureKey() (string, *rsa.PrivateKey, error) {
 
 // VerifyAccessToken implements authn.JWTVerifier.
 func (s *Service) VerifyAccessToken(token string, now time.Time) (principalID string, ok bool, err error) {
-	_, priv, err := s.ensureKey()
-	if err != nil {
+	claims, ok, err := s.VerifyAccessTokenClaims(token, now)
+	if err != nil || !ok {
 		return "", false, err
-	}
-	claims, err := authn.VerifyRS256JWT(&priv.PublicKey, token, now)
-	if err != nil {
-		return "", false, nil
 	}
 	id := authn.PrincipalFromJWTClaims(claims)
 	if id == "" {
@@ -83,39 +79,80 @@ func (s *Service) VerifyAccessToken(token string, now time.Time) (principalID st
 	return id, true, nil
 }
 
+// VerifyAccessTokenClaims implements authn.JWTClaimsVerifier.
+func (s *Service) VerifyAccessTokenClaims(token string, now time.Time) (claims map[string]any, ok bool, err error) {
+	_, priv, err := s.ensureKey()
+	if err != nil {
+		return nil, false, err
+	}
+	claims, err = authn.VerifyRS256JWT(&priv.PublicKey, token, now)
+	if err != nil {
+		return nil, false, nil
+	}
+	return claims, true, nil
+}
+
 // MintAccessToken issues an RS256 lab JWT and records its hash for opaque lookup compatibility.
+// Empty audience is preserved (not defaulted to ARM). For app/SP principals, oid is the
+// service principal object id when one exists; appid/azp stay the application (client) id.
 func (s *Service) MintAccessToken(principalID, audience string) (token string, expiresIn int, err error) {
 	kid, priv, err := s.ensureKey()
 	if err != nil {
 		return "", 0, err
 	}
-	if audience == "" {
-		audience = "https://management.azure.com"
-	}
 	now := s.now()
 	exp := now.Add(time.Duration(defaultExpiresIn) * time.Second)
 	iss := s.base() + "/" + s.TenantID + "/v2.0"
+	oid, appID := s.resolveTokenIdentity(principalID)
 	claims := map[string]any{
-		"aud":   audience,
 		"iss":   iss,
 		"iat":   now.Unix(),
 		"nbf":   now.Unix(),
 		"exp":   exp.Unix(),
-		"sub":   principalID,
-		"oid":   principalID,
+		"sub":   oid,
+		"oid":   oid,
 		"tid":   s.TenantID,
-		"appid": principalID,
-		"azp":   principalID,
+		"appid": appID,
+		"azp":   appID,
 		"ver":   "2.0",
+	}
+	if audience != "" {
+		claims["aud"] = audience
 	}
 	token, err = authn.EncodeRS256JWT(priv, kid, claims)
 	if err != nil {
 		return "", 0, err
 	}
-	if err := s.Store.PutAccessToken(authn.HashToken(token), principalID, exp); err != nil {
+	if err := s.Store.PutAccessToken(authn.HashToken(token), oid, exp); err != nil {
 		return "", 0, err
 	}
 	return token, defaultExpiresIn, nil
+}
+
+// resolveTokenIdentity maps a client id / SP id / app object id to (oid, appId).
+func (s *Service) resolveTokenIdentity(principalID string) (oid, appID string) {
+	principalID = strings.TrimSpace(principalID)
+	if principalID == "" {
+		return "", ""
+	}
+	oid, appID = principalID, principalID
+	if s == nil || s.Store == nil {
+		return oid, appID
+	}
+	if sp, ok, err := s.Store.GetServicePrincipal(principalID); err == nil && ok {
+		return sp.ID, sp.AppID
+	}
+	if obj, app, _, found, err := s.Store.ResolveEntraApp(s.appTenant(), principalID); err == nil && found {
+		appID = app
+		if sp, ok, err := s.Store.GetServicePrincipal(app); err == nil && ok {
+			return sp.ID, sp.AppID
+		}
+		if obj != "" {
+			return obj, app
+		}
+		return app, app
+	}
+	return oid, appID
 }
 
 // loginTenants are literal path prefixes. Wildcards conflict with Graph /v1.0/{path...}.

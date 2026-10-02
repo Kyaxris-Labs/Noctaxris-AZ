@@ -8,7 +8,7 @@ Noctaxris-AZ fails closed. Defaults favor a loopback lab on a single laptop.
 |---------|---------|-------|
 | HTTP listen | `127.0.0.1:4599` | Non-loopback without TLS requires `NOCTAXRIS_AZ_ALLOW_NONLOOPBACK_LISTEN=1` |
 | AMQP listen | `127.0.0.1:5672` | Non-loopback requires the same allow opt-in |
-| Compose publish | `127.0.0.1:4599` (and optional AMQP) | Container bind may be `0.0.0.0` with the opt-in above |
+| Compose publish | `127.0.0.1:4599` and `127.0.0.1:5672` | Stock Compose always publishes both. Container bind may be `0.0.0.0` with the opt-in above |
 | Host Docker socket | never mounted | Nested DinD is opt-in only via `docker/compose.engine.yaml` |
 
 ## Nested engine (opt-in)
@@ -46,8 +46,13 @@ Noctaxris-AZ fails closed. Defaults favor a loopback lab on a single laptop.
 - Missing or invalid Bearer credentials return Azure ARM `AuthenticationFailed` (HTTP 401).
 - Storage SAS that fails HMAC, expiry, or `sp` checks returns HTTP 403 `AuthenticationFailed`. Shared Key with a missing account stays HTTP 404 `AccountNotFound`.
 - Public paths: `/_noctaxris-az/health`, `/_noctaxris-az/ready`, `/_noctaxris-az/version`,
-  Entra token/OIDC discovery/JWKS, `POST /device`, and IMDS `/metadata/identity/oauth2/token`
-  (IMDS still requires Metadata, a known identity, and a loopback/link-local/private peer).
+  Entra token/OIDC discovery/JWKS, `POST /device`,
+  `/_noctaxris-az/oidc-lab/*` (lab WIF IdP including unauthenticated assertion mint),
+  and IMDS `/metadata/identity/oauth2/token`
+  (IMDS still requires Metadata, a known identity, and a loopback/link-local peer;
+  RFC1918 peers are denied even when Host is the metadata address).
+- ACR Registry `/v2/` and `/oauth2/token` skip the ARM Bearer envelope so handlers
+  can return Docker `WWW-Authenticate`; registry auth + RBAC still apply.
 - Nested image pulls fail closed unless allowlisted (`NOCTAXRIS_AZ_IMAGE_PULL_ALLOWLIST`).
 
 ## Example root refusal
@@ -66,12 +71,16 @@ non-loopback listen.
   operator convenience in the AWS/GCP sibling products and is intentional.
   Documented here so operators do not treat root as a normal app registration.
 - Built-in GUIDs include Owner, Contributor, Reader, Log Analytics Reader,
-  Monitoring Reader, Log Analytics Data Reader, AcrPull, and Event Hubs Data
-  Receiver / Data Owner. Contributor cannot mutate role assignments. Reader
-  is ARM read-only plus Resource Graph. Workspace KQL is Log Analytics Reader
-  or Data Reader. Event Hubs captured-events require Data Receiver or Data Owner
-  (`receive/action`). AcrPull grants
-  Registry V2 pull on `/v2/` and denies push.
+  Monitoring Reader, Log Analytics Data Reader, AcrPull, Event Hubs Data
+  Receiver / Data Owner, Key Vault Secrets User / Officer / Administrator,
+  Service Bus Data Owner / Sender / Receiver, App Configuration Data Owner /
+  Reader, Cognitive OpenAI User, and Cosmos Data Reader / Contributor.
+  Contributor cannot mutate role assignments. Reader is ARM read-only plus
+  Resource Graph. Workspace KQL is Log Analytics Reader or Data Reader.
+  Event Hubs captured-events require Data Receiver or Data Owner
+  (`receive/action`). AcrPull grants Registry V2 pull on `/v2/` and denies push.
+  Dedicated data-plane roles (Key Vault, App Config, Cosmos, Service Bus,
+  Cognitive, Event Grid send) are isolated from Owner/Contributor.
 
 ## Secrets at rest
 

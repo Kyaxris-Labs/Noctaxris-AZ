@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authz"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/azauth"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/store"
 )
 
@@ -334,14 +336,56 @@ func (h *Handler) authorizeDataPlane(w http.ResponseWriter, r *http.Request, acc
 		}
 		return true
 	}
-	if h.Auth != nil {
-		p, err := h.Auth.AuthenticateRequest(r)
-		if err == nil && p.IsRoot {
-			return true
+	action := storageDataAction(r)
+	sub, rg, _, exists, err := h.Store.GetStorageAccountByName(account)
+	if err != nil {
+		azerrors.StorageError(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return false
+	}
+	scope := "/subscriptions/" + config.DefaultSubscriptionID
+	if exists {
+		scope = "/subscriptions/" + sub + "/resourceGroups/" + rg +
+			"/providers/Microsoft.Storage/storageAccounts/" + account
+	}
+	if _, ok := azauth.RequireDataPlaneBearer(w, r, h.Auth, h.Authz, authn.Principal.AllowsStorage, action, scope); !ok {
+		return false
+	}
+	if !exists {
+		azerrors.StorageError(w, http.StatusNotFound, "AccountNotFound", "storage account not found")
+		return false
+	}
+	return true
+}
+
+func storageDataAction(r *http.Request) string {
+	path := ""
+	method := http.MethodGet
+	if r != nil {
+		method = strings.ToUpper(r.Method)
+		if r.URL != nil {
+			path = r.URL.Path
 		}
 	}
-	azerrors.StorageError(w, http.StatusUnauthorized, "AuthenticationFailed", "SharedKey, SAS, or root Bearer required")
-	return false
+	switch {
+	case strings.HasPrefix(path, "/queue/"):
+		switch method {
+		case http.MethodGet, http.MethodHead:
+			return "Microsoft.Storage/storageAccounts/queueServices/queues/messages/read"
+		case http.MethodDelete:
+			return "Microsoft.Storage/storageAccounts/queueServices/queues/messages/delete"
+		default:
+			return "Microsoft.Storage/storageAccounts/queueServices/queues/messages/write"
+		}
+	default:
+		switch method {
+		case http.MethodGet, http.MethodHead:
+			return "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read"
+		case http.MethodDelete:
+			return "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/delete"
+		default:
+			return "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/write"
+		}
+	}
 }
 
 func (h *Handler) authorizeSAS(w http.ResponseWriter, r *http.Request, account string) bool {

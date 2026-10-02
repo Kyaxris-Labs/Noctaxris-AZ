@@ -44,9 +44,56 @@ func decodeAccountKey(accountKey string) []byte {
 	return key
 }
 
-// StorageStringToSign builds a simplified lab string-to-sign (method + path).
+// StorageStringToSign builds a lab Shared Key Lite-shaped string-to-sign:
+// Verb, Content-MD5, Content-Type, Date (x-ms-date preferred), canonicalized
+// x-ms-* headers, then the request path. Lab-safe subset of Azure Shared Key Lite.
 func StorageStringToSign(r *http.Request) string {
-	return strings.ToUpper(r.Method) + "\n" + r.URL.Path
+	if r == nil || r.URL == nil {
+		return ""
+	}
+	date := strings.TrimSpace(r.Header.Get("x-ms-date"))
+	if date == "" {
+		date = strings.TrimSpace(r.Header.Get("Date"))
+	}
+	return strings.Join([]string{
+		strings.ToUpper(r.Method),
+		strings.TrimSpace(r.Header.Get("Content-MD5")),
+		strings.TrimSpace(r.Header.Get("Content-Type")),
+		date,
+		canonicalizeStorageMSHeaders(r),
+		r.URL.Path,
+	}, "\n")
+}
+
+func canonicalizeStorageMSHeaders(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	type kv struct{ k, v string }
+	var ms []kv
+	for k, vals := range r.Header {
+		lk := strings.ToLower(strings.TrimSpace(k))
+		if !strings.HasPrefix(lk, "x-ms-") {
+			continue
+		}
+		ms = append(ms, kv{k: lk, v: strings.Join(vals, ",")})
+	}
+	if len(ms) == 0 {
+		return ""
+	}
+	// Insertion sort keeps the stdlib-only dependency surface small.
+	for i := 1; i < len(ms); i++ {
+		j := i
+		for j > 0 && ms[j-1].k > ms[j].k {
+			ms[j-1], ms[j] = ms[j], ms[j-1]
+			j--
+		}
+	}
+	parts := make([]string, 0, len(ms))
+	for _, h := range ms {
+		parts = append(parts, h.k+":"+strings.TrimSpace(h.v))
+	}
+	return strings.Join(parts, "\n")
 }
 
 // HasSAS reports whether the request carries SAS query parameters (non-empty sig and se).

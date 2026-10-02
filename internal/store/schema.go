@@ -1,6 +1,6 @@
 package store
 
-const schemaVersion = 5
+const schemaVersion = 6
 
 const schema = `
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -529,6 +529,7 @@ CREATE TABLE IF NOT EXISTS entra_ca_policies (
 CREATE TABLE IF NOT EXISTS refresh_tokens (
   token_hash TEXT PRIMARY KEY,
   principal_id TEXT NOT NULL,
+  audience TEXT NOT NULL DEFAULT '',
   expires_at TEXT NOT NULL,
   created_at TEXT NOT NULL
 );

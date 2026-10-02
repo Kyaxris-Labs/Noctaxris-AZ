@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authz"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/azauth"
@@ -53,18 +54,17 @@ func (h *Handler) putAccount(w http.ResponseWriter, r *http.Request) {
 	if body.Location != "" {
 		location = body.Location
 	}
-	key, err := h.Store.UpsertCosmosAccount(sub, rg, name, location)
-	if err != nil {
+	if _, err := h.Store.UpsertCosmosAccount(sub, rg, name, location); err != nil {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
 		return
 	}
+	// Master keys stay in store and are returned only from listKeys.
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id":   "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.DocumentDB/databaseAccounts/" + name,
 		"name": name, "type": "Microsoft.DocumentDB/databaseAccounts", "location": location,
 		"properties": map[string]any{
 			"provisioningState": "Succeeded",
 			"documentEndpoint":  "/cosmos/" + name,
-			"primaryMasterKey":  key,
 		},
 	})
 }
@@ -105,8 +105,8 @@ func (h *Handler) listKeys(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"primaryMasterKey":   key,
-		"secondaryMasterKey": key,
+		"primaryMasterKey":           key,
+		"secondaryMasterKey":         key,
 		"primaryReadonlyMasterKey":   key,
 		"secondaryReadonlyMasterKey": key,
 	})
@@ -236,22 +236,32 @@ func (h *Handler) changeFeed(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) authData(w http.ResponseWriter, r *http.Request, action string) bool {
 	account := r.PathValue("account")
-	sub, rg, _, key, ok, err := h.Store.GetCosmosAccountByName(account)
-	if err != nil || !ok {
+	sub, rg, _, key, exists, err := h.Store.GetCosmosAccountByName(account)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return false
+	}
+	if hdr := strings.TrimSpace(r.Header.Get("x-ms-cosmos-account-key")); hdr != "" {
+		// Account-key path: never reveal whether the account name exists.
+		if !exists || hdr != key {
+			azerrors.Unauthenticated(w, "")
+			return false
+		}
+		return true
+	}
+	scope := "/subscriptions/" + config.DefaultSubscriptionID
+	if exists {
+		scope = "/subscriptions/" + sub + "/resourceGroups/" + rg +
+			"/providers/Microsoft.DocumentDB/databaseAccounts/" + account
+	}
+	if _, ok := azauth.RequireDataPlaneBearer(w, r, h.Auth, h.Authz, authn.Principal.AllowsCosmos, action, scope); !ok {
+		return false
+	}
+	if !exists {
 		azerrors.NotFound(w, "account not found")
 		return false
 	}
-	if hdr := r.Header.Get("x-ms-cosmos-account-key"); hdr != "" {
-		if hdr == key {
-			return true
-		}
-		azerrors.Unauthenticated(w, "")
-		return false
-	}
-	scope := "/subscriptions/" + sub + "/resourceGroups/" + rg +
-		"/providers/Microsoft.DocumentDB/databaseAccounts/" + account
-	_, ok = azauth.RequireDataPlaneBearer(w, r, h.Auth, h.Authz, authn.Principal.AllowsCosmos, action, scope)
-	return ok
+	return true
 }
 
 func (h *Handler) require(w http.ResponseWriter, r *http.Request, action string) bool {

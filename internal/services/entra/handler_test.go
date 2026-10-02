@@ -66,7 +66,7 @@ func TestTokenMintClientCredentials(t *testing.T) {
 	svc.Mount(mux)
 
 	secret := addClientSecret(t, st, config.DefaultTenantID, "sp-lab-1")
-	body := "grant_type=client_credentials&client_id=sp-lab-1&client_secret=" + secret
+	body := "grant_type=client_credentials&client_id=sp-lab-1&client_secret=" + secret + "&scope=https://management.azure.com/.default"
 	req := httptest.NewRequest(http.MethodPost, "/"+config.DefaultTenantID+"/oauth2/v2.0/token", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
@@ -89,19 +89,43 @@ func TestTokenMintClientCredentials(t *testing.T) {
 	if !ok || int(expires) != 3600 {
 		t.Fatalf("expires_in = %#v", resp["expires_in"])
 	}
+	_, claims, err := authn.DecodeJWTUnverified(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row, okApp, err := st.GetEntraApp(config.DefaultTenantID, "sp-lab-1")
+	if err != nil || !okApp {
+		t.Fatalf("app: ok=%v err=%v", okApp, err)
+	}
+	wantOID := row.ObjectID
+	if wantOID == "" {
+		wantOID = row.AppID
+	}
+	if authn.ClaimString(claims, "oid") != wantOID {
+		t.Fatalf("oid=%q want app object id %q", claims["oid"], wantOID)
+	}
+	if authn.ClaimString(claims, "appid") != "sp-lab-1" {
+		t.Fatalf("appid=%v", claims["appid"])
+	}
+	if authn.ClaimString(claims, "aud") != "https://management.azure.com" {
+		t.Fatalf("aud=%v", claims["aud"])
+	}
 
 	id, found, err := st.LookupAccessToken(authn.HashToken(token), time.Now().UTC())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !found || id != "sp-lab-1" {
-		t.Fatalf("lookup principal=%q found=%v", id, found)
+	if !found || id != wantOID {
+		t.Fatalf("lookup principal=%q found=%v want=%q", id, found, wantOID)
 	}
 
 	auth := &authn.Authenticator{Tokens: st, JWT: svc}
 	p, err := auth.AuthenticateToken(token)
-	if err != nil || p.ID != "sp-lab-1" {
+	if err != nil || p.ID != wantOID {
 		t.Fatalf("jwt auth: %#v %v", p, err)
+	}
+	if !p.AllowsARM() {
+		t.Fatalf("expected ARM audience on minted token: %+v", p)
 	}
 }
 

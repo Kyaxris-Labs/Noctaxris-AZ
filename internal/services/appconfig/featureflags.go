@@ -10,14 +10,8 @@ import (
 
 func (h *Handler) putFeatureFlag(w http.ResponseWriter, r *http.Request, p authn.Principal) {
 	storeName, name := r.PathValue("store"), r.PathValue("name")
-	st, ok, err := h.Store.GetAppConfigByName(storeName)
-	if err != nil || !ok {
-		azerrors.NotFound(w, "configuration store not found")
-		return
-	}
-	scope := storeResourceID(st.SubscriptionID, st.ResourceGroup, st.Name)
-	if err := h.requireDataPlane(p, "Microsoft.AppConfiguration/configurationStores/keyValues/write", scope); err != nil {
-		writeAuthz(w, err)
+	if _, ok := h.authorizeStoreDataPlane(w, p, storeName,
+		"Microsoft.AppConfiguration/configurationStores/keyValues/write"); !ok {
 		return
 	}
 	var body struct {
@@ -39,14 +33,8 @@ func (h *Handler) putFeatureFlag(w http.ResponseWriter, r *http.Request, p authn
 
 func (h *Handler) getFeatureFlag(w http.ResponseWriter, r *http.Request, p authn.Principal) {
 	storeName, name := r.PathValue("store"), r.PathValue("name")
-	st, ok, err := h.Store.GetAppConfigByName(storeName)
-	if err != nil || !ok {
-		azerrors.NotFound(w, "configuration store not found")
-		return
-	}
-	scope := storeResourceID(st.SubscriptionID, st.ResourceGroup, st.Name)
-	if err := h.requireDataPlane(p, "Microsoft.AppConfiguration/configurationStores/keyValues/read", scope); err != nil {
-		writeAuthz(w, err)
+	if _, ok := h.authorizeStoreDataPlane(w, p, storeName,
+		"Microsoft.AppConfiguration/configurationStores/keyValues/read"); !ok {
 		return
 	}
 	enabled, cond, ok, err := h.Store.GetAppConfigFeatureFlag(storeName, name)
@@ -65,14 +53,8 @@ func (h *Handler) getFeatureFlag(w http.ResponseWriter, r *http.Request, p authn
 
 func (h *Handler) listFeatureFlags(w http.ResponseWriter, r *http.Request, p authn.Principal) {
 	storeName := r.PathValue("store")
-	st, ok, err := h.Store.GetAppConfigByName(storeName)
-	if err != nil || !ok {
-		azerrors.NotFound(w, "configuration store not found")
-		return
-	}
-	scope := storeResourceID(st.SubscriptionID, st.ResourceGroup, st.Name)
-	if err := h.requireDataPlane(p, "Microsoft.AppConfiguration/configurationStores/keyValues/read", scope); err != nil {
-		writeAuthz(w, err)
+	if _, ok := h.authorizeStoreDataPlane(w, p, storeName,
+		"Microsoft.AppConfiguration/configurationStores/keyValues/read"); !ok {
 		return
 	}
 	rows, err := h.Store.ListAppConfigFeatureFlags(storeName)
@@ -91,14 +73,8 @@ func (h *Handler) listFeatureFlags(w http.ResponseWriter, r *http.Request, p aut
 
 func (h *Handler) putSnapshot(w http.ResponseWriter, r *http.Request, p authn.Principal) {
 	storeName, name := r.PathValue("store"), r.PathValue("name")
-	st, ok, err := h.Store.GetAppConfigByName(storeName)
-	if err != nil || !ok {
-		azerrors.NotFound(w, "configuration store not found")
-		return
-	}
-	scope := storeResourceID(st.SubscriptionID, st.ResourceGroup, st.Name)
-	if err := h.requireDataPlane(p, "Microsoft.AppConfiguration/configurationStores/keyValues/write", scope); err != nil {
-		writeAuthz(w, err)
+	if _, ok := h.authorizeStoreDataPlane(w, p, storeName,
+		"Microsoft.AppConfiguration/configurationStores/keyValues/write"); !ok {
 		return
 	}
 	if err := h.Store.UpsertAppConfigSnapshot(storeName, name, "ready"); err != nil {
@@ -110,14 +86,8 @@ func (h *Handler) putSnapshot(w http.ResponseWriter, r *http.Request, p authn.Pr
 
 func (h *Handler) getSnapshot(w http.ResponseWriter, r *http.Request, p authn.Principal) {
 	storeName, name := r.PathValue("store"), r.PathValue("name")
-	st, ok, err := h.Store.GetAppConfigByName(storeName)
-	if err != nil || !ok {
-		azerrors.NotFound(w, "configuration store not found")
-		return
-	}
-	scope := storeResourceID(st.SubscriptionID, st.ResourceGroup, st.Name)
-	if err := h.requireDataPlane(p, "Microsoft.AppConfiguration/configurationStores/keyValues/read", scope); err != nil {
-		writeAuthz(w, err)
+	if _, ok := h.authorizeStoreDataPlane(w, p, storeName,
+		"Microsoft.AppConfiguration/configurationStores/keyValues/read"); !ok {
 		return
 	}
 	status, created, ok, err := h.Store.GetAppConfigSnapshot(storeName, name)
@@ -141,14 +111,8 @@ func (h *Handler) getSnapshot(w http.ResponseWriter, r *http.Request, p authn.Pr
 
 func (h *Handler) listSnapshots(w http.ResponseWriter, r *http.Request, p authn.Principal) {
 	storeName := r.PathValue("store")
-	st, ok, err := h.Store.GetAppConfigByName(storeName)
-	if err != nil || !ok {
-		azerrors.NotFound(w, "configuration store not found")
-		return
-	}
-	scope := storeResourceID(st.SubscriptionID, st.ResourceGroup, st.Name)
-	if err := h.requireDataPlane(p, "Microsoft.AppConfiguration/configurationStores/keyValues/read", scope); err != nil {
-		writeAuthz(w, err)
+	if _, ok := h.authorizeStoreDataPlane(w, p, storeName,
+		"Microsoft.AppConfiguration/configurationStores/keyValues/read"); !ok {
 		return
 	}
 	rows, err := h.Store.ListAppConfigSnapshots(storeName)

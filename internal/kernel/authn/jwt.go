@@ -1,15 +1,17 @@
 package authn
 
 import (
-	"crypto"
 	"crypto/rsa"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
+
+	jose "github.com/go-jose/go-jose/v4"
 )
+
+var allowedRS256 = []jose.SignatureAlgorithm{jose.RS256}
 
 // JWTVerifier validates lab-issued RS256 access tokens.
 type JWTVerifier interface {
@@ -71,76 +73,58 @@ func attachJWTClaims(p Principal, token string) (Principal, error) {
 	return p, nil
 }
 
-// EncodeRS256JWT builds a compact RS256 JWT.
+// EncodeRS256JWT builds a compact RS256 JWT via go-jose.
 func EncodeRS256JWT(priv *rsa.PrivateKey, kid string, claims map[string]any) (string, error) {
-	header := map[string]any{"alg": "RS256", "typ": "JWT", "kid": kid}
-	hb, err := json.Marshal(header)
+	if priv == nil {
+		return "", fmt.Errorf("nil signing key")
+	}
+	payload, err := json.Marshal(claims)
 	if err != nil {
 		return "", err
 	}
-	cb, err := json.Marshal(claims)
+	jwk := jose.JSONWebKey{
+		Key:       priv,
+		KeyID:     kid,
+		Algorithm: string(jose.RS256),
+		Use:       "sig",
+	}
+	opts := (&jose.SignerOptions{}).WithType("JWT")
+	if kid != "" {
+		opts = opts.WithHeader("kid", kid)
+	}
+	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: &jwk}, opts)
 	if err != nil {
 		return "", err
 	}
-	enc := base64.RawURLEncoding
-	signingInput := enc.EncodeToString(hb) + "." + enc.EncodeToString(cb)
-	sum := sha256.Sum256([]byte(signingInput))
-	sig, err := rsa.SignPKCS1v15(nil, priv, crypto.SHA256, sum[:])
+	obj, err := signer.Sign(payload)
 	if err != nil {
 		return "", err
 	}
-	return signingInput + "." + enc.EncodeToString(sig), nil
+	return obj.CompactSerialize()
 }
 
 // VerifyRS256JWT verifies signature and exp, returning the claims map.
 func VerifyRS256JWT(pub *rsa.PublicKey, token string, now time.Time) (map[string]any, error) {
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
+	if pub == nil {
+		return nil, fmt.Errorf("nil public key")
+	}
+	if token == "" {
 		return nil, fmt.Errorf("invalid jwt")
 	}
-	enc := base64.RawURLEncoding
-	hb, err := enc.DecodeString(parts[0])
+	jws, err := jose.ParseSigned(token, allowedRS256)
 	if err != nil {
 		return nil, err
 	}
-	var header struct {
-		Alg string `json:"alg"`
-	}
-	if err := json.Unmarshal(hb, &header); err != nil {
-		return nil, err
-	}
-	if header.Alg != "RS256" {
-		return nil, fmt.Errorf("unsupported alg")
-	}
-	cb, err := enc.DecodeString(parts[1])
+	payload, err := jws.Verify(pub)
 	if err != nil {
-		return nil, err
-	}
-	sig, err := enc.DecodeString(parts[2])
-	if err != nil {
-		return nil, err
-	}
-	signingInput := parts[0] + "." + parts[1]
-	sum := sha256.Sum256([]byte(signingInput))
-	if err := rsa.VerifyPKCS1v15(pub, crypto.SHA256, sum[:], sig); err != nil {
 		return nil, err
 	}
 	var claims map[string]any
-	if err := json.Unmarshal(cb, &claims); err != nil {
+	if err := json.Unmarshal(payload, &claims); err != nil {
 		return nil, err
 	}
-	if expRaw, ok := claims["exp"]; ok {
-		var exp int64
-		switch v := expRaw.(type) {
-		case float64:
-			exp = int64(v)
-		case json.Number:
-			n, _ := v.Int64()
-			exp = n
-		}
-		if exp > 0 && now.Unix() > exp {
-			return nil, fmt.Errorf("token expired")
-		}
+	if exp, ok := ClaimUnix(claims, "exp"); ok && now.Unix() > exp {
+		return nil, fmt.Errorf("token expired")
 	}
 	return claims, nil
 }

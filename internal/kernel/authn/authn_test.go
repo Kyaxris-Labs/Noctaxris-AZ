@@ -112,7 +112,7 @@ func TestAuthenticateTokenLookupAndJWT(t *testing.T) {
 }
 
 func TestJWTEncodeVerifyAndClaims(t *testing.T) {
-	key, err := rsa.GenerateKey(rand.Reader, 1024)
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,6 +154,12 @@ func TestJWTEncodeVerifyAndClaims(t *testing.T) {
 	if _, err := authn.VerifyRS256JWT(&key.PublicKey, "a.b", now); err == nil {
 		t.Fatal("expected invalid")
 	}
+
+	// alg=none compact JWT must fail closed under RS256-only parse.
+	noneTok := "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJvaWQiOiJ4In0."
+	if _, err := authn.VerifyRS256JWT(&key.PublicKey, noneTok, now); err == nil {
+		t.Fatal("expected alg=none reject")
+	}
 }
 
 func hmacSHA256B64(key, sts string) string {
@@ -175,8 +181,16 @@ func TestSharedKeyAndSAS(t *testing.T) {
 	}
 	req := httptest.NewRequest(http.MethodGet, "/blob/c/b?sig=abc&se=2026", nil)
 	sts := authn.StorageStringToSign(req)
-	if sts != "GET\n/blob/c/b" {
+	if sts != "GET\n\n\n\n\n/blob/c/b" {
 		t.Fatalf("%q", sts)
+	}
+	req.Header.Set("Content-Type", "text/plain")
+	req.Header.Set("x-ms-date", "Thu, 01 Jan 2026 00:00:00 GMT")
+	req.Header.Set("x-ms-version", "2020-10-02")
+	sts = authn.StorageStringToSign(req)
+	wantSTS := "GET\n\ntext/plain\nThu, 01 Jan 2026 00:00:00 GMT\nx-ms-date:Thu, 01 Jan 2026 00:00:00 GMT\nx-ms-version:2020-10-02\n/blob/c/b"
+	if sts != wantSTS {
+		t.Fatalf("lite sts\n got %q\nwant %q", sts, wantSTS)
 	}
 	if !authn.VerifyStorageSharedKey("not-base64-key", "hello", hmacSHA256B64("not-base64-key", "hello")) {
 		t.Fatal("raw key verify")
@@ -332,7 +346,7 @@ func TestAudienceAllowAndHashLookup(t *testing.T) {
 		t.Fatal("cosmos accepts ARM theatre")
 	}
 
-	key, err := rsa.GenerateKey(rand.Reader, 1024)
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
 	}

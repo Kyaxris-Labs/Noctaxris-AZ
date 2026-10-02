@@ -60,14 +60,24 @@ func TestIMDSHostGateAndEmptyRemoteAddr(t *testing.T) {
 		t.Fatalf("private peer without metadata Host status=%d body=%s", prec.Code, prec.Body.String())
 	}
 
-	privateOK := httptest.NewRequest(http.MethodGet, path, nil)
-	privateOK.Header.Set("Metadata", "true")
-	privateOK.RemoteAddr = "10.0.0.5:9"
-	privateOK.Host = "169.254.169.254"
+	privateMetaHost := httptest.NewRequest(http.MethodGet, path, nil)
+	privateMetaHost.Header.Set("Metadata", "true")
+	privateMetaHost.RemoteAddr = "10.0.0.5:9"
+	privateMetaHost.Host = "169.254.169.254"
 	okRec := httptest.NewRecorder()
-	mux.ServeHTTP(okRec, privateOK)
-	if okRec.Code != http.StatusOK {
-		t.Fatalf("private+metadata Host status=%d body=%s", okRec.Code, okRec.Body.String())
+	mux.ServeHTTP(okRec, privateMetaHost)
+	if okRec.Code != http.StatusForbidden {
+		t.Fatalf("RFC1918 peer must not mint even with metadata Host status=%d body=%s", okRec.Code, okRec.Body.String())
+	}
+
+	linkLocal := httptest.NewRequest(http.MethodGet, path, nil)
+	linkLocal.Header.Set("Metadata", "true")
+	linkLocal.RemoteAddr = "169.254.1.2:9"
+	linkLocal.Host = "169.254.169.254"
+	llRec := httptest.NewRecorder()
+	mux.ServeHTTP(llRec, linkLocal)
+	if llRec.Code != http.StatusOK {
+		t.Fatalf("link-local peer status=%d body=%s", llRec.Code, llRec.Body.String())
 	}
 
 	loopback := httptest.NewRequest(http.MethodGet, path, nil)

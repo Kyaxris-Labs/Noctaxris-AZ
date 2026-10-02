@@ -353,14 +353,14 @@ func (h *Handler) requireV2(w http.ResponseWriter, r *http.Request, repo string,
 		return false
 	}
 	scope := h.registryAuthzScope(r)
+	// V2 pull requires registries/pull/read (AcrPull). ARM registries/read alone
+	// (Reader) must not authorize distribution pull or push.
 	actions := []string{
 		"Microsoft.ContainerRegistry/registries/pull/read",
-		"Microsoft.ContainerRegistry/registries/read",
 	}
 	if push {
 		actions = []string{
 			"Microsoft.ContainerRegistry/registries/push/write",
-			"Microsoft.ContainerRegistry/registries/write",
 		}
 	}
 	for _, action := range actions {

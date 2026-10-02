@@ -27,7 +27,7 @@ All settings use the `NOCTAXRIS_AZ_*` prefix.
 
 ## HTTP auth
 
-Discovery, JWKS, token, device code, `POST /device`, lab OIDC discovery/JWKS/token, health/ready/version, and IMDS token skip Bearer. IMDS still requires `Metadata: true`, a known managed identity, and a metadata Host or loopback/link-local peer (RFC1918 peers need Host `169.254.169.254`). `POST /provisioningwebservice.svc` does not skip Bearer; send a directory Bearer (`aud` `https://graph.microsoft.com` or `https://graph.windows.net`). Graph rejects tokens whose `aud` is ARM (`https://management.azure.com`, `https://management.core.windows.net`) or the token `iss`. ARM control-plane routes reject Graph `aud` (HTTP 403 `InvalidAuthenticationTokenAudience`). Key Vault data plane requires vault `aud` (`https://vault.azure.net`) plus data-plane RBAC. Storage Shared Key/SAS, table/blob, Event Hubs HTTP send/receive (root Bearer) and captured-events (root or Event Hubs Data Receiver / Data Owner), Graph, and SOAP do not require ARM `aud`. Root Bearer skips audience. Cloud-hosts TLS (`NOCTAXRIS_AZ_CLOUD_HOSTS=1`) enforces Host/SNI against the AzureCloud lab SAN list.
+Discovery, JWKS, token, device code, `POST /device`, lab OIDC discovery/JWKS/token, health/ready/version, and IMDS token skip Bearer. IMDS still requires `Metadata: true`, a known managed identity, and a loopback or link-local peer (RFC1918 peers are denied even when Host is the metadata address). `POST /provisioningwebservice.svc` does not skip Bearer; send a directory Bearer (`aud` `https://graph.microsoft.com` or `https://graph.windows.net`). Graph rejects tokens whose `aud` is ARM (`https://management.azure.com`, `https://management.core.windows.net`) or the token `iss`. ARM control-plane routes reject Graph `aud` (HTTP 403 `InvalidAuthenticationTokenAudience`). Key Vault data plane requires vault `aud` (`https://vault.azure.net`) plus data-plane RBAC. Storage Shared Key/SAS, table/blob, Event Hubs HTTP send/receive (root Bearer) and captured-events (root or Event Hubs Data Receiver / Data Owner), Graph, and SOAP do not require ARM `aud`. Root Bearer skips audience. Cloud-hosts TLS (`NOCTAXRIS_AZ_CLOUD_HOSTS=1`) enforces Host/SNI against the AzureCloud lab SAN list.
 
 ## Compose
 
@@ -37,7 +37,7 @@ When `docker/compose.yaml` is present it typically sets:
 - `NOCTAXRIS_AZ_ALLOW_NONLOOPBACK_LISTEN=1`
 - `NOCTAXRIS_AZ_DATA_ROOT=/var/lib/noctaxris-az`
 - `NOCTAXRIS_AZ_MASTER_KEY_FILE=/var/lib/noctaxris-az-secrets/master.key`
-- Host publish `127.0.0.1:4599:4599` (AMQP publish optional)
+- Host publish `127.0.0.1:4599:4599` and `127.0.0.1:5672:5672` (AMQP lite always published on stock Compose)
 - Volumes: data + secrets
 - `read_only: true` and `tmpfs: /tmp`
 - No `docker.sock`

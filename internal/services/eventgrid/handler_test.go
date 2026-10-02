@@ -1,7 +1,9 @@
 package eventgrid_test
 
 import (
+	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -38,10 +40,29 @@ func TestEventGridTopicSubAndPublish(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	hook := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ln, err := net.Listen("tcp", "127.0.0.1:4599")
+	if err != nil {
+		t.Skipf("lab-local webhook port busy: %v", err)
+	}
+	hook := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		var events []map[string]any
+		_ = json.Unmarshal(raw, &events)
+		if len(events) > 0 {
+			if et, _ := events[0]["eventType"].(string); et == "Microsoft.EventGrid.SubscriptionValidationEvent" {
+				data, _ := events[0]["data"].(map[string]any)
+				code, _ := data["validationCode"].(string)
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]string{"validationResponse": code})
+				return
+			}
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
+	hook.Listener = ln
+	hook.Start()
 	defer hook.Close()
+	hookURL := "http://127.0.0.1:4599/hook"
 
 	topicURL := srv.URL + "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.EventGrid/topics/egt"
 	req, _ := http.NewRequest(http.MethodPut, topicURL, strings.NewReader(`{"location":"eastus"}`))
@@ -69,11 +90,7 @@ func TestEventGridTopicSubAndPublish(t *testing.T) {
 	}
 
 	subURL := topicURL + "/providers/Microsoft.EventGrid/eventSubscriptions/es1"
-	// Lab-local egress allow: use 127.0.0.1:4599 style OR allow hook via env.
-	// hook.URL is random port; set allowlist.
-	t.Setenv("NOCTAXRIS_AZ_HTTP_EGRESS", "1")
-	t.Setenv("NOCTAXRIS_AZ_HTTP_ALLOWLIST", hook.URL)
-	body := `{"properties":{"destination":{"endpointType":"WebHook","properties":{"endpointUrl":"` + hook.URL + `"}}}}`
+	body := `{"properties":{"destination":{"endpointType":"WebHook","properties":{"endpointUrl":"` + hookURL + `"}}}}`
 	sreq, _ := http.NewRequest(http.MethodPut, subURL, strings.NewReader(body))
 	sreq.Header.Set("Authorization", "Bearer tok")
 	sreq.Header.Set("Content-Type", "application/json")
@@ -119,5 +136,19 @@ func TestEventGridTopicSubAndPublish(t *testing.T) {
 	defer mres.Body.Close()
 	if mres.StatusCode != http.StatusNotFound {
 		t.Fatalf("missing %d", mres.StatusCode)
+	}
+
+	// Negative: RFC1918 webhook is fail-closed by egress (even when egress env is unset).
+	badBody := `{"properties":{"destination":{"endpointType":"WebHook","properties":{"endpointUrl":"http://10.0.0.1/hook"}}}}`
+	badReq, _ := http.NewRequest(http.MethodPut, topicURL+"/providers/Microsoft.EventGrid/eventSubscriptions/bad", strings.NewReader(badBody))
+	badReq.Header.Set("Authorization", "Bearer tok")
+	badReq.Header.Set("Content-Type", "application/json")
+	badRes, err := http.DefaultClient.Do(badReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer badRes.Body.Close()
+	if badRes.StatusCode != http.StatusBadRequest {
+		t.Fatalf("private webhook want 400 got %d", badRes.StatusCode)
 	}
 }

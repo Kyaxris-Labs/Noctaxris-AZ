@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authz"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/azauth"
@@ -226,19 +227,25 @@ func amqpEndpoint(addr string) string {
 
 func (h *Handler) requireDataPlane(w http.ResponseWriter, r *http.Request, action string) bool {
 	ns := r.PathValue("ns")
-	sub, rg, _, ok, err := h.Store.GetServiceBusNamespaceByName(ns)
+	sub, rg, _, exists, err := h.Store.GetServiceBusNamespaceByName(ns)
 	if err != nil {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
 		return false
 	}
-	if !ok {
+	scope := "/subscriptions/" + config.DefaultSubscriptionID +
+		"/providers/Microsoft.ServiceBus/namespaces/" + ns
+	if exists {
+		scope = "/subscriptions/" + sub + "/resourceGroups/" + rg +
+			"/providers/Microsoft.ServiceBus/namespaces/" + ns
+	}
+	if _, ok := azauth.RequireDataPlaneBearer(w, r, h.Auth, h.Authz, authn.Principal.AllowsServiceBus, action, scope); !ok {
+		return false
+	}
+	if !exists {
 		azerrors.NotFound(w, "namespace not found")
 		return false
 	}
-	scope := "/subscriptions/" + sub + "/resourceGroups/" + rg +
-		"/providers/Microsoft.ServiceBus/namespaces/" + ns
-	_, ok = azauth.RequireDataPlaneBearer(w, r, h.Auth, h.Authz, authn.Principal.AllowsServiceBus, action, scope)
-	return ok
+	return true
 }
 
 func (h *Handler) requireBearerARM(w http.ResponseWriter, r *http.Request, action, scope string) bool {

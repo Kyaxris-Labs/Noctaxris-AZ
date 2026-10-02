@@ -9,8 +9,10 @@ import (
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/armprops"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authz"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/azauth"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/store"
 )
 
@@ -133,7 +135,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 func resourceJSON(sub, rg, name, location string, props map[string]any) map[string]any {
 	id := "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.ContainerRegistry/registries/" + name
 	return map[string]any{
-		"id": id, "name": name, "type": armType, "location": location, "properties": props,
+		"id": id, "name": name, "type": armType, "location": location, "properties": armprops.Public(props),
 	}
 }
 
@@ -152,8 +154,11 @@ func (h *Handler) require(w http.ResponseWriter, r *http.Request, action string)
 		return false
 	}
 	scope := "/subscriptions/" + r.PathValue("sub") + "/resourceGroups/" + r.PathValue("rg")
+	if !azauth.RequireAuthzEvaluator(w, p.IsRoot, h.Authz) {
+		return false
+	}
 	if h.Authz == nil {
-		return p.IsRoot
+		return true
 	}
 	ok, err := h.Authz.Evaluate(p.ID, p.IsRoot, action, scope)
 	if err != nil {

@@ -97,14 +97,21 @@ func caClientIncluded(cond map[string]any, clientID string) bool {
 		if strings.EqualFold(id, "All") || strings.EqualFold(id, "AllApplications") {
 			return true
 		}
-		if id == clientID {
+		if clientID != "" && id == clientID {
 			return true
 		}
+	}
+	// Omitted client_id cannot evade an application-scoped Conditional Access policy.
+	if clientID == "" {
+		return true
 	}
 	return false
 }
 
 func caClientExcluded(cond map[string]any, clientID string) bool {
+	if clientID == "" {
+		return false
+	}
 	apps := nestedMap(cond, "applications")
 	for _, id := range stringList(apps["excludeApplications"]) {
 		if id == clientID {

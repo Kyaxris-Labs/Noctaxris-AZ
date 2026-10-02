@@ -51,18 +51,22 @@ func (s *Service) tokenAudience(r *http.Request) string {
 	if audience == "" {
 		audience = strings.TrimSpace(r.Form.Get("resource"))
 	}
+	return normalizeTokenAudience(audience)
+}
+
+func normalizeTokenAudience(audience string) string {
+	audience = strings.TrimSpace(audience)
 	audience = strings.TrimSuffix(audience, "/.default")
 	if i := strings.IndexByte(audience, ' '); i > 0 {
 		audience = audience[:i]
 	}
-	return audience
+	return strings.TrimRight(strings.TrimSpace(audience), "/")
 }
 
 func (s *Service) writeToken(w http.ResponseWriter, r *http.Request, principalID, audience string, withRefresh bool) {
+	// Conditional Access must use the request client_id; do not substitute principalID
+	// (omitted client_id must not evade application-scoped policies).
 	clientID := strings.TrimSpace(r.Form.Get("client_id"))
-	if clientID == "" {
-		clientID = principalID
-	}
 	if s.conditionalAccessBlocked(r, clientID) {
 		s.writeConditionalAccessDenied(w)
 		return
@@ -84,7 +88,7 @@ func (s *Service) writeToken(w http.ResponseWriter, r *http.Request, principalID
 	if withRefresh {
 		rt := store.RandomToken(32)
 		exp := s.now().Add(refreshTTL)
-		if err := s.Store.PutRefreshToken(authn.HashToken(rt), principalID, exp); err != nil {
+		if err := s.Store.PutRefreshToken(authn.HashToken(rt), principalID, audience, exp); err != nil {
 			azerrors.WriteOAuth(w, http.StatusInternalServerError, "server_error", err.Error())
 			return
 		}
@@ -186,7 +190,7 @@ func (s *Service) tokenRefresh(w http.ResponseWriter, r *http.Request) {
 		azerrors.WriteOAuth(w, http.StatusBadRequest, "invalid_request", "refresh_token is required")
 		return
 	}
-	id, ok, err := s.Store.LookupRefreshToken(authn.HashToken(rt), s.now())
+	id, storedAud, ok, err := s.Store.LookupRefreshToken(authn.HashToken(rt), s.now())
 	if err != nil {
 		azerrors.WriteOAuth(w, http.StatusInternalServerError, "server_error", err.Error())
 		return
@@ -195,7 +199,13 @@ func (s *Service) tokenRefresh(w http.ResponseWriter, r *http.Request) {
 		azerrors.WriteOAuth(w, http.StatusBadRequest, "invalid_grant", "refresh_token is invalid or expired")
 		return
 	}
-	s.writeToken(w, r, id, s.tokenAudience(r), true)
+	requested := s.tokenAudience(r)
+	storedAud = normalizeTokenAudience(storedAud)
+	if requested != "" && requested != storedAud {
+		azerrors.WriteOAuth(w, http.StatusBadRequest, "invalid_grant", "refresh_token cannot change audience via scope or resource")
+		return
+	}
+	s.writeToken(w, r, id, storedAud, true)
 }
 
 func (s *Service) handleDeviceCode(w http.ResponseWriter, r *http.Request) {

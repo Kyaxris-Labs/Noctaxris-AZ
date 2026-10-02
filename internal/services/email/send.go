@@ -20,7 +20,7 @@ func (h *Handler) sendEmail(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		SenderAddress string `json:"senderAddress"`
 		Content       struct {
-			Subject string `json:"subject"`
+			Subject   string `json:"subject"`
 			PlainText string `json:"plainText"`
 		} `json:"content"`
 		Recipients struct {

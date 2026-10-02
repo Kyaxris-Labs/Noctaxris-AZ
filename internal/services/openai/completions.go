@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/azauth"
 )
@@ -19,15 +20,23 @@ var allowedModels = map[string]struct{}{
 
 func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	row, ok, err := h.Store.GetProviderResourceByName(providerKey, name)
-	if err != nil || !ok {
-		azerrors.NotFound(w, "account not found")
+	row, exists, err := h.Store.GetProviderResourceByName(providerKey, name)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
 		return
 	}
-	scope := "/subscriptions/" + row.SubscriptionID + "/resourceGroups/" + row.ResourceGroup +
+	scope := "/subscriptions/" + config.DefaultSubscriptionID +
 		"/providers/Microsoft.CognitiveServices/accounts/" + name
+	if exists {
+		scope = "/subscriptions/" + row.SubscriptionID + "/resourceGroups/" + row.ResourceGroup +
+			"/providers/Microsoft.CognitiveServices/accounts/" + name
+	}
 	if _, ok := azauth.RequireDataPlaneBearer(w, r, h.Auth, h.Authz, authn.Principal.AllowsCognitive,
 		"Microsoft.CognitiveServices/accounts/deployments/chat/completions/action", scope); !ok {
+		return
+	}
+	if !exists {
+		azerrors.NotFound(w, "account not found")
 		return
 	}
 	var body struct {

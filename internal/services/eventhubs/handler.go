@@ -9,6 +9,7 @@ import (
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authz"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/azauth"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/store"
 )
 
@@ -323,8 +324,11 @@ func (h *Handler) require(w http.ResponseWriter, r *http.Request, action string)
 		return false
 	}
 	scope := "/subscriptions/" + r.PathValue("sub") + "/resourceGroups/" + r.PathValue("rg")
+	if !azauth.RequireAuthzEvaluator(w, p.IsRoot, h.Authz) {
+		return false
+	}
 	if h.Authz == nil {
-		return p.IsRoot
+		return true
 	}
 	ok, err := h.Authz.Evaluate(p.ID, p.IsRoot, action, scope)
 	if err != nil {

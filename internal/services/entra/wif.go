@@ -40,6 +40,11 @@ func (s *Service) verifyClientAssertion(w http.ResponseWriter, r *http.Request, 
 }
 
 func (s *Service) verifyFederatedAssertion(w http.ResponseWriter, r *http.Request, clientID, assertion, iss, aud string) (string, bool) {
+	clientID = strings.TrimSpace(clientID)
+	if clientID == "" {
+		azerrors.WriteOAuth(w, http.StatusUnauthorized, "invalid_client", "client_id is required for federated client_assertion")
+		return "", false
+	}
 	_, priv, err := s.ensureOIDCLabKey()
 	if err != nil {
 		azerrors.WriteOAuth(w, http.StatusInternalServerError, "server_error", err.Error())
@@ -51,6 +56,10 @@ func (s *Service) verifyFederatedAssertion(w http.ResponseWriter, r *http.Reques
 		return "", false
 	}
 	appIDs := s.federatedMatchAppIDs(clientID)
+	if len(appIDs) == 0 {
+		azerrors.WriteOAuth(w, http.StatusUnauthorized, "invalid_client", "client_id is required for federated client_assertion")
+		return "", false
+	}
 	fic, ok, err := s.Store.MatchFIC(iss, aud, claims, appIDs...)
 	if err != nil {
 		azerrors.WriteOAuth(w, http.StatusInternalServerError, "server_error", err.Error())
@@ -65,17 +74,14 @@ func (s *Service) verifyFederatedAssertion(w http.ResponseWriter, r *http.Reques
 		azerrors.WriteOAuth(w, http.StatusInternalServerError, "server_error", err.Error())
 		return "", false
 	}
-	if clientID != "" && found && clientID != appID && clientID != fic.AppObjectID {
+	if found && clientID != appID && clientID != fic.AppObjectID {
 		azerrors.WriteOAuth(w, http.StatusUnauthorized, "invalid_client", "client_id does not match federated credential application")
 		return "", false
 	}
 	if found {
 		return appID, true
 	}
-	if clientID != "" {
-		return clientID, true
-	}
-	return fic.AppObjectID, true
+	return clientID, true
 }
 
 func (s *Service) federatedMatchAppIDs(clientID string) []string {

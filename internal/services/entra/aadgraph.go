@@ -24,10 +24,10 @@ func (s *Service) handleAADTenantDetails(w http.ResponseWriter, r *http.Request)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"value": []map[string]any{{
-			"objectId":          s.appTenant(),
-			"displayName":       "Noctaxris-AZ Lab",
-			"verifiedDomains":   []map[string]any{{"name": "lab.local", "default": true}},
-			"dirSyncEnabled":    false,
+			"objectId":               s.appTenant(),
+			"displayName":            "Noctaxris-AZ Lab",
+			"verifiedDomains":        []map[string]any{{"name": "lab.local", "default": true}},
+			"dirSyncEnabled":         false,
 			"companyLastDirSyncTime": nil,
 		}},
 	})
@@ -45,12 +45,12 @@ func (s *Service) handleAADUsers(w http.ResponseWriter, r *http.Request) {
 	value := make([]map[string]any, 0, len(users))
 	for _, u := range users {
 		value = append(value, map[string]any{
-			"objectId":            u.ID,
-			"displayName":         u.DisplayName,
-			"userPrincipalName":   u.UserPrincipalName,
-			"mail":                u.Mail,
-			"accountEnabled":      true,
-			"userType":            "Member",
+			"objectId":          u.ID,
+			"displayName":       u.DisplayName,
+			"userPrincipalName": u.UserPrincipalName,
+			"mail":              u.Mail,
+			"accountEnabled":    true,
+			"userType":          "Member",
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"value": value})
@@ -73,10 +73,10 @@ func (s *Service) handleAADDirectoryRoles(w http.ResponseWriter, r *http.Request
 			ms = append(ms, map[string]any{"objectId": id, "url": "directoryObjects/" + id})
 		}
 		value = append(value, map[string]any{
-			"objectId":        role.ID,
-			"displayName":     role.DisplayName,
-			"roleTemplateId":  role.TemplateID,
-			"members":         ms,
+			"objectId":       role.ID,
+			"displayName":    role.DisplayName,
+			"roleTemplateId": role.TemplateID,
+			"members":        ms,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"value": value})

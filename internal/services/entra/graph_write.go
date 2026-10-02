@@ -100,7 +100,11 @@ func (s *Service) handleAddOwner(w http.ResponseWriter, r *http.Request) {
 		azerrors.WriteGraph(w, http.StatusNotFound, "Request_ResourceNotFound", "Resource not found")
 		return
 	}
-	if !s.requireGraphAppWrite(w, r, resourceID) {
+	if strings.Contains(r.URL.Path, "/groups/") {
+		if !s.requireGraphDirectoryWrite(w, r, "Global Administrator", "Groups Administrator", "User Administrator") {
+			return
+		}
+	} else if !s.requireGraphAppWrite(w, r, resourceID) {
 		return
 	}
 	if err := s.Store.AddOwner(resourceID, ownerID, "user"); err != nil {

@@ -35,6 +35,8 @@ const (
 	AudienceCognitive = "https://cognitiveservices.azure.com"
 	// AudienceCommunication is Azure Communication Services data plane.
 	AudienceCommunication = "https://communication.azure.com"
+	// AudienceStorage is the Azure Storage data-plane resource.
+	AudienceStorage = "https://storage.azure.com"
 )
 
 // NormalizeAudience trims space and a trailing slash for resource comparison.
@@ -68,6 +70,8 @@ func audienceKind(aud string) string {
 		return "cognitive"
 	case NormalizeAudience(AudienceCommunication):
 		return "communication"
+	case NormalizeAudience(AudienceStorage):
+		return "storage"
 	default:
 		return ""
 	}
@@ -207,6 +211,15 @@ func (p Principal) AllowsCognitive() bool {
 // AllowsCommunication reports whether p may call Communication Services email send.
 func (p Principal) AllowsCommunication() bool {
 	return p.allowsKind("communication")
+}
+
+// AllowsStorage reports whether p may call Storage blob/queue/table data plane with Entra.
+// Root skips audience. ARM audience is accepted for Entra data-plane theatre; Graph is denied.
+func (p Principal) AllowsStorage() bool {
+	if p.IsRoot || p.AllowsARM() {
+		return true
+	}
+	return p.allowsKind("storage")
 }
 
 // AllowsRegistry reports whether p may call Registry V2 / oauth2 token theatre.

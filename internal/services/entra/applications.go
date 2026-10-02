@@ -69,7 +69,7 @@ func (s *Service) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleCreateSP(w http.ResponseWriter, r *http.Request) {
-	if !s.requireGraph(w, r) {
+	if !s.requireGraphDirectoryWrite(w, r, "Global Administrator", "Application Administrator", "Cloud Application Administrator") {
 		return
 	}
 	var body struct {

@@ -39,11 +39,8 @@ func TestCosmosDataPlaneRejectsGraphAndReaderOmitsKey(t *testing.T) {
 	if prec.Code != http.StatusOK {
 		t.Fatalf("put %d %s", prec.Code, prec.Body.String())
 	}
-	var putBody map[string]any
-	_ = json.Unmarshal(prec.Body.Bytes(), &putBody)
-	props, _ := putBody["properties"].(map[string]any)
-	if props["primaryMasterKey"] == nil || props["primaryMasterKey"] == "" {
-		t.Fatal("create must return primaryMasterKey")
+	if strings.Contains(prec.Body.String(), "primaryMasterKey") {
+		t.Fatalf("PUT must omit primaryMasterKey: %s", prec.Body.String())
 	}
 
 	get, _ := http.NewRequest(http.MethodGet, arm, nil)
@@ -55,6 +52,14 @@ func TestCosmosDataPlaneRejectsGraphAndReaderOmitsKey(t *testing.T) {
 	}
 	if strings.Contains(grec.Body.String(), "primaryMasterKey") {
 		t.Fatalf("GET must omit primaryMasterKey: %s", grec.Body.String())
+	}
+
+	rootKeys, _ := http.NewRequest(http.MethodPost, arm+"/listKeys", nil)
+	rootKeys.Header.Set("Authorization", "Bearer root-tok")
+	rkrec := httptest.NewRecorder()
+	mux.ServeHTTP(rkrec, rootKeys)
+	if rkrec.Code != http.StatusOK || !strings.Contains(rkrec.Body.String(), "primaryMasterKey") {
+		t.Fatalf("listKeys must return primaryMasterKey: %d %s", rkrec.Code, rkrec.Body.String())
 	}
 
 	if err := st.UpsertRoleAssignment(authz.Assignment{

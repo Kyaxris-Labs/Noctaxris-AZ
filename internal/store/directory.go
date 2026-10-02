@@ -693,27 +693,27 @@ func (s *Store) ListAppRoleAssignedTo(spID string) ([]map[string]string, error) 
 	return out, rows.Err()
 }
 
-func (s *Store) PutRefreshToken(tokenHash, principalID string, exp time.Time) error {
-	_, err := s.db.Exec(`INSERT INTO refresh_tokens (token_hash, principal_id, expires_at, created_at) VALUES (?,?,?,?)
-ON CONFLICT(token_hash) DO UPDATE SET principal_id=excluded.principal_id, expires_at=excluded.expires_at`,
-		tokenHash, principalID, exp.UTC().Format(time.RFC3339), time.Now().UTC().Format(time.RFC3339))
+func (s *Store) PutRefreshToken(tokenHash, principalID, audience string, exp time.Time) error {
+	_, err := s.db.Exec(`INSERT INTO refresh_tokens (token_hash, principal_id, audience, expires_at, created_at) VALUES (?,?,?,?,?)
+ON CONFLICT(token_hash) DO UPDATE SET principal_id=excluded.principal_id, audience=excluded.audience, expires_at=excluded.expires_at`,
+		tokenHash, principalID, strings.TrimSpace(audience), exp.UTC().Format(time.RFC3339), time.Now().UTC().Format(time.RFC3339))
 	return err
 }
 
-func (s *Store) LookupRefreshToken(tokenHash string, now time.Time) (string, bool, error) {
-	var id, exp string
-	err := s.db.QueryRow(`SELECT principal_id, expires_at FROM refresh_tokens WHERE token_hash = ?`, tokenHash).Scan(&id, &exp)
+func (s *Store) LookupRefreshToken(tokenHash string, now time.Time) (principalID, audience string, ok bool, err error) {
+	var id, aud, exp string
+	err = s.db.QueryRow(`SELECT principal_id, COALESCE(audience, ''), expires_at FROM refresh_tokens WHERE token_hash = ?`, tokenHash).Scan(&id, &aud, &exp)
 	if err == sql.ErrNoRows {
-		return "", false, nil
+		return "", "", false, nil
 	}
 	if err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
 	t, perr := time.Parse(time.RFC3339, exp)
 	if perr == nil && now.After(t) {
-		return "", false, nil
+		return "", "", false, nil
 	}
-	return id, true, nil
+	return id, aud, true, nil
 }
 
 func (s *Store) PutDeviceCode(code, userCode string, exp time.Time) error {

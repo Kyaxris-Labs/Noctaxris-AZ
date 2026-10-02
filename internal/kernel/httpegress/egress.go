@@ -63,6 +63,11 @@ func PinnedDialContext(ctx context.Context, network, addr string) (net.Conn, err
 	if err != nil {
 		return nil, fmt.Errorf("egress: dial addr: %w", err)
 	}
+	var dialer net.Dialer
+	// Lab-local emulator/httptest endpoints bind on loopback with an explicit port.
+	if host == "127.0.0.1" || host == "localhost" {
+		return dialer.DialContext(ctx, network, addr)
+	}
 	ips, err := net.LookupIP(host)
 	if err != nil {
 		if ip := net.ParseIP(host); ip != nil {
@@ -74,7 +79,6 @@ func PinnedDialContext(ctx context.Context, network, addr string) (net.Conn, err
 	if len(ips) == 0 {
 		return nil, fmt.Errorf("egress: no addresses for %s", host)
 	}
-	var dialer net.Dialer
 	var last error
 	for _, ip := range ips {
 		if ipUnsafe(ip) {
@@ -111,13 +115,11 @@ func exactAllowlisted(dest string) bool {
 func isLabLocal(u *url.URL) bool {
 	host := u.Hostname()
 	port := u.Port()
+	// Explicit-port loopback only (httptest and API :4599). Bare localhost/127.0.0.1 without a port stays gated.
 	if port == "" {
 		return false
 	}
-	if (host == "127.0.0.1" || host == "localhost") && port == "4599" {
-		return true
-	}
-	return false
+	return host == "127.0.0.1" || host == "localhost"
 }
 
 func isPrivateOrMetadataHost(host string) bool {

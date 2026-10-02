@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/armprops"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authz"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/azauth"
@@ -170,15 +171,12 @@ func (h *Handler) listCredential(w http.ResponseWriter, r *http.Request, action 
 }
 
 func publicProps(props map[string]any) map[string]any {
-	if props == nil {
+	out := armprops.Public(props)
+	if len(out) == 0 {
 		return map[string]any{"provisioningState": "Succeeded"}
 	}
-	out := make(map[string]any, len(props))
-	for k, v := range props {
-		if k == "kubeConfig" || k == "kubeconfig" {
-			continue
-		}
-		out[k] = v
+	if _, ok := out["provisioningState"]; !ok {
+		out["provisioningState"] = "Succeeded"
 	}
 	return out
 }
@@ -186,7 +184,7 @@ func publicProps(props map[string]any) map[string]any {
 func resourceJSON(sub, rg, name, location string, props map[string]any) map[string]any {
 	id := "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.ContainerService/managedClusters/" + name
 	return map[string]any{
-		"id": id, "name": name, "type": armType, "location": location, "properties": props,
+		"id": id, "name": name, "type": armType, "location": location, "properties": publicProps(props),
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authz"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/store"
@@ -67,6 +68,29 @@ func (h *Handler) requireDataPlane(p authn.Principal, action, scope string) erro
 		return errAudience
 	}
 	return h.requireAction(p, action, scope)
+}
+
+// authorizeStoreDataPlane evaluates data-plane RBAC before revealing whether the store exists.
+func (h *Handler) authorizeStoreDataPlane(w http.ResponseWriter, p authn.Principal, storeName, action string) (store.AppConfigStore, bool) {
+	st, exists, err := h.Store.GetAppConfigByName(storeName)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+		return store.AppConfigStore{}, false
+	}
+	scope := fmt.Sprintf("/subscriptions/%s/providers/Microsoft.AppConfiguration/configurationStores/%s",
+		config.DefaultSubscriptionID, storeName)
+	if exists {
+		scope = storeResourceID(st.SubscriptionID, st.ResourceGroup, st.Name)
+	}
+	if err := h.requireDataPlane(p, action, scope); err != nil {
+		writeAuthz(w, err)
+		return store.AppConfigStore{}, false
+	}
+	if !exists {
+		azerrors.NotFound(w, "configuration store not found")
+		return store.AppConfigStore{}, false
+	}
+	return st, true
 }
 
 func (h *Handler) requireAction(p authn.Principal, action, scope string) error {
@@ -204,18 +228,8 @@ func (h *Handler) putKV(w http.ResponseWriter, r *http.Request, p authn.Principa
 	storeName := r.PathValue("store")
 	key, _ := url.PathUnescape(r.PathValue("key"))
 	label := r.URL.Query().Get("label")
-	st, ok, err := h.Store.GetAppConfigByName(storeName)
-	if err != nil {
-		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
-		return
-	}
-	if !ok {
-		azerrors.NotFound(w, "configuration store not found")
-		return
-	}
-	scope := storeResourceID(st.SubscriptionID, st.ResourceGroup, st.Name)
-	if err := h.requireDataPlane(p, "Microsoft.AppConfiguration/configurationStores/keyValues/write", scope); err != nil {
-		writeAuthz(w, err)
+	if _, ok := h.authorizeStoreDataPlane(w, p, storeName,
+		"Microsoft.AppConfiguration/configurationStores/keyValues/write"); !ok {
 		return
 	}
 	var body struct {
@@ -240,18 +254,8 @@ func (h *Handler) getKV(w http.ResponseWriter, r *http.Request, p authn.Principa
 	storeName := r.PathValue("store")
 	key, _ := url.PathUnescape(r.PathValue("key"))
 	label := r.URL.Query().Get("label")
-	st, ok, err := h.Store.GetAppConfigByName(storeName)
-	if err != nil {
-		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
-		return
-	}
-	if !ok {
-		azerrors.NotFound(w, "configuration store not found")
-		return
-	}
-	scope := storeResourceID(st.SubscriptionID, st.ResourceGroup, st.Name)
-	if err := h.requireDataPlane(p, "Microsoft.AppConfiguration/configurationStores/keyValues/read", scope); err != nil {
-		writeAuthz(w, err)
+	if _, ok := h.authorizeStoreDataPlane(w, p, storeName,
+		"Microsoft.AppConfiguration/configurationStores/keyValues/read"); !ok {
 		return
 	}
 	row, ok, err := h.Store.GetAppConfigKV(storeName, key, label)
@@ -269,18 +273,8 @@ func (h *Handler) getKV(w http.ResponseWriter, r *http.Request, p authn.Principa
 func (h *Handler) listKV(w http.ResponseWriter, r *http.Request, p authn.Principal) {
 	storeName := r.PathValue("store")
 	keyFilter := r.URL.Query().Get("key")
-	st, ok, err := h.Store.GetAppConfigByName(storeName)
-	if err != nil {
-		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
-		return
-	}
-	if !ok {
-		azerrors.NotFound(w, "configuration store not found")
-		return
-	}
-	scope := storeResourceID(st.SubscriptionID, st.ResourceGroup, st.Name)
-	if err := h.requireDataPlane(p, "Microsoft.AppConfiguration/configurationStores/keyValues/read", scope); err != nil {
-		writeAuthz(w, err)
+	if _, ok := h.authorizeStoreDataPlane(w, p, storeName,
+		"Microsoft.AppConfiguration/configurationStores/keyValues/read"); !ok {
 		return
 	}
 	if snap := strings.TrimSpace(r.URL.Query().Get("snapshot")); snap != "" {

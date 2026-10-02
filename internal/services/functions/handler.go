@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authz"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/store"
@@ -194,18 +195,21 @@ func (h *Handler) listApps(w http.ResponseWriter, r *http.Request, p authn.Princ
 
 func (h *Handler) invoke(w http.ResponseWriter, r *http.Request, p authn.Principal) {
 	name := r.PathValue("name")
-	row, ok, err := h.Store.GetFunctionAppByName(name)
+	row, exists, err := h.Store.GetFunctionAppByName(name)
 	if err != nil {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
 		return
 	}
-	if !ok {
-		azerrors.NotFound(w, "function app not found")
-		return
+	scope := fmt.Sprintf("/subscriptions/%s/providers/Microsoft.Web/sites/%s", config.DefaultSubscriptionID, name)
+	if exists {
+		scope = siteResourceID(row.SubscriptionID, row.ResourceGroup, row.Name)
 	}
-	scope := siteResourceID(row.SubscriptionID, row.ResourceGroup, row.Name)
 	if err := h.require(p, "Microsoft.Web/sites/functions/write", scope); err != nil {
 		writeAuthz(w, err)
+		return
+	}
+	if !exists {
+		azerrors.NotFound(w, "function app not found")
 		return
 	}
 	_, _ = io.Copy(io.Discard, r.Body)

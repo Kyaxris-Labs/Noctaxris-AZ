@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authz"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/azauth"
@@ -93,28 +94,41 @@ func (h *Handler) putSub(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body)
 	dest := body.Properties.Destination.Properties.EndpointURL
+	if dest != "" {
+		if err := handshakeWebhook(dest, ""); err != nil {
+			azerrors.BadRequest(w, "subscription validation failed: "+err.Error())
+			return
+		}
+	}
 	if err := h.Store.UpsertEventGridSubscription(topic, name, dest, "{}"); err != nil {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"name": name, "type": "Microsoft.EventGrid/eventSubscriptions"})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"name": name, "type": "Microsoft.EventGrid/eventSubscriptions",
+		"properties": map[string]any{"provisioningState": "Succeeded"},
+	})
 }
 
 func (h *Handler) publish(w http.ResponseWriter, r *http.Request) {
 	topic := r.PathValue("topic")
-	sub, rg, _, ok, err := h.Store.GetEventGridTopicByName(topic)
+	sub, rg, _, exists, err := h.Store.GetEventGridTopicByName(topic)
 	if err != nil {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
 		return
 	}
-	if !ok {
-		azerrors.NotFound(w, "topic not found")
-		return
-	}
-	scope := "/subscriptions/" + sub + "/resourceGroups/" + rg +
+	scope := "/subscriptions/" + config.DefaultSubscriptionID +
 		"/providers/Microsoft.EventGrid/topics/" + topic
+	if exists {
+		scope = "/subscriptions/" + sub + "/resourceGroups/" + rg +
+			"/providers/Microsoft.EventGrid/topics/" + topic
+	}
 	if _, ok := azauth.RequireDataPlaneBearer(w, r, h.Auth, h.Authz, authn.Principal.AllowsEventGrid,
 		"Microsoft.EventGrid/topics/send/action", scope); !ok {
+		return
+	}
+	if !exists {
+		azerrors.NotFound(w, "topic not found")
 		return
 	}
 	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))

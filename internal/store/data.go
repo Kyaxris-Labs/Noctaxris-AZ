@@ -94,6 +94,20 @@ WHERE subscription_id = ? ORDER BY name`, subID)
 	return out, rows.Err()
 }
 
+// GetStorageAccountByName loads subscription/resource group/location by account name.
+func (s *Store) GetStorageAccountByName(accountName string) (subID, rg, location string, ok bool, err error) {
+	err = s.db.QueryRow(`
+SELECT subscription_id, resource_group, location FROM storage_accounts
+WHERE name = ? LIMIT 1`, accountName).Scan(&subID, &rg, &location)
+	if err == sql.ErrNoRows {
+		return "", "", "", false, nil
+	}
+	if err != nil {
+		return "", "", "", false, err
+	}
+	return subID, rg, location, true, nil
+}
+
 // GetStorageAccountKey unseals the account key for a storage account name.
 func (s *Store) GetStorageAccountKey(accountName string) (string, bool, error) {
 	var sealed []byte

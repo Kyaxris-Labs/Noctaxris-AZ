@@ -2,8 +2,9 @@
 //
 // Full Azure azservicebus SDK interop is best-effort lite: this server speaks
 // enough Open/Begin/Attach/Transfer/Flow/Disposition framing for simple custom
-// clients and store-backed send/receive. CBS auth, sessions, and full link
-// settlement semantics are not guaranteed.
+// clients and store-backed send/receive. Auth is signed SharedAccessSignature
+// theatre (HMAC over sr/se), not bare SharedAccessKey equality. Full CBS put-token
+// management links, sessions, and full link settlement semantics are not guaranteed.
 package amqp
 
 import (
@@ -16,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/store"
 )
 
@@ -148,7 +150,8 @@ type link struct {
 type session struct {
 	store        *store.Store
 	namespace    string
-	sasKey       string
+	sasToken     string
+	sasKeyName   string
 	links        map[uint32]*link
 	nextDelivery uint32
 }
@@ -170,12 +173,16 @@ func (s *session) onFrame(c net.Conn, f frame) error {
 		if cs, ok := props["connection-string"]; ok {
 			s.applyConnectionString(cs)
 		}
-		if key, ok := props["SharedAccessKey"]; ok {
-			s.sasKey = key
+		if tok, ok := props["SharedAccessSignature"]; ok {
+			s.sasToken = tok
+		}
+		if tok, ok := props["sas-token"]; ok && s.sasToken == "" {
+			s.sasToken = tok
 		}
 		if name, ok := props["SharedAccessKeyName"]; ok {
-			_ = name
+			s.sasKeyName = name
 		}
+		// Bare SharedAccessKey equality is rejected; clients must send a signed SAS token.
 		return writePerformative(c, f.channel, perfOpen, []any{
 			"noctaxris-az", // container-id
 			nil,            // hostname
@@ -220,11 +227,12 @@ func (s *session) onFrame(c net.Conn, f frame) error {
 		if !ok {
 			return fmt.Errorf("unknown namespace")
 		}
-		if s.sasKey == "" {
-			return fmt.Errorf("SharedAccessKey required")
+		if strings.TrimSpace(s.sasToken) == "" {
+			return fmt.Errorf("SharedAccessSignature required")
 		}
-		if want != s.sasKey {
-			return fmt.Errorf("sas key mismatch")
+		// Signature + expiry only; sr may be namespace- or entity-scoped.
+		if !authn.VerifyServiceBusSAS(want, s.sasToken, "", time.Now().UTC()) {
+			return fmt.Errorf("sas token invalid")
 		}
 		s.links[handle] = &link{
 			name:      name,
@@ -321,6 +329,7 @@ func (s *session) deliver(c net.Conn, channel uint16, lnk *link) error {
 
 func (s *session) applyConnectionString(cs string) {
 	parts := strings.Split(cs, ";")
+	var key, keyName, entity string
 	for _, p := range parts {
 		kv := strings.SplitN(p, "=", 2)
 		if len(kv) != 2 {
@@ -342,12 +351,23 @@ func (s *session) applyConnectionString(cs string) {
 				s.namespace = v
 			}
 		case "sharedaccesskey":
-			s.sasKey = v
+			key = v
 		case "sharedaccesskeyname":
-			// accepted; RootManageSharedAccessKey theatre
+			keyName = v
+			s.sasKeyName = v
+		case "sharedaccesssignature":
+			s.sasToken = v
 		case "entitypath":
-			// optional default queue; ignored at open
+			entity = v
 		}
+	}
+	// Connection strings that only carry the key mint a short-lived signed SAS for attach.
+	if s.sasToken == "" && key != "" && s.namespace != "" {
+		uri := "sb://" + s.namespace + ".servicebus.windows.net/"
+		if entity != "" {
+			uri += strings.TrimPrefix(entity, "/")
+		}
+		s.sasToken = authn.SignServiceBusSAS(key, keyName, uri, time.Now().UTC().Add(time.Hour))
 	}
 }
 

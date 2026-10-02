@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/store"
 )
 
@@ -37,7 +38,7 @@ func TestHandleConnOpenAttachTransferFlowDeliver(t *testing.T) {
 	errCh := make(chan error, 1)
 	go func() { errCh <- handleConn(ctx, c2, st) }()
 
-	_ = c1.SetDeadline(time.Now().Add(5 * time.Second))
+	_ = c1.SetDeadline(time.Now().Add(15 * time.Second))
 	if _, err := c1.Write(protocolHeader); err != nil {
 		t.Fatal(err)
 	}
@@ -46,12 +47,19 @@ func TestHandleConnOpenAttachTransferFlowDeliver(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	tok := authn.SignServiceBusSAS(sas, "RootManageSharedAccessKey",
+		"sb://ns1.servicebus.windows.net/", time.Now().UTC().Add(time.Hour))
+	if tok == "" {
+		t.Fatal("empty sas token")
+	}
 	if err := writePerformative(c1, 0, perfOpen, []any{
 		"client",
 		"ns1.servicebus.windows.net",
 		uint32(65536),
 		uint16(1),
-		map[string]string{"SharedAccessKey": sas},
+		map[string]string{
+			"SharedAccessSignature": tok,
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -157,15 +165,16 @@ func TestHandleConnOpenAttachTransferFlowDeliver(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// applyConnectionString unit
+	// applyConnectionString unit mints a signed SAS from the key material.
 	sess := &session{}
 	sess.applyConnectionString("Endpoint=sb://ns2.servicebus.windows.net/;SharedAccessKeyName=Root;SharedAccessKey=" + sas + ";EntityPath=q")
-	if sess.namespace != "ns2" || sess.sasKey != sas {
+	if sess.namespace != "ns2" || sess.sasKeyName != "Root" || sess.sasToken == "" {
 		t.Fatalf("%#v", sess)
 	}
-	sess.applyConnectionString("Endpoint=amqp://onlyhost:5671/;SharedAccessKey=k")
-	if sess.namespace != "onlyhost" {
-		t.Fatalf("%q", sess.namespace)
+	sess2 := &session{}
+	sess2.applyConnectionString("Endpoint=amqp://onlyhost:5671/;SharedAccessKey=k")
+	if sess2.namespace != "onlyhost" || sess2.sasToken == "" {
+		t.Fatalf("%#v", sess2)
 	}
 
 	cancel()

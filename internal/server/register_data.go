@@ -31,6 +31,7 @@ func (s *Server) registerData() {
 	(&table.Handler{
 		Store: s.store,
 		Auth:  s.authn,
+		Authz: s.authz,
 	}).Register(s.mux)
 
 	(&servicebus.Handler{

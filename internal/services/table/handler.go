@@ -10,7 +10,10 @@ import (
 	"time"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authz"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/azauth"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/store"
 )
 
@@ -18,6 +21,7 @@ import (
 type Handler struct {
 	Store *store.Store
 	Auth  *authn.Authenticator
+	Authz *authz.Evaluator
 }
 
 // Register mounts Table routes on mux.
@@ -252,14 +256,40 @@ func (h *Handler) authorize(w http.ResponseWriter, r *http.Request, account stri
 		}
 		return true
 	}
-	if h.Auth != nil {
-		p, err := h.Auth.AuthenticateRequest(r)
-		if err == nil && p.IsRoot {
-			return true
-		}
+	action := tableDataAction(r)
+	sub, rg, _, exists, err := h.Store.GetStorageAccountByName(account)
+	if err != nil {
+		azerrors.StorageError(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return false
 	}
-	azerrors.StorageError(w, http.StatusUnauthorized, "AuthenticationFailed", "SharedKey, SAS, or root Bearer required")
-	return false
+	scope := "/subscriptions/" + config.DefaultSubscriptionID
+	if exists {
+		scope = "/subscriptions/" + sub + "/resourceGroups/" + rg +
+			"/providers/Microsoft.Storage/storageAccounts/" + account
+	}
+	if _, ok := azauth.RequireDataPlaneBearer(w, r, h.Auth, h.Authz, authn.Principal.AllowsStorage, action, scope); !ok {
+		return false
+	}
+	if !exists {
+		azerrors.StorageError(w, http.StatusNotFound, "AccountNotFound", "storage account not found")
+		return false
+	}
+	return true
+}
+
+func tableDataAction(r *http.Request) string {
+	method := http.MethodGet
+	if r != nil {
+		method = strings.ToUpper(r.Method)
+	}
+	switch method {
+	case http.MethodGet, http.MethodHead:
+		return "Microsoft.Storage/storageAccounts/tableServices/tables/entities/read"
+	case http.MethodDelete:
+		return "Microsoft.Storage/storageAccounts/tableServices/tables/entities/delete"
+	default:
+		return "Microsoft.Storage/storageAccounts/tableServices/tables/entities/write"
+	}
 }
 
 func (h *Handler) authorizeSAS(w http.ResponseWriter, r *http.Request, account string) bool {

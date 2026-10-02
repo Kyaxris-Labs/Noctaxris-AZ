@@ -192,7 +192,7 @@ func TestV2AcrPullGetNotPut(t *testing.T) {
 	}
 }
 
-func TestV2ReaderPullOnly(t *testing.T) {
+func TestV2ReaderCannotPull(t *testing.T) {
 	st := openStore(t)
 	defer st.Close()
 	if err := st.PutAccessToken(authn.HashToken("read-tok"), "reader", time.Time{}); err != nil {
@@ -214,8 +214,8 @@ func TestV2ReaderPullOnly(t *testing.T) {
 	get.Header.Set("Authorization", "Bearer read-tok")
 	gr := mustDo(t, get)
 	gr.Body.Close()
-	if gr.StatusCode != http.StatusOK {
-		t.Fatalf("reader get %d", gr.StatusCode)
+	if gr.StatusCode != http.StatusForbidden {
+		t.Fatalf("reader get %d want 403", gr.StatusCode)
 	}
 
 	put, _ := http.NewRequest(http.MethodPut, srv.URL+"/v2/hello/manifests/other", strings.NewReader(`{"schemaVersion":2}`))

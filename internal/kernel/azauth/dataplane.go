@@ -70,3 +70,17 @@ func RequireARMBearer(
 ) (authn.Principal, bool) {
 	return RequireDataPlaneBearer(w, r, auth, ev, authn.Principal.AllowsARM, action, scope)
 }
+
+// RequireAuthzEvaluator fails closed when the RBAC evaluator is missing.
+// Root is allowed without an evaluator. Non-root gets Forbidden.
+// When it returns true and ev is nil, the caller must allow without Evaluate.
+func RequireAuthzEvaluator(w http.ResponseWriter, isRoot bool, ev *authz.Evaluator) bool {
+	if ev != nil {
+		return true
+	}
+	if isRoot {
+		return true
+	}
+	azerrors.Forbidden(w, "")
+	return false
+}

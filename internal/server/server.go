@@ -161,6 +161,11 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 				return
 			}
 		}
+		// Cosmos lab account-key header is verified in the handler (not Bearer).
+		if strings.HasPrefix(path, "/cosmos/") && strings.TrimSpace(r.Header.Get("x-ms-cosmos-account-key")) != "" {
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
 
 		p, err := s.authn.AuthenticateRequest(r)
 		if err != nil {

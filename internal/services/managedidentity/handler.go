@@ -12,6 +12,7 @@ import (
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authz"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/azauth"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/services/entra"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/store"
 	"github.com/google/uuid"
@@ -132,7 +133,7 @@ func (h *Handler) imdsToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !imdsTokenMintAllowed(r) {
-		writeIMDSError(w, http.StatusForbidden, "forbidden", "IMDS token mint requires metadata Host or a loopback/link-local peer")
+		writeIMDSError(w, http.StatusForbidden, "forbidden", "IMDS token mint requires a loopback or link-local peer")
 		return
 	}
 	apiVersion := strings.TrimSpace(r.URL.Query().Get("api-version"))
@@ -320,8 +321,8 @@ func writeIMDSError(w http.ResponseWriter, code int, errCode, desc string) {
 	})
 }
 
-// imdsTokenMintAllowed gates mint like Azure IMDS on a shared listener: metadata Host
-// (with a parseable nested peer) or loopback/link-local peer. Empty RemoteAddr fails closed.
+// imdsTokenMintAllowed gates mint on a shared listener: loopback or link-local peer only.
+// Metadata Host alone must not authorize RFC1918 peers (Host spoof). Empty RemoteAddr fails closed.
 func imdsTokenMintAllowed(r *http.Request) bool {
 	if r == nil {
 		return false
@@ -329,9 +330,6 @@ func imdsTokenMintAllowed(r *http.Request) bool {
 	ip := imdsPeerIP(r.RemoteAddr)
 	if ip == nil {
 		return false
-	}
-	if imdsMetadataHost(r.Host) {
-		return ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsPrivate()
 	}
 	return ip.IsLoopback() || ip.IsLinkLocalUnicast()
 }
@@ -370,8 +368,11 @@ func (h *Handler) requireARM(w http.ResponseWriter, r *http.Request, action stri
 		return false
 	}
 	scope := "/subscriptions/" + r.PathValue("sub") + "/resourceGroups/" + r.PathValue("rg")
+	if !azauth.RequireAuthzEvaluator(w, p.IsRoot, h.Authz) {
+		return false
+	}
 	if h.Authz == nil {
-		return p.IsRoot
+		return true
 	}
 	ok, err := h.Authz.Evaluate(p.ID, p.IsRoot, action, scope)
 	if err != nil {
