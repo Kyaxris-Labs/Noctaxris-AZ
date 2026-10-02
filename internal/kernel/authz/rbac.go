@@ -159,6 +159,8 @@ func roleGrants(roleDefID, action string) bool {
 		return isStorageTableDataReadAction(act)
 	case roleHasGUID(role, guidEventHubsDataOwner) || roleHasGUID(role, guidEventHubsDataOwnerAlias):
 		return isEventHubsDataPlaneAction(act)
+	case roleHasGUID(role, guidEventHubsDataSender):
+		return isEventHubsSendAction(act)
 	case roleHasGUID(role, guidEventHubsDataReceiver) || roleHasGUID(role, guidEventHubsDataReceiverAlias):
 		return isEventHubsReceiveAction(act)
 	case roleHasGUID(role, guidServiceBusDataOwner):
@@ -388,6 +390,16 @@ func isAcrPullAction(act string) bool {
 	return strings.Contains(act, "/pull")
 }
 
+func isEventHubsSendAction(act string) bool {
+	if !strings.Contains(act, "eventhub") {
+		return false
+	}
+	if isEventHubsControlPlaneAction(act) {
+		return false
+	}
+	return strings.Contains(act, "/send") || strings.Contains(act, "/messages/send")
+}
+
 func isEventHubsReceiveAction(act string) bool {
 	if !strings.Contains(act, "eventhub") {
 		return false
@@ -400,15 +412,7 @@ func isEventHubsReceiveAction(act string) bool {
 
 // isEventHubsDataPlaneAction is Azure Event Hubs Data Owner: send/receive on hubs, not ARM namespace CRUD/read.
 func isEventHubsDataPlaneAction(act string) bool {
-	if !strings.Contains(act, "eventhub") {
-		return false
-	}
-	if isEventHubsControlPlaneAction(act) {
-		return false
-	}
-	return strings.Contains(act, "/receive") ||
-		strings.Contains(act, "/send") ||
-		strings.Contains(act, "/messages/")
+	return isEventHubsSendAction(act) || isEventHubsReceiveAction(act)
 }
 
 func isEventHubsControlPlaneAction(act string) bool {
@@ -444,6 +448,8 @@ const (
 	RoleStorageQueueDataReader       = "/providers/Microsoft.Authorization/roleDefinitions/" + guidStorageQueueDataReader
 	RoleStorageTableDataContributor  = "/providers/Microsoft.Authorization/roleDefinitions/" + guidStorageTableDataContributor
 	RoleStorageTableDataReader       = "/providers/Microsoft.Authorization/roleDefinitions/" + guidStorageTableDataReader
+	// RoleEventHubsDataSender grants Event Hubs send data-plane actions.
+	RoleEventHubsDataSender = "/providers/Microsoft.Authorization/roleDefinitions/" + guidEventHubsDataSender
 	// RoleEventHubsDataReceiver grants Event Hubs receive/read data-plane actions.
 	RoleEventHubsDataReceiver = "/providers/Microsoft.Authorization/roleDefinitions/" + guidEventHubsDataReceiver
 	// RoleEventHubsDataOwner grants Event Hubs send/receive/read data-plane actions (not ARM namespace write).
@@ -498,6 +504,7 @@ const (
 	guidStorageTableDataReader      = "76199698-9eea-4c19-bc75-cec21354c6b6"
 	guidEventHubsDataOwner         = "f526a384-b230-433a-b45c-95f59c4a2dec"
 	guidEventHubsDataOwnerAlias    = "f526a384-b744-4348-a86b-d3d1f7ce3260"
+	guidEventHubsDataSender        = "2b629674-e913-4c01-ae53-ef4638d8f975"
 	guidEventHubsDataReceiver      = "a638d3c7-ab3a-418d-83e6-5f17a39d4fde"
 	guidEventHubsDataReceiverAlias = "a638d3c7-ad44-4d07-a2c2-6d98be95d4e5"
 	guidKeyVaultAdministrator      = "00482a5a-887f-4fb3-b363-3b7fe8e74483"

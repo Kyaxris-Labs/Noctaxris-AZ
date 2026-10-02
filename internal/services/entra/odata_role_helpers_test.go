@@ -91,7 +91,7 @@ func TestApplyODataSelectSkipAndRoleHelpers(t *testing.T) {
 	}
 	_ = errPEM.Error()
 
-	priv, err := rsa.GenerateKey(rand.Reader, 1024)
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
 	}

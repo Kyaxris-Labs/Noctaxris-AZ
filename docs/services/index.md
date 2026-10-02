@@ -17,7 +17,7 @@ Implemented lab surface on `127.0.0.1:4599` (HTTP) and `127.0.0.1:5672` (AMQP li
 | Redis | lab | [rediscache.md](rediscache.md) | Cache ARM + theatre |
 | ACR | lab | [acr.md](acr.md) | Registry ARM + V2 on :4599; AcrPull pull-only |
 | Service Bus | lab | [servicebus.md](servicebus.md) | Queues/topics + AMQP lite (SAS required); connectionString via listKeys |
-| Event Hubs | lab | [eventhubs.md](eventhubs.md) | Namespaces/hubs + HTTP messages (root); captured-events list/get for Data Receiver / Data Owner |
+| Event Hubs | lab | [eventhubs.md](eventhubs.md) | Namespaces/hubs + HTTP messages (Data Sender/Receiver/Owner or root); captured-events for Data Receiver / Data Owner |
 | Event Grid | lab | [eventgrid.md](eventgrid.md) | Topics + allowlisted egress delivery |
 | Virtual Network | lab | [network.md](network.md) | VNet ARM lite |
 | NSG / NIC | lab | [nsg.md](nsg.md) / [nic.md](nic.md) | ARM lite |

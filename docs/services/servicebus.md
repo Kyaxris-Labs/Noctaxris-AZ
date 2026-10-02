@@ -4,7 +4,7 @@ ARM namespace / queue lite plus AMQP 1.0 send/receive for `azservicebus` clients
 
 ## Status
 
-**lab** — Namespace and queue CRUD; AMQP lite on `127.0.0.1:5672` with connection string / SAS.
+**lab** — Namespace and queue CRUD; AMQP lite on `127.0.0.1:5672` with signed SAS. Stock Compose always publishes `127.0.0.1:5672:5672` alongside HTTP `:4599`.
 
 ## Wire protocol
 
@@ -12,6 +12,7 @@ ARM namespace / queue lite plus AMQP 1.0 send/receive for `azservicebus` clients
 |--------|-----------------|
 | ARM | `/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.ServiceBus/namespaces/{name}` |
 | Queues | `.../namespaces/{name}/queues/{queue}` |
+| HTTP messages | `/servicebus/{ns}/queues/{q}/messages` |
 | AMQP | `amqp://127.0.0.1:5672` |
 
 ## Authz / authn

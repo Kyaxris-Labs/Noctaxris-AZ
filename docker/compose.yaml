@@ -17,7 +17,8 @@ services:
     environment:
       NOCTAXRIS_AZ_LISTEN: "0.0.0.0:4599"
       NOCTAXRIS_AZ_AMQP_LISTEN: "0.0.0.0:5672"
-      # Required for the container bind above. Default host publish is 127.0.0.1:4599.
+      # Required for the container binds above. Stock host publish is always
+      # 127.0.0.1:4599 (HTTP) and 127.0.0.1:5672 (AMQP lite).
       NOCTAXRIS_AZ_ALLOW_NONLOOPBACK_LISTEN: "1"
       NOCTAXRIS_AZ_DATA_ROOT: "/var/lib/noctaxris-az"
       # Sibling secrets volume (outside data root; required under read_only rootfs).

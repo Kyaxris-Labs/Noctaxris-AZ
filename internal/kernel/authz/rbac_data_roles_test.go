@@ -14,6 +14,8 @@ func TestOwnerDeniedEventHubsDataPlaneSendReceive(t *testing.T) {
 			{PrincipalID: "owner", RoleDefinitionID: authz.RoleOwner, Scope: scope},
 			{PrincipalID: "contrib", RoleDefinitionID: authz.RoleContributor, Scope: scope},
 			{PrincipalID: "eh-owner", RoleDefinitionID: authz.RoleEventHubsDataOwner, Scope: scope},
+			{PrincipalID: "eh-sender", RoleDefinitionID: authz.RoleEventHubsDataSender, Scope: scope},
+			{PrincipalID: "eh-recv", RoleDefinitionID: authz.RoleEventHubsDataReceiver, Scope: scope},
 		},
 	}}
 	ev := &authz.Evaluator{Assignments: store}
@@ -36,6 +38,18 @@ func TestOwnerDeniedEventHubsDataPlaneSendReceive(t *testing.T) {
 	}
 	if ok, err := ev.Evaluate("eh-owner", false, recv, scope); err != nil || !ok {
 		t.Fatal("Event Hubs Data Owner must receive")
+	}
+	if ok, err := ev.Evaluate("eh-sender", false, send, scope); err != nil || !ok {
+		t.Fatal("Event Hubs Data Sender must send")
+	}
+	if ok, err := ev.Evaluate("eh-sender", false, recv, scope); err != nil || ok {
+		t.Fatal("Event Hubs Data Sender must not receive")
+	}
+	if ok, err := ev.Evaluate("eh-recv", false, recv, scope); err != nil || !ok {
+		t.Fatal("Event Hubs Data Receiver must receive")
+	}
+	if ok, err := ev.Evaluate("eh-recv", false, send, scope); err != nil || ok {
+		t.Fatal("Event Hubs Data Receiver must not send")
 	}
 }
 

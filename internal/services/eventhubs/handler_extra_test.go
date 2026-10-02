@@ -207,6 +207,152 @@ func TestEventHubsDataPlaneRejectsDirectoryBearer(t *testing.T) {
 	}
 }
 
+func TestEventHubsHTTPMessagesDataPlaneRoles(t *testing.T) {
+	dir := t.TempDir()
+	key, err := store.LoadOrCreateMasterKey(dir + "/master.key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := store.Open(dir+"/data", key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := st.EnsureRoot("00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002", "root"); err != nil {
+		t.Fatal(err)
+	}
+	es := &entra.Service{Store: st, TenantID: "00000000-0000-0000-0000-000000000001", PublicBase: "http://127.0.0.1:4599"}
+	h := &eventhubs.Handler{
+		Store: st,
+		Auth: &authn.Authenticator{
+			RootClientID:    "r",
+			RootAccessToken: "tok",
+			Tokens:          st,
+			JWT:             es,
+		},
+		Authz: &authz.Evaluator{Assignments: st},
+	}
+	mux := http.NewServeMux()
+	h.Register(mux)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	authRoot := func(r *http.Request) { r.Header.Set("Authorization", "Bearer tok") }
+
+	ns := srv.URL + "/subscriptions/s/resourceGroups/rg/providers/Microsoft.EventHub/namespaces/ns1"
+	req, _ := http.NewRequest(http.MethodPut, ns, strings.NewReader(`{"location":"eastus"}`))
+	authRoot(req)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatalf("put ns %d", res.StatusCode)
+	}
+	hub, _ := http.NewRequest(http.MethodPut, ns+"/eventhubs/hub1", strings.NewReader(`{}`))
+	authRoot(hub)
+	hr, _ := http.DefaultClient.Do(hub)
+	hr.Body.Close()
+
+	scope := "/subscriptions/s/resourceGroups/rg"
+	senderID, recvID, ownerID := "eh-sender", "eh-recv", "eh-owner-arm"
+	for _, a := range []authz.Assignment{
+		{ID: scope + "/ra-sender", Scope: scope, RoleDefinitionID: authz.RoleEventHubsDataSender, PrincipalID: senderID, PrincipalType: "User"},
+		{ID: scope + "/ra-recv", Scope: scope, RoleDefinitionID: authz.RoleEventHubsDataReceiver, PrincipalID: recvID, PrincipalType: "User"},
+		{ID: scope + "/ra-owner", Scope: scope, RoleDefinitionID: authz.RoleOwner, PrincipalID: ownerID, PrincipalType: "User"},
+	} {
+		if err := st.UpsertRoleAssignment(a); err != nil {
+			t.Fatal(err)
+		}
+	}
+	senderTok, _, err := es.MintAccessToken(senderID, authn.AudienceEventHubs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recvTok, _, err := es.MintAccessToken(recvID, authn.AudienceEventHubs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ownerTok, _, err := es.MintAccessToken(ownerID, authn.AudienceARM)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	postOwner, _ := http.NewRequest(http.MethodPost, srv.URL+"/eventhubs/ns1/hubs/hub1/messages?partition=0", strings.NewReader("owner-denied"))
+	postOwner.Header.Set("Authorization", "Bearer "+ownerTok)
+	por, err := http.DefaultClient.Do(postOwner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	por.Body.Close()
+	if por.StatusCode != http.StatusForbidden {
+		t.Fatalf("Owner send %d", por.StatusCode)
+	}
+
+	postRecv, _ := http.NewRequest(http.MethodPost, srv.URL+"/eventhubs/ns1/hubs/hub1/messages?partition=0", strings.NewReader("recv-denied"))
+	postRecv.Header.Set("Authorization", "Bearer "+recvTok)
+	prr, err := http.DefaultClient.Do(postRecv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prr.Body.Close()
+	if prr.StatusCode != http.StatusForbidden {
+		t.Fatalf("Data Receiver send %d", prr.StatusCode)
+	}
+
+	postOK, _ := http.NewRequest(http.MethodPost, srv.URL+"/eventhubs/ns1/hubs/hub1/messages?partition=0", strings.NewReader("sender-ok"))
+	postOK.Header.Set("Authorization", "Bearer "+senderTok)
+	psr, err := http.DefaultClient.Do(postOK)
+	if err != nil {
+		t.Fatal(err)
+	}
+	psr.Body.Close()
+	if psr.StatusCode != http.StatusCreated {
+		t.Fatalf("Data Sender send %d", psr.StatusCode)
+	}
+
+	getSender, _ := http.NewRequest(http.MethodGet, srv.URL+"/eventhubs/ns1/hubs/hub1/messages?partition=0", nil)
+	getSender.Header.Set("Authorization", "Bearer "+senderTok)
+	gsr, err := http.DefaultClient.Do(getSender)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gsr.Body.Close()
+	if gsr.StatusCode != http.StatusForbidden {
+		t.Fatalf("Data Sender receive %d", gsr.StatusCode)
+	}
+
+	getRecv, _ := http.NewRequest(http.MethodGet, srv.URL+"/eventhubs/ns1/hubs/hub1/messages?partition=0", nil)
+	getRecv.Header.Set("Authorization", "Bearer "+recvTok)
+	grr, err := http.DefaultClient.Do(getRecv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer grr.Body.Close()
+	if grr.StatusCode != http.StatusOK {
+		t.Fatalf("Data Receiver receive %d", grr.StatusCode)
+	}
+	body, _ := io.ReadAll(grr.Body)
+	if string(body) != "sender-ok" {
+		t.Fatalf("receive body %q", body)
+	}
+
+	outsiderTok, _, err := es.MintAccessToken("not-assigned", authn.AudienceEventHubs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bad, _ := http.NewRequest(http.MethodGet, srv.URL+"/eventhubs/ns1/hubs/hub1/messages", nil)
+	bad.Header.Set("Authorization", "Bearer "+outsiderTok)
+	br, err := http.DefaultClient.Do(bad)
+	if err != nil {
+		t.Fatal(err)
+	}
+	br.Body.Close()
+	if br.StatusCode != http.StatusForbidden {
+		t.Fatalf("outsider receive %d", br.StatusCode)
+	}
+}
+
 func TestEventHubsCapturedEventsAuthorizedReader(t *testing.T) {
 	dir := t.TempDir()
 	key, err := store.LoadOrCreateMasterKey(dir + "/master.key")

@@ -8,7 +8,7 @@ Run **one** Noctaxris-AZ API process against a given data root (Compose named vo
 
 ## Listen and example roots
 
-Process HTTP listen is loopback only for `localhost`, `127.0.0.0/8`, and `::1`. Port-only (`:4599`), `0.0.0.0`, and `::` are non-loopback and require TLS or `NOCTAXRIS_AZ_ALLOW_NONLOOPBACK_LISTEN=1` (Compose sets the opt-in for the in-container `0.0.0.0` bind; host publish stays `127.0.0.1:4599`). The same rule applies to `NOCTAXRIS_AZ_AMQP_LISTEN`.
+Process HTTP listen is loopback only for `localhost`, `127.0.0.0/8`, and `::1`. Port-only (`:4599`), `0.0.0.0`, and `::` are non-loopback and require TLS or `NOCTAXRIS_AZ_ALLOW_NONLOOPBACK_LISTEN=1` (Compose sets the opt-in for the in-container `0.0.0.0` binds; host publish stays `127.0.0.1:4599` and `127.0.0.1:5672`). The same rule applies to `NOCTAXRIS_AZ_AMQP_LISTEN`. Stock Compose always publishes both ports.
 
 The shipped `docker/.env.example` root pair is allowed on loopback listen only. Startup refuses that pair when listen is non-loopback, including default Compose. Copy `.env.example` to `.env` and replace both root values with unique lab credentials before `compose up`.
 
@@ -88,9 +88,9 @@ Release tag push runs [`.github/workflows/ci-required.yml`](../.github/workflows
 
 ## Compose overlays (lab opt-in)
 
-Default `docker/compose.yaml` stays loopback-published and nested engine off. Use overlays only when nested compute is needed.
+Default `docker/compose.yaml` stays loopback-published (`127.0.0.1:4599` HTTP and `127.0.0.1:5672` AMQP lite; both always mapped) and nested engine off. Use overlays only when nested compute is needed.
 
 | Overlay | When |
 |---------|------|
 | `docker/compose.engine.yaml` | Opt-in restricted DinD (`noctaxris-az-engine`). Sets `NOCTAXRIS_AZ_DOCKER_HOST` / `NOCTAXRIS_AZ_DOCKER_CERT_PATH`. No host publish of 2375/2376. Never mounts host `docker.sock` |
-| `docker/compose.engine-privileged.yaml` | Restricted DinD cannot start nested containers (Desktop/WSL edge cases). Privileged DinD is a host workaround, not the secure default. Keep publish on `127.0.0.1:4599` |
+| `docker/compose.engine-privileged.yaml` | Restricted DinD cannot start nested containers (Desktop/WSL edge cases). Privileged DinD is a host workaround, not the secure default. Keep host publish on `127.0.0.1:4599` and `127.0.0.1:5672` |

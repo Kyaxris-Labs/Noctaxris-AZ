@@ -29,25 +29,30 @@ Noctaxris-AZ fails closed. Defaults favor a loopback lab on a single laptop.
   only, unless extended with `NOCTAXRIS_AZ_IMAGE_PULL_ALLOWLIST` (exact refs, or
   prefixes ending in `/` with digest required for registry hosts).
 - If nested containers fail on Desktop/WSL2, add `compose.engine-privileged.yaml`
-  (`privileged: true`). Keep host publish on `127.0.0.1:4599`.
+  (`privileged: true`). Keep host publish on `127.0.0.1:4599` and `127.0.0.1:5672`.
 
 ## Authentication
 
 | Surface | Credential |
 |---------|------------|
 | ARM / RBAC / Key Vault / Monitor / App Configuration / Functions | `Authorization: Bearer <token>` |
-| Storage blob / queue / table | Shared Key HMAC (`SharedKey <account>:<sig>`), SAS query HMAC (`sig` / `se` / `sp` against the account key), or root Bearer |
-| Event Hubs HTTP messages | Root Bearer only (send/receive). Captured-events list/get: root or Event Hubs Data Receiver / Data Owner |
-| Service Bus AMQP lite | Connection string / SAS (SharedAccessKey required on attach) |
+| Storage blob / queue / table | Shared Key HMAC (`SharedKey <account>:<sig>`), SAS query HMAC (`sig` / `se` / `sp` against the account key), Entra Bearer with storage `aud` plus Storage data roles, or root Bearer |
+| Event Hubs HTTP messages | Root, or Event Hubs Data Sender (`send/action`) / Data Receiver (`receive/action`) / Data Owner. Captured-events list/get: root or Data Receiver / Data Owner |
+| Service Bus AMQP lite | Signed `SharedAccessSignature` on attach (HMAC over `sr`/`se`). Bare `SharedAccessKey` property equality is rejected. Connection strings may mint a short-lived SAS for attach |
+| Service Bus HTTP messages | Service Bus `aud` plus Data Owner / Sender / Receiver (or root). Owner/Contributor alone do not grant send/receive |
 | Key Vault data plane | Bearer with vault `aud` plus Key Vault data RBAC |
+| Cosmos DB data plane | `x-ms-cosmos-account-key`, or Bearer with Cosmos/ARM `aud` plus Cosmos data roles |
 
 - Root token comes from `NOCTAXRIS_AZ_ROOT_ACCESS_TOKEN` and maps to `NOCTAXRIS_AZ_ROOT_CLIENT_ID`.
 - Other tokens are SHA-256 hashed and looked up in `access_tokens`.
 - Missing or invalid Bearer credentials return Azure ARM `AuthenticationFailed` (HTTP 401).
 - Storage SAS that fails HMAC, expiry, or `sp` checks returns HTTP 403 `AuthenticationFailed`. Shared Key with a missing account stays HTTP 404 `AccountNotFound`.
+- Global Bearer middleware skips `/blob/`, `/queue/`, and `/table/` when the request already carries `Authorization: SharedKey …` or a SAS query so handlers can verify HMAC. That skip is intentional; do not force Bearer-only on those prefixes.
+- Global Bearer middleware skips `/cosmos/` when the request already carries `x-ms-cosmos-account-key` so the handler can verify the account key. That skip is intentional; do not force Bearer-only on those prefixes.
 - Public paths: `/_noctaxris-az/health`, `/_noctaxris-az/ready`, `/_noctaxris-az/version`,
   Entra token/OIDC discovery/JWKS, `POST /device`,
-  `/_noctaxris-az/oidc-lab/*` (lab WIF IdP including unauthenticated assertion mint),
+  `/_noctaxris-az/oidc-lab/*` (intentional public WIF lab IdP, including unauthenticated
+  `POST …/oidc-lab/token` assertion mint for federated credential theatre),
   and IMDS `/metadata/identity/oauth2/token`
   (IMDS still requires Metadata, a known identity, and a loopback/link-local peer;
   RFC1918 peers are denied even when Host is the metadata address).
@@ -71,16 +76,20 @@ non-loopback listen.
   operator convenience in the AWS/GCP sibling products and is intentional.
   Documented here so operators do not treat root as a normal app registration.
 - Built-in GUIDs include Owner, Contributor, Reader, Log Analytics Reader,
-  Monitoring Reader, Log Analytics Data Reader, AcrPull, Event Hubs Data
-  Receiver / Data Owner, Key Vault Secrets User / Officer / Administrator,
+  Monitoring Reader, Log Analytics Data Reader, AcrPull, Storage Blob / Queue /
+  Table Data Owner/Contributor/Reader (Azure published GUIDs), Event Hubs Data
+  Sender / Receiver / Owner, Key Vault Secrets User / Officer / Administrator,
   Service Bus Data Owner / Sender / Receiver, App Configuration Data Owner /
-  Reader, Cognitive OpenAI User, and Cosmos Data Reader / Contributor.
+  Reader, Cognitive OpenAI User, Cosmos Data Reader / Contributor, and AKS
+  Cluster Admin / User credential roles.
   Contributor cannot mutate role assignments. Reader is ARM read-only plus
   Resource Graph. Workspace KQL is Log Analytics Reader or Data Reader.
-  Event Hubs captured-events require Data Receiver or Data Owner
-  (`receive/action`). AcrPull grants Registry V2 pull on `/v2/` and denies push.
-  Dedicated data-plane roles (Key Vault, App Config, Cosmos, Service Bus,
-  Cognitive, Event Grid send) are isolated from Owner/Contributor.
+  Event Hubs HTTP send/receive and captured-events require the matching
+  Event Hubs data roles (`send/action` / `receive/action`). AcrPull grants
+  Registry V2 pull on `/v2/` and denies push.
+  Dedicated data-plane roles (Storage blob/queue/table, Key Vault, App Config,
+  Cosmos, Service Bus HTTP, Event Hubs, Cognitive, Event Grid send) are
+  isolated from Owner/Contributor.
 
 ## Secrets at rest
 

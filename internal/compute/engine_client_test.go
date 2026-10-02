@@ -41,10 +41,10 @@ func TestNewEngineClientDisabledAndValidateFailures(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	empty := filepath.Join(dir, "empty")
-	if err := os.MkdirAll(empty, 0o700); err != nil {
+	if err := compute.ValidateDockerHost("tcp://noctaxris-az-engine:2376", dir); err != nil {
 		t.Fatal(err)
 	}
+	empty := t.TempDir()
 	for _, name := range []string{"ca.pem", "cert.pem", "key.pem"} {
 		if err := os.WriteFile(filepath.Join(empty, name), nil, 0o600); err != nil {
 			t.Fatal(err)
@@ -54,22 +54,22 @@ func TestNewEngineClientDisabledAndValidateFailures(t *testing.T) {
 		t.Fatal("empty cert files must fail")
 	}
 
-	cli, err = compute.NewEngineClient("tcp://noctaxris-az-engine:2376", dir)
-	if err != nil {
-		t.Fatal(err)
+	// NewEngineClient TLS parse fails on placeholder PEM after ValidateDockerHost succeeds.
+	_, err = compute.NewEngineClient("tcp://noctaxris-az-engine:2376", dir)
+	if err == nil {
+		t.Fatal("expected TLS client config failure for placeholder PEM")
 	}
-	if cli == nil {
-		t.Fatal("expected client")
+	if !strings.Contains(err.Error(), "docker client") {
+		t.Fatalf("client err: %v", err)
 	}
-	_ = cli.Close()
 }
 
 func TestAllowImagePullExactAllowlistWithoutDigestHost(t *testing.T) {
-	t.Setenv(compute.EnvImagePullAllowlist, "localtool:1, ,ghcr.io/example/")
-	if err := compute.AllowImagePull("localtool:1"); err != nil {
+	t.Setenv(compute.EnvImagePullAllowlist, "localtool, ,ghcr.io/example/")
+	if err := compute.AllowImagePull("localtool"); err != nil {
 		t.Fatal(err)
 	}
-	if err := compute.AllowImagePull("other:1"); err == nil {
+	if err := compute.AllowImagePull("other"); err == nil {
 		t.Fatal("unknown exact ref must fail")
 	}
 	if err := compute.AllowImagePull("ghcr.io/example/app@sha256:" + strings.Repeat("c", 64)); err != nil {

@@ -122,16 +122,8 @@ func (h *Handler) putCG(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) postMsg(w http.ResponseWriter, r *http.Request) {
-	if !h.requireRoot(w, r) {
-		return
-	}
-	key, ok, err := h.resolveNamespaceKey(r.PathValue("ns"))
-	if err != nil {
-		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
-		return
-	}
+	key, ok := h.requireMessageDataPlane(w, r, "Microsoft.EventHub/namespaces/eventhubs/send/action")
 	if !ok {
-		azerrors.NotFound(w, "namespace not found")
 		return
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
@@ -148,16 +140,8 @@ func (h *Handler) postMsg(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) getMsg(w http.ResponseWriter, r *http.Request) {
-	if !h.requireRoot(w, r) {
-		return
-	}
-	key, foundNS, err := h.resolveNamespaceKey(r.PathValue("ns"))
-	if err != nil {
-		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
-		return
-	}
-	if !foundNS {
-		azerrors.NotFound(w, "namespace not found")
+	key, ok := h.requireMessageDataPlane(w, r, "Microsoft.EventHub/namespaces/eventhubs/receive/action")
+	if !ok {
 		return
 	}
 	body, found, err := h.Store.DequeueEventHub(key, r.PathValue("hub"), r.URL.Query().Get("partition"))
@@ -277,36 +261,66 @@ func (h *Handler) requireCaptureRead(w http.ResponseWriter, r *http.Request) ([]
 	return keys, true
 }
 
-func (h *Handler) resolveNamespaceKey(name string) (string, bool, error) {
-	rows, err := h.Store.ListEventHubsNamespacesByName(name)
-	if err != nil {
-		return "", false, err
-	}
-	if len(rows) == 0 {
-		return "", false, nil
-	}
-	if len(rows) > 1 {
-		// Bare HTTP paths are ambiguous when the same namespace name exists in multiple RGs.
-		return "", false, nil
-	}
-	return store.EventHubNamespaceKey(rows[0].SubscriptionID, rows[0].ResourceGroup, rows[0].Name), true, nil
-}
-
-func (h *Handler) requireRoot(w http.ResponseWriter, r *http.Request) bool {
+// requireMessageDataPlane authenticates Bearer, checks Event Hubs audience, then
+// evaluates dedicated send/receive data actions. Fail-closed when Authz is nil.
+// Authn/audience run before namespace lookup so missing Bearer stays 401.
+func (h *Handler) requireMessageDataPlane(w http.ResponseWriter, r *http.Request, action string) (string, bool) {
 	if h.Auth == nil {
 		azerrors.Unauthenticated(w, "")
-		return false
+		return "", false
 	}
 	p, err := h.Auth.AuthenticateRequest(r)
 	if err != nil {
 		azerrors.Unauthenticated(w, "")
-		return false
+		return "", false
+	}
+	if !p.AllowsEventHubs() {
+		azerrors.InvalidAuthenticationTokenAudience(w, "")
+		return "", false
+	}
+	if !p.IsRoot && h.Authz == nil {
+		azerrors.Forbidden(w, "")
+		return "", false
+	}
+	ns := r.PathValue("ns")
+	rows, err := h.Store.ListEventHubsNamespacesByName(ns)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return "", false
+	}
+	if len(rows) == 0 {
+		azerrors.NotFound(w, "namespace not found")
+		return "", false
 	}
 	if p.IsRoot {
-		return true
+		if len(rows) != 1 {
+			azerrors.NotFound(w, "namespace not found")
+			return "", false
+		}
+		return store.EventHubNamespaceKey(rows[0].SubscriptionID, rows[0].ResourceGroup, rows[0].Name), true
 	}
-	azerrors.Forbidden(w, "")
-	return false
+	keys := make([]string, 0, len(rows))
+	for _, row := range rows {
+		rowScope := "/subscriptions/" + row.SubscriptionID + "/resourceGroups/" + row.ResourceGroup
+		allowed, err := h.Authz.Evaluate(p.ID, p.IsRoot, action, rowScope)
+		if err != nil {
+			azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+			return "", false
+		}
+		if allowed {
+			keys = append(keys, store.EventHubNamespaceKey(row.SubscriptionID, row.ResourceGroup, row.Name))
+		}
+	}
+	if len(keys) == 0 {
+		azerrors.Forbidden(w, "")
+		return "", false
+	}
+	if len(keys) != 1 {
+		// Bare HTTP paths are ambiguous when the same namespace name exists in multiple RGs.
+		azerrors.NotFound(w, "namespace not found")
+		return "", false
+	}
+	return keys[0], true
 }
 
 func (h *Handler) require(w http.ResponseWriter, r *http.Request, action string) bool {

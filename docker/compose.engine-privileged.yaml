@@ -5,7 +5,8 @@
 # Usage (from docker/):
 #   docker compose -f compose.yaml -f compose.engine.yaml -f compose.engine-privileged.yaml --env-file .env up --build
 #
-# Keep host publish on 127.0.0.1:4599. Never add host docker.sock on the API.
+# Keep host publish on 127.0.0.1:4599 and 127.0.0.1:5672 (stock compose.yaml).
+# Never add host docker.sock on the API.
 services:
   noctaxris-az-engine:
     privileged: true

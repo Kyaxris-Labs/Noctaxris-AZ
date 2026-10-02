@@ -106,7 +106,7 @@ func TestEventHubsAuthErrorsHubWithoutNSAndCaptureID(t *testing.T) {
 		t.Fatalf("get missing ns %d", gmr.StatusCode)
 	}
 
-	// Non-root cannot post messages (requireRoot).
+	// Non-root without Event Hubs data roles cannot post messages.
 	armTok, _, err := es.MintAccessToken("nobody", authn.AudienceARM)
 	if err != nil {
 		t.Fatal(err)

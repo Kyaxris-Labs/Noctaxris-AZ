@@ -15,14 +15,15 @@ Blob, queue, and table endpoints with Shared Key / SAS on the shared HTTP listen
 | Queue | `/queue/{account}/...` |
 | Table | `/table/{account}/...` (see [table.md](table.md)) |
 
-Auth: ARM account CRUD uses Bearer. Blob/queue/table use `Authorization: SharedKey ...` or SAS query HMAC. Well-known Azurite `devstoreaccount1` key refused on non-loopback listen.
+Auth: ARM account CRUD uses Bearer. Blob/queue/table use `Authorization: SharedKey ...`, SAS query HMAC, or Entra Bearer with Storage data roles. Well-known Azurite `devstoreaccount1` key refused on non-loopback listen.
 
 ## Authz / authn
 
 - ARM storage account: token `aud` must be `https://management.azure.com` or `https://management.core.windows.net` (Graph `aud` is HTTP 403 `InvalidAuthenticationTokenAudience`). Root Bearer skips audience.
+- Global Bearer middleware skips `/blob/`, `/queue/`, and `/table/` when the request already carries Shared Key or SAS so handlers can verify HMAC. That skip is intentional (not an unauthenticated open path).
 - Shared Key Lite-shaped HMAC-SHA256: Verb, Content-MD5, Content-Type, Date (`x-ms-date` preferred), canonicalized `x-ms-*` headers, path
 - SAS query HMAC-SHA256 of `sp`, `st`, `se`, and path with the same account key. `se` is expiry (expired or unparseable is denied). `sp` is permissions (GET blob needs `r`, list needs `l`, PUT needs `w`/`c`/`a`, DELETE needs `d`; Create Table needs `c`). Shared Key missing/unknown account is HTTP 404 `AccountNotFound`. SAS unknown account or garbage `sig` is HTTP 403 `AuthenticationFailed`. Table entity paths are `/table/{account}/{table}/{pk}/{rk}` (not OData `Tables('…')`); SAS verifies against that entity path
-- Entra Bearer on blob/queue/table: `aud` `https://storage.azure.com` (or ARM theatre / root) plus Storage Blob / Queue / Table data roles. Owner/Contributor/Reader alone do not authorize data-plane read/write
+- Entra Bearer on blob/queue/table: `aud` `https://storage.azure.com` (or ARM theatre / root) plus Storage Blob / Queue / Table data roles (Azure published GUIDs: Blob Data Owner/Contributor/Reader, Queue Data Contributor/Reader, Table Data Contributor/Reader). Owner/Contributor/Reader alone do not authorize data-plane read/write
 - Account keys sealed at rest
 
 ## Detailed actions

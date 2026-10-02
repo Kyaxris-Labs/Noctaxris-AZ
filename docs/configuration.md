@@ -27,7 +27,7 @@ All settings use the `NOCTAXRIS_AZ_*` prefix.
 
 ## HTTP auth
 
-Discovery, JWKS, token, device code, `POST /device`, lab OIDC discovery/JWKS/token, health/ready/version, and IMDS token skip Bearer. IMDS still requires `Metadata: true`, a known managed identity, and a loopback or link-local peer (RFC1918 peers are denied even when Host is the metadata address). `POST /provisioningwebservice.svc` does not skip Bearer; send a directory Bearer (`aud` `https://graph.microsoft.com` or `https://graph.windows.net`). Graph rejects tokens whose `aud` is ARM (`https://management.azure.com`, `https://management.core.windows.net`) or the token `iss`. ARM control-plane routes reject Graph `aud` (HTTP 403 `InvalidAuthenticationTokenAudience`). Key Vault data plane requires vault `aud` (`https://vault.azure.net`) plus data-plane RBAC. Storage Shared Key/SAS, table/blob, Event Hubs HTTP send/receive (root Bearer) and captured-events (root or Event Hubs Data Receiver / Data Owner), Graph, and SOAP do not require ARM `aud`. Root Bearer skips audience. Cloud-hosts TLS (`NOCTAXRIS_AZ_CLOUD_HOSTS=1`) enforces Host/SNI against the AzureCloud lab SAN list.
+Discovery, JWKS, token, device code, `POST /device`, lab OIDC discovery/JWKS/token (`/_noctaxris-az/oidc-lab/*`, intentional public WIF assertion mint), health/ready/version, and IMDS token skip Bearer. IMDS still requires `Metadata: true`, a known managed identity, and a loopback or link-local peer (RFC1918 peers are denied even when Host is the metadata address). `POST /provisioningwebservice.svc` does not skip Bearer; send a directory Bearer (`aud` `https://graph.microsoft.com` or `https://graph.windows.net`). Graph rejects tokens whose `aud` is ARM (`https://management.azure.com`, `https://management.core.windows.net`) or the token `iss`. ARM control-plane routes reject Graph `aud` (HTTP 403 `InvalidAuthenticationTokenAudience`). Key Vault data plane requires vault `aud` (`https://vault.azure.net`) plus data-plane RBAC. Storage `/blob|/queue|/table` skip the global Bearer envelope when the request already has `SharedKey` or SAS so handlers verify HMAC; Entra Bearer on those paths needs storage `aud` plus Storage Blob / Queue / Table data roles (Owner/Contributor alone do not authorize). Event Hubs HTTP send/receive accept root or Event Hubs Data Sender / Receiver / Data Owner; captured-events accept root or Data Receiver / Data Owner. Graph and SOAP do not require ARM `aud`. Root Bearer skips audience. Cloud-hosts TLS (`NOCTAXRIS_AZ_CLOUD_HOSTS=1`) enforces Host/SNI against the AzureCloud lab SAN list.
 
 ## Compose
 
@@ -53,9 +53,9 @@ before starting. Startup refuses that pair on the non-loopback container bind.
 | curl / raw HTTP | `http://127.0.0.1:4599` + `Authorization: Bearer <token>` |
 | Azure CLI | `az rest` / ARM against `http://127.0.0.1:4599` with Bearer, or `az cloud register` (`--name`, `--endpoint-resource-manager`, `--endpoint-active-directory`, `--endpoint-microsoft-graph-resource-id`, `--skip-endpoint-discovery`; see README) |
 | Az PowerShell | `Add-AzEnvironment -Name ... -ResourceManagerEndpoint ... -ActiveDirectoryEndpoint ... -MicrosoftGraphUrl ... -MicrosoftGraphEndpointResourceId ...` then `Connect-AzAccount -Environment ...` (see README) |
-| Storage SDK | account endpoint `http://127.0.0.1:4599/blob/{account}` (Shared Key HMAC or SAS HMAC with `se` expiry and `sp` permissions) |
+| Storage SDK | account endpoint `http://127.0.0.1:4599/blob/{account}` (Shared Key HMAC, SAS HMAC with `se`/`sp`, or Entra Bearer + Storage data roles) |
 | Key Vault SDK | vault base `http://127.0.0.1:4599/keyvault/{name}` + Bearer |
-| Service Bus | AMQP `amqp://127.0.0.1:5672` with connection string / SAS |
+| Service Bus | AMQP `amqp://127.0.0.1:5672` (stock Compose always publishes this port) with signed SAS on attach; HTTP messages need Service Bus `aud` + data roles |
 | App Configuration | data plane `http://127.0.0.1:4599/appconfig/{store}` + Bearer |
 | Functions mock invoke | `POST http://127.0.0.1:4599/functions/{name}/invoke` + Bearer |
 | Monitor / Activity Log | ARM paths under `/subscriptions/.../providers/Microsoft.Insights/...` + Bearer |
