@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- CI: align Actions with siblings (`smoke-core` on push/PR, weekly/dispatch `smoke-nested`, path-filtered `integration-suites`); add `docker/smoke-nested.sh`; `docker-nightly` runs `ci-required` before Hub push
+
 ## 1.3.0
 
 Minor after 1.2.2: data-plane authz tightening across Event Hubs, Storage, Service Bus, and related ARM paths, JWT verify via go-jose, plus more tests and service docs. Docker Hub: `kyaxris/noctaxris-az` (`1.3.0`, `1.3`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).

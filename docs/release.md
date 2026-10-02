@@ -17,7 +17,7 @@ Forks skip publish with a log line. Missing secrets fail closed on schedule and 
 
 1. Bump `VERSION` (plain text, e.g. `1.3.0`) and keep `internal/version/version.go` (and Dockerfile `ARG VERSION`) in sync.
 2. Move CHANGELOG notes under `## 1.3.0` (feature-oriented sections; no internal delivery labels).
-3. Confirm PR CI is green (`unit`, `image`, `govulncheck`). Run nested Compose when the release touches DinD / engine overlays.
+3. Confirm PR CI is green (`unit`, `image`, `smoke-core`). Run nested smoke when the release touches DinD / engine overlays (`docker/smoke-nested.sh` or Actions `nested_smoke=true`).
 4. Confirm docs still describe loopback defaults and opt-in nested compute only.
 
 ## Cut the release
@@ -44,7 +44,7 @@ Optional: Actions → **release** → Run workflow with an existing tag if you n
 
 ## Nightly (separate)
 
-[`.github/workflows/docker-nightly.yml`](../.github/workflows/docker-nightly.yml) runs on a UTC cron and `workflow_dispatch`. It pushes `nightly`, `nightly-YYYYMMDD`, and `sha-<short>` only. It does **not** move `latest` or semver tags.
+[`.github/workflows/docker-nightly.yml`](../.github/workflows/docker-nightly.yml) runs on a UTC cron and `workflow_dispatch`. It first runs the required CI gates (`ci-required.yml`), then pushes `nightly`, `nightly-YYYYMMDD`, and `sha-<short>` only when those gates succeed. It does **not** move `latest` or semver tags.
 
 ## Local image check
 

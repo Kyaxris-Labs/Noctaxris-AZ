@@ -79,12 +79,22 @@ GitHub Actions (`.github/workflows/ci.yml`):
 |-----|------|
 | unit | Every push and PR (`go test ./...`) |
 | compose-static | `go test ./docker/` |
+| govulncheck | `go run ./scripts/govulncheck-ci` (allowlist empty by default after moby client migration; see [security-defaults.md](security-defaults.md)) |
 | race | Scoped `./internal/kernel/... ./internal/store/... -race` |
 | image | `docker build -f docker/Dockerfile .` |
 | sbom | After image: Syft SPDX SBOM artifact |
-| govulncheck | `go run ./scripts/govulncheck-ci` (allowlist empty by default after moby client migration; see [security-defaults.md](security-defaults.md)) |
+| smoke-core | Every push and PR (after unit + compose-static + image): Compose up → ready → subscription / RG / Storage / Key Vault; audit JSONL must not contain the root token |
+| smoke-nested | Weekly schedule on `main` plus Actions `workflow_dispatch` with `nested_smoke=true`. Runs `docker/smoke-nested.sh` (engine overlay healthy + ARM Redis). **Not** on push/PR |
+| integration-suites | Optional: `workflow_dispatch` with `integration_suites=true`, or pull requests that touch `tests/**`. Compose up → `tests/run-all.sh`. **Not** a required PR gate |
 
-Release tag push runs [`.github/workflows/ci-required.yml`](../.github/workflows/ci-required.yml) (unit, compose-static, govulncheck, scoped race, image, smoke-core) before Hub publish. Nested DinD remains opt-in and is not required for default green CI.
+A green PR proves unit tests, image build, and `smoke-core` only. It does **not** prove nested DinD. Run nested smoke via the weekly schedule, Actions `workflow_dispatch`, or:
+
+```bash
+bash docker/smoke-nested.sh
+# COMPOSE_EXTRA_FILES="-f docker/compose.engine-privileged.yaml" bash docker/smoke-nested.sh
+```
+
+Release tag push and nightly Hub publish run [`.github/workflows/ci-required.yml`](../.github/workflows/ci-required.yml) (unit, compose-static, govulncheck, scoped race, image, smoke-core) before Hub publish. Nested DinD remains opt-in and is not required for default green CI.
 
 ## Compose overlays (lab opt-in)
 
