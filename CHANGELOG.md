@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 1.3.1
+
+Patch after 1.3.0: ARM role assignments at resource scope (Key Vault vault and other single-level ARM resources). Docker Hub: `kyaxris/noctaxris-az` (`1.3.1`, `1.3`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
+
+- Authorization: PUT/GET/DELETE/list role assignments under `/subscriptions/{sub}/resourceGroups/{rg}/providers/{provider}/{type}/{name}/providers/Microsoft.Authorization/roleAssignments/...` (same body and Owner/root gates as subscription and resource-group scope)
 - CI: align Actions with siblings (`smoke-core` on push/PR, weekly/dispatch `smoke-nested`, path-filtered `integration-suites`); add `docker/smoke-nested.sh`; `docker-nightly` runs `ci-required` before Hub push
 
 ## 1.3.0
