@@ -169,6 +169,59 @@ func TestRoleAssignmentDeleteWritesActivityLog(t *testing.T) {
 	}
 }
 
+func TestRoleAssignmentPutAtResourceScope(t *testing.T) {
+	st := openStore(t)
+	if err := st.UpsertResourceGroup(config.DefaultSubscriptionID, "rg-kv", "eastus"); err != nil {
+		t.Fatal(err)
+	}
+	svc := &authorization.Service{
+		Store:          st,
+		Authz:          &authz.Evaluator{Assignments: st},
+		PrincipalFrom:  authn.PrincipalFromContext,
+		SubscriptionID: config.DefaultSubscriptionID,
+	}
+	mux := http.NewServeMux()
+	svc.Mount(mux)
+	h := withAuth(st, mux)
+
+	sub := config.DefaultSubscriptionID
+	name := "ra-vault-1"
+	scope := "/subscriptions/" + sub + "/resourceGroups/rg-kv/providers/Microsoft.KeyVault/vaults/lab-vault"
+	path := scope + "/providers/Microsoft.Authorization/roleAssignments/" + name + "?api-version=2022-04-01"
+	body := `{"properties":{"roleDefinitionId":"` + authz.RoleKeyVaultSecretsUser + `","principalId":"sp-vault","principalType":"ServicePrincipal"}}`
+	req := httptest.NewRequest(http.MethodPut, path, strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+rootToken)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("put status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	got, ok, err := st.GetRoleAssignment(scope + "/providers/Microsoft.Authorization/roleAssignments/" + name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || got.Scope != scope || got.PrincipalID != "sp-vault" {
+		t.Fatalf("stored = %#v ok=%v", got, ok)
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, scope+"/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01", nil)
+	listReq.Header.Set("Authorization", "Bearer "+rootToken)
+	listRec := httptest.NewRecorder()
+	h.ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list status=%d body=%s", listRec.Code, listRec.Body.String())
+	}
+
+	delReq := httptest.NewRequest(http.MethodDelete, path, nil)
+	delReq.Header.Set("Authorization", "Bearer "+rootToken)
+	delRec := httptest.NewRecorder()
+	h.ServeHTTP(delRec, delReq)
+	if delRec.Code != http.StatusOK {
+		t.Fatalf("delete status=%d body=%s", delRec.Code, delRec.Body.String())
+	}
+}
+
 func TestRoleAssignmentPutAtResourceGroup(t *testing.T) {
 	st := openStore(t)
 	if err := st.UpsertResourceGroup(config.DefaultSubscriptionID, "rg-lab", "eastus"); err != nil {

@@ -15,7 +15,7 @@ Azure RBAC role assignments lite on ARM scopes.
 | `DELETE` | `/{scope}/providers/Microsoft.Authorization/roleAssignments/{name}` |
 | `GET` | `/{scope}/providers/Microsoft.Authorization/roleAssignments` |
 
-`scope` is typically `/subscriptions/{sub}` or `/subscriptions/{sub}/resourceGroups/{rg}`. `api-version` is required.
+`scope` is `/subscriptions/{sub}`, `/subscriptions/{sub}/resourceGroups/{rg}`, or a resource id such as `/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.KeyVault/vaults/{name}`. `api-version` is required.
 
 ## Authz
 

@@ -31,6 +31,11 @@ func (s *Service) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Authorization/roleAssignments/{roleAssignmentName}", s.getAtResourceGroup)
 	mux.HandleFunc("DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Authorization/roleAssignments/{roleAssignmentName}", s.deleteAtResourceGroup)
 	mux.HandleFunc("GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Authorization/roleAssignments", s.listAtResourceGroup)
+	// Resource scope (e.g. Key Vault vault, App Configuration store, Event Hubs namespace).
+	mux.HandleFunc("PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProvider}/{resourceType}/{resourceName}/providers/Microsoft.Authorization/roleAssignments/{roleAssignmentName}", s.putAtResource)
+	mux.HandleFunc("GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProvider}/{resourceType}/{resourceName}/providers/Microsoft.Authorization/roleAssignments/{roleAssignmentName}", s.getAtResource)
+	mux.HandleFunc("DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProvider}/{resourceType}/{resourceName}/providers/Microsoft.Authorization/roleAssignments/{roleAssignmentName}", s.deleteAtResource)
+	mux.HandleFunc("GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProvider}/{resourceType}/{resourceName}/providers/Microsoft.Authorization/roleAssignments", s.listAtResource)
 }
 
 func (s *Service) principal(ctx context.Context) (authn.Principal, bool) {
@@ -132,6 +137,39 @@ func (s *Service) listAtResourceGroup(w http.ResponseWriter, r *http.Request) {
 	rg := r.PathValue("resourceGroupName")
 	scope := "/subscriptions/" + subID + "/resourceGroups/" + rg
 	s.listRoleAssignments(w, r, scope)
+}
+
+func resourceScope(r *http.Request) string {
+	return "/subscriptions/" + r.PathValue("subscriptionId") +
+		"/resourceGroups/" + r.PathValue("resourceGroupName") +
+		"/providers/" + r.PathValue("resourceProvider") +
+		"/" + r.PathValue("resourceType") +
+		"/" + r.PathValue("resourceName")
+}
+
+func (s *Service) putAtResource(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("roleAssignmentName")
+	scope := resourceScope(r)
+	id := scope + "/providers/Microsoft.Authorization/roleAssignments/" + name
+	s.putRoleAssignment(w, r, scope, id, name)
+}
+
+func (s *Service) getAtResource(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("roleAssignmentName")
+	scope := resourceScope(r)
+	id := scope + "/providers/Microsoft.Authorization/roleAssignments/" + name
+	s.getRoleAssignment(w, r, scope, id, name)
+}
+
+func (s *Service) deleteAtResource(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("roleAssignmentName")
+	scope := resourceScope(r)
+	id := scope + "/providers/Microsoft.Authorization/roleAssignments/" + name
+	s.deleteRoleAssignment(w, r, scope, id, name)
+}
+
+func (s *Service) listAtResource(w http.ResponseWriter, r *http.Request) {
+	s.listRoleAssignments(w, r, resourceScope(r))
 }
 
 func (s *Service) listRoleAssignments(w http.ResponseWriter, r *http.Request, scope string) {
