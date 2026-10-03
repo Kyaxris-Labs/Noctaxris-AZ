@@ -216,17 +216,17 @@ func (s *Service) graphAppWriteAllowed(principalID, resourceID string) bool {
 		return false
 	}
 	owners, err := s.Store.ListOwners(resourceID)
-	if err == nil {
-		for _, owner := range owners {
-			if owner == principalID {
-				return true
-			}
-		}
+	if err != nil {
+		owners = nil
 	}
-	if sp, ok, err := s.Store.GetServicePrincipal(principalID); err == nil && ok {
-		for _, owner := range owners {
-			if owner == sp.ID || owner == sp.AppID {
-				return true
+	candidates := s.directoryPrincipalIDs(principalID)
+	for _, owner := range owners {
+		ownerIDs := s.directoryPrincipalIDs(owner)
+		for _, oid := range ownerIDs {
+			for _, cid := range candidates {
+				if oid == cid {
+					return true
+				}
 			}
 		}
 	}

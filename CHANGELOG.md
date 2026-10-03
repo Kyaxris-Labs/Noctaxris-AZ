@@ -4,9 +4,11 @@
 
 ## 1.3.1
 
-Patch after 1.3.0: ARM role assignments at resource scope (Key Vault vault and other single-level ARM resources). Docker Hub: `kyaxris/noctaxris-az` (`1.3.1`, `1.3`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
+Patch after 1.3.0: ARM role assignments at resource scope, Graph owner and ARM RBAC appId/objectId matching. Docker Hub: `kyaxris/noctaxris-az` (`1.3.1`, `1.3`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
 
 - Authorization: PUT/GET/DELETE/list role assignments under `/subscriptions/{sub}/resourceGroups/{rg}/providers/{provider}/{type}/{name}/providers/Microsoft.Authorization/roleAssignments/...` (same body and Owner/root gates as subscription and resource-group scope)
+- Entra Graph: `addPassword` / `addKey` / owners mutate treat stored owners and caller principals as equal when either side is the app registration `appId` or `objectId` (client_credentials tokens use `oid` = object id)
+- ARM RBAC: role assignment `principalId` matches when it is the caller's app registration `appId`, application object id, or service principal object id (same alias set as Graph)
 - CI: align Actions with siblings (`smoke-core` on push/PR, weekly/dispatch `smoke-nested`, path-filtered `integration-suites`); add `docker/smoke-nested.sh`; `docker-nightly` runs `ci-required` before Hub push
 
 ## 1.3.0

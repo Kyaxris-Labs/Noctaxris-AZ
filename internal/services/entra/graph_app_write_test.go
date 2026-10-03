@@ -79,3 +79,40 @@ func TestGraphAppWriteOwnersAndApplicationAdministrator(t *testing.T) {
 		t.Fatalf("app admin owners $ref %d", ownRes.StatusCode)
 	}
 }
+
+func TestGraphAppWriteOwnerAppIDMatchesObjectOID(t *testing.T) {
+	st := openStore(t)
+	const ownerClientID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+	if _, err := st.UpsertEntraApp(config.DefaultTenantID, ownerClientID, "owner-app"); err != nil {
+		t.Fatal(err)
+	}
+	owner, ok, err := st.GetEntraApp(config.DefaultTenantID, ownerClientID)
+	if err != nil || !ok || owner.ObjectID == "" {
+		t.Fatalf("owner app lookup ok=%v err=%v row=%#v", ok, err, owner)
+	}
+	targetClientID, err := st.UpsertEntraApp(config.DefaultTenantID, "", "target-app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, ok, err := st.GetEntraApp(config.DefaultTenantID, targetClientID)
+	if err != nil || !ok || target.ObjectID == "" {
+		t.Fatalf("target app lookup ok=%v err=%v", ok, err)
+	}
+	// Seed often stores the client id (appId) as owner while Graph tokens use oid=object id.
+	if err := st.AddOwner(target.ObjectID, ownerClientID, "servicePrincipal"); err != nil {
+		t.Fatal(err)
+	}
+
+	ownerSrv := graphServerAs(t, st, authn.Principal{ID: owner.ObjectID, Audiences: []string{authn.AudienceGraph}})
+	pwReq, _ := http.NewRequest(http.MethodPost, ownerSrv.URL+"/v1.0/applications/"+target.ObjectID+"/addPassword",
+		strings.NewReader(`{"passwordCredential":{"displayName":"via-appid-owner"}}`))
+	pwReq.Header.Set("Content-Type", "application/json")
+	pwRes, err := http.DefaultClient.Do(pwReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pwBody := drain(t, pwRes)
+	if pwRes.StatusCode != http.StatusOK || !strings.Contains(string(pwBody), "secretText") {
+		t.Fatalf("appId-owner addPassword %d %s", pwRes.StatusCode, pwBody)
+	}
+}

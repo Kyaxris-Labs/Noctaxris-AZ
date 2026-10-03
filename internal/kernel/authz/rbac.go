@@ -24,6 +24,12 @@ type GroupMembershipStore interface {
 	ListGroupMembers(groupID string) (ids []string, types []string, err error)
 }
 
+// PrincipalAliasStore expands appId / objectId / service principal id aliases
+// for ARM principal matching. Store implements this when Assignments is *store.Store.
+type PrincipalAliasStore interface {
+	ListPrincipalAliases(id string) ([]string, error)
+}
+
 // Evaluator checks Azure RBAC grants. Root bypasses. Deny by default.
 type Evaluator struct {
 	Assignments AssignmentStore
@@ -61,7 +67,18 @@ func (e *Evaluator) Evaluate(principalID string, isRoot bool, action, scope stri
 }
 
 func (e *Evaluator) principalMatches(a Assignment, principalID string) (bool, error) {
-	if a.PrincipalID == principalID {
+	if strings.TrimSpace(a.PrincipalID) != "" && a.PrincipalID == principalID {
+		return true, nil
+	}
+	callerIDs, err := e.principalIDs(principalID)
+	if err != nil {
+		return false, err
+	}
+	assignIDs, err := e.principalIDs(a.PrincipalID)
+	if err != nil {
+		return false, err
+	}
+	if idSetsOverlap(callerIDs, assignIDs) {
 		return true, nil
 	}
 	pt := strings.ToLower(strings.TrimSpace(a.PrincipalType))
@@ -72,7 +89,7 @@ func (e *Evaluator) principalMatches(a Assignment, principalID string) (bool, er
 	if !ok {
 		return false, nil
 	}
-	return groupContains(gm, a.PrincipalID, principalID, 0, map[string]struct{}{})
+	return groupContains(gm, e, a.PrincipalID, callerIDs, 0, map[string]struct{}{})
 }
 
 func (e *Evaluator) membership() (GroupMembershipStore, bool) {
@@ -83,8 +100,62 @@ func (e *Evaluator) membership() (GroupMembershipStore, bool) {
 	return gm, ok
 }
 
-func groupContains(gm GroupMembershipStore, groupID, principalID string, depth int, seen map[string]struct{}) (bool, error) {
-	if gm == nil || groupID == "" || principalID == "" || depth >= groupExpandMaxDepth {
+func (e *Evaluator) aliases() (PrincipalAliasStore, bool) {
+	if e == nil || e.Assignments == nil {
+		return nil, false
+	}
+	as, ok := e.Assignments.(PrincipalAliasStore)
+	return as, ok
+}
+
+// principalIDs returns id plus directory aliases (appId / objectId / SP id).
+func (e *Evaluator) principalIDs(id string) ([]string, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, nil
+	}
+	out := []string{id}
+	seen := map[string]struct{}{id: {}}
+	as, ok := e.aliases()
+	if !ok {
+		return out, nil
+	}
+	more, err := as.ListPrincipalAliases(id)
+	if err != nil {
+		return nil, err
+	}
+	for _, a := range more {
+		a = strings.TrimSpace(a)
+		if a == "" {
+			continue
+		}
+		if _, dup := seen[a]; dup {
+			continue
+		}
+		seen[a] = struct{}{}
+		out = append(out, a)
+	}
+	return out, nil
+}
+
+func idSetsOverlap(a, b []string) bool {
+	if len(a) == 0 || len(b) == 0 {
+		return false
+	}
+	set := make(map[string]struct{}, len(a))
+	for _, id := range a {
+		set[id] = struct{}{}
+	}
+	for _, id := range b {
+		if _, ok := set[id]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func groupContains(gm GroupMembershipStore, e *Evaluator, groupID string, callerIDs []string, depth int, seen map[string]struct{}) (bool, error) {
+	if gm == nil || groupID == "" || len(callerIDs) == 0 || depth >= groupExpandMaxDepth {
 		return false, nil
 	}
 	if _, ok := seen[groupID]; ok {
@@ -96,7 +167,11 @@ func groupContains(gm GroupMembershipStore, groupID, principalID string, depth i
 		return false, err
 	}
 	for i, id := range ids {
-		if id == principalID {
+		memberIDs, err := e.principalIDs(id)
+		if err != nil {
+			return false, err
+		}
+		if idSetsOverlap(callerIDs, memberIDs) {
 			return true, nil
 		}
 		typ := ""
@@ -104,7 +179,7 @@ func groupContains(gm GroupMembershipStore, groupID, principalID string, depth i
 			typ = strings.ToLower(strings.TrimSpace(types[i]))
 		}
 		if typ == "group" {
-			ok, err := groupContains(gm, id, principalID, depth+1, seen)
+			ok, err := groupContains(gm, e, id, callerIDs, depth+1, seen)
 			if err != nil || ok {
 				return ok, err
 			}

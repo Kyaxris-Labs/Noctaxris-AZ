@@ -258,3 +258,50 @@ func TestKeyVaultSecretsOfficerDoesNotGrantKeysOrCerts(t *testing.T) {
 		}
 	}
 }
+
+type aliasMemStore struct {
+	memStore
+	aliases map[string][]string
+}
+
+func (a aliasMemStore) ListPrincipalAliases(id string) ([]string, error) {
+	if a.aliases == nil {
+		return []string{id}, nil
+	}
+	if out, ok := a.aliases[id]; ok {
+		return out, nil
+	}
+	return []string{id}, nil
+}
+
+func TestEvaluateAppIDAssignmentMatchesObjectOID(t *testing.T) {
+	const (
+		appID    = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+		objectID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+		rgScope  = "/subscriptions/s/resourceGroups/rg"
+	)
+	store := aliasMemStore{
+		memStore: memStore{byScope: map[string][]authz.Assignment{
+			rgScope: {{
+				PrincipalID:      appID,
+				PrincipalType:    "ServicePrincipal",
+				RoleDefinitionID: authz.RoleReader,
+				Scope:            rgScope,
+			}},
+		}},
+		aliases: map[string][]string{
+			objectID: {objectID, appID},
+			appID:    {appID, objectID},
+		},
+	}
+	ev := &authz.Evaluator{Assignments: store}
+	action := "Microsoft.Web/staticSites/read"
+	ok, err := ev.Evaluate(objectID, false, action, rgScope)
+	if err != nil || !ok {
+		t.Fatalf("object id caller vs appId assignment: ok=%v err=%v", ok, err)
+	}
+	ok, err = ev.Evaluate("cccccccc-cccc-cccc-cccc-cccccccccccc", false, action, rgScope)
+	if err != nil || ok {
+		t.Fatal("unrelated principal must be denied")
+	}
+}

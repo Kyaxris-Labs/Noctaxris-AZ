@@ -8,6 +8,70 @@ import (
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authz"
 )
 
+// ListPrincipalAliases implements authz.PrincipalAliasStore.
+// Returns app registration objectId/appId and service principal id/appId for the same directory identity.
+func (s *Store) ListPrincipalAliases(id string) ([]string, error) {
+	id = strings.TrimSpace(id)
+	if id == "" || s == nil || s.db == nil {
+		return nil, nil
+	}
+	seen := map[string]struct{}{id: {}}
+	out := []string{id}
+	add := func(v string) {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			return
+		}
+		if _, ok := seen[v]; ok {
+			return
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+	if sp, ok, err := s.GetServicePrincipal(id); err != nil {
+		return nil, err
+	} else if ok {
+		add(sp.ID)
+		add(sp.AppID)
+	}
+	// Drain the apps query before further GetServicePrincipal calls; SQLite deadlocks
+	// when a second query runs on the same connection while rows are still open.
+	type appIDs struct{ objectID, appID string }
+	var apps []appIDs
+	rows, err := s.db.Query(`
+SELECT COALESCE(NULLIF(object_id,''), app_id), app_id FROM entra_apps
+WHERE app_id = ? OR object_id = ?`, id, id)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var row appIDs
+		if err := rows.Scan(&row.objectID, &row.appID); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		apps = append(apps, row)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	for _, row := range apps {
+		add(row.objectID)
+		add(row.appID)
+		if sp, ok, err := s.GetServicePrincipal(row.appID); err != nil {
+			return nil, err
+		} else if ok {
+			add(sp.ID)
+			add(sp.AppID)
+		}
+	}
+	return out, nil
+}
+
 // ListRoleAssignmentsForScope implements authz.AssignmentStore with exact scope match.
 // Parent scopes are walked by authz.Evaluator.scopeChain; do not use SQL LIKE prefixes
 // (sibling resource group names and LIKE wildcards would otherwise collide).
