@@ -49,7 +49,8 @@ Noctaxris-AZ fails closed. Defaults favor a loopback lab on a single laptop.
 - Storage SAS that fails HMAC, expiry, or `sp` checks returns HTTP 403 `AuthenticationFailed`. Shared Key with a missing account stays HTTP 404 `AccountNotFound`.
 - Global Bearer middleware skips `/blob/`, `/queue/`, and `/table/` when the request already carries `Authorization: SharedKey …` or a SAS query so handlers can verify HMAC. That skip is intentional; do not force Bearer-only on those prefixes.
 - Global Bearer middleware skips `/cosmos/` when the request already carries `x-ms-cosmos-account-key` so the handler can verify the account key. That skip is intentional; do not force Bearer-only on those prefixes.
-- Public paths: `/_noctaxris-az/health`, `/_noctaxris-az/ready`, `/_noctaxris-az/version`,
+- Public paths: `/_noctaxris-az/health`, `/_noctaxris-az/ready`, `/_noctaxris-az/version`
+  (or `/_lab/health|ready|version` only when `NOCTAXRIS_AZ_STRIP_PRODUCT=1`; the other trio is not registered),
   Entra token/OIDC discovery/JWKS, `POST /device`,
   `/_noctaxris-az/oidc-lab/*` (intentional public WIF lab IdP, including unauthenticated
   `POST …/oidc-lab/token` assertion mint for federated credential theatre),

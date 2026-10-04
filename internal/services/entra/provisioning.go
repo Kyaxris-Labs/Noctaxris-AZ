@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
 )
 
 func (s *Service) mountProvisioningSOAP(mux *http.ServeMux) {
@@ -54,7 +55,8 @@ func (s *Service) writeSOAPListUsers(w http.ResponseWriter) {
 }
 
 func (s *Service) writeSOAPTenant(w http.ResponseWriter) {
-	body := `<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"><s:Body><CompanyResponse xmlns="http://provisioning.microsoftonline.com/"><DisplayName>Noctaxris-AZ Lab</DisplayName><ContextId>` +
+	body := `<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"><s:Body><CompanyResponse xmlns="http://provisioning.microsoftonline.com/"><DisplayName>` +
+		xmlEscape(config.LabDisplayName()) + `</DisplayName><ContextId>` +
 		xmlEscape(s.appTenant()) + `</ContextId></CompanyResponse></s:Body></s:Envelope>`
 	w.Header().Set("Content-Type", "application/soap+xml; charset=utf-8")
 	w.WriteHeader(http.StatusOK)

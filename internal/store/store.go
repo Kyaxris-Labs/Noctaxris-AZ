@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
+
 	_ "modernc.org/sqlite"
 )
 
@@ -87,7 +89,7 @@ func (s *Store) EnsureRoot(tenantID, subscriptionID, rootPrincipal string) error
 INSERT INTO subscriptions (id, display_name, state, tenant_id)
 VALUES (?, ?, 'Enabled', ?)
 ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name, tenant_id=excluded.tenant_id`,
-		subscriptionID, "Noctaxris-AZ Lab", tenantID)
+		subscriptionID, config.LabDisplayName(), tenantID)
 	if err != nil {
 		return fmt.Errorf("seed subscription: %w", err)
 	}

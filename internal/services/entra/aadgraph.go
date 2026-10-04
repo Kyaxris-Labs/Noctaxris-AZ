@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
 )
 
 func (s *Service) requireAADGraph(w http.ResponseWriter, r *http.Request) bool {
@@ -25,7 +26,7 @@ func (s *Service) handleAADTenantDetails(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"value": []map[string]any{{
 			"objectId":               s.appTenant(),
-			"displayName":            "Noctaxris-AZ Lab",
+			"displayName":            config.LabDisplayName(),
 			"verifiedDomains":        []map[string]any{{"name": "lab.local", "default": true}},
 			"dirSyncEnabled":         false,
 			"companyLastDirSyncTime": nil,

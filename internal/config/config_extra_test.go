@@ -89,19 +89,21 @@ func TestLoadFromEnvAndTLSAMQP(t *testing.T) {
 	t.Setenv(EnvActivityInject, "")
 	t.Setenv(EnvLogsInject, "")
 	t.Setenv(EnvDefenderInject, "")
+	t.Setenv(EnvStripProduct, "")
 	cfg, err = LoadFromEnv()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.LabForensics || cfg.ActivityInject || cfg.LogsInject || cfg.DefenderInject {
-		t.Fatalf("forensics flags should default off: %+v", cfg)
+	if cfg.LabForensics || cfg.ActivityInject || cfg.LogsInject || cfg.DefenderInject || cfg.StripProduct {
+		t.Fatalf("forensics/strip flags should default off: %+v", cfg)
 	}
 	t.Setenv(EnvLabForensics, "1")
 	t.Setenv(EnvActivityInject, "true")
 	t.Setenv(EnvLogsInject, "1")
 	t.Setenv(EnvDefenderInject, "true")
+	t.Setenv(EnvStripProduct, "true")
 	cfg, err = LoadFromEnv()
-	if err != nil || !cfg.LabForensics || !cfg.ActivityInject || !cfg.LogsInject || !cfg.DefenderInject {
-		t.Fatalf("forensics flags on: %+v %v", cfg, err)
+	if err != nil || !cfg.LabForensics || !cfg.ActivityInject || !cfg.LogsInject || !cfg.DefenderInject || !cfg.StripProduct {
+		t.Fatalf("forensics/strip flags on: %+v %v", cfg, err)
 	}
 }

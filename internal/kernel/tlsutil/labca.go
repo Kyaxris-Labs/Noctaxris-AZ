@@ -14,6 +14,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
 )
 
 // DefaultCloudHostSANs are Microsoft AzureCloud hostnames tools call on 443.
@@ -86,7 +88,7 @@ func EnsureServerCert(secretsDir string, notAfter time.Time) (Paths, error) {
 	}
 	caTpl := &x509.Certificate{
 		SerialNumber:          caSerial,
-		Subject:               pkix.Name{CommonName: "Noctaxris-AZ Lab CA", Organization: []string{"Noctaxris-AZ"}},
+		Subject:               pkix.Name{CommonName: config.LabCACommonName(), Organization: []string{config.LabCAOrganization()}},
 		NotBefore:             time.Now().UTC().Add(-time.Hour),
 		NotAfter:              notAfter,
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,

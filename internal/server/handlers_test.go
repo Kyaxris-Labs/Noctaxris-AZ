@@ -55,6 +55,9 @@ func TestHealthReadyVersionMiddleware(t *testing.T) {
 	hs := httptest.NewServer(s.Handler())
 	defer hs.Close()
 
+	healthPath := s.cfg.HealthPath()
+	readyPath := s.cfg.ReadyPath()
+	versionPath := s.cfg.VersionPath()
 	for _, path := range []string{healthPath, readyPath, versionPath} {
 		res, err := http.Get(hs.URL + path)
 		if err != nil {
@@ -80,7 +83,7 @@ func TestHealthReadyVersionMiddleware(t *testing.T) {
 		}
 	}
 
-	s2 := &Server{mux: http.NewServeMux(), authn: s.authn}
+	s2 := &Server{cfg: s.cfg, mux: http.NewServeMux(), authn: s.authn}
 	s2.registerREST()
 	rec := httptest.NewRecorder()
 	s2.handleReady(rec, httptest.NewRequest(http.MethodGet, readyPath, nil))
@@ -170,7 +173,7 @@ func TestNewRegistersMux(t *testing.T) {
 	}, st, aud)
 	hs := httptest.NewServer(srv.Handler())
 	defer hs.Close()
-	res, err := http.Get(hs.URL + readyPath)
+	res, err := http.Get(hs.URL + srv.cfg.ReadyPath())
 	if err != nil {
 		t.Fatal(err)
 	}

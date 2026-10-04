@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/store"
 )
 
@@ -56,7 +57,7 @@ func (s *Service) listTenants(w http.ResponseWriter, r *http.Request) {
 		"value": []map[string]any{{
 			"id":             "/tenants/" + tid,
 			"tenantId":       tid,
-			"displayName":    "Noctaxris-AZ Lab",
+			"displayName":    config.LabDisplayName(),
 			"tenantCategory": "Home",
 		}},
 	})

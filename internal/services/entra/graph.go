@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/store"
 )
@@ -424,7 +425,7 @@ func (s *Service) handleGraphOrganization(w http.ResponseWriter, r *http.Request
 	tid := s.appTenant()
 	s.writeOData(w, r, []map[string]any{{
 		"id":              tid,
-		"displayName":     "Noctaxris-AZ Lab",
+		"displayName":     config.LabDisplayName(),
 		"verifiedDomains": []map[string]any{{"name": "lab.local", "isDefault": true}},
 	}})
 }

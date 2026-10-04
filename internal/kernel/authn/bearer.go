@@ -61,9 +61,12 @@ func HashToken(token string) string {
 }
 
 // IsPublicPath reports whether path skips authentication.
+// Product and strip ops health trios are both listed so the inactive set can
+// 404 from the mux without a Bearer challenge. Server.New registers only one.
 func IsPublicPath(path string) bool {
 	switch path {
 	case "/_noctaxris-az/health", "/_noctaxris-az/ready", "/_noctaxris-az/version",
+		"/_lab/health", "/_lab/ready", "/_lab/version",
 		"/metadata/identity/oauth2/token",
 		"/device":
 		return true

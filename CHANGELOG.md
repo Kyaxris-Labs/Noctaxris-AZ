@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.3.2
+
+Patch after 1.3.1: opt-in product strip for challenge images. Docker Hub: `kyaxris/noctaxris-az` (`1.3.2`, `1.3`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
+
+- Opt-in `NOCTAXRIS_AZ_STRIP_PRODUCT=1`: ops probes move to `/_lab/health|ready|version` only (product `/_noctaxris-az/health|ready|version` not registered), subscription/tenant/Graph/AAD/SOAP display names become `Lab`, and the lab CA uses `Lab CA` / Org `Lab`. Default unset keeps product paths and `Noctaxris-AZ Lab` / `Noctaxris-AZ Lab CA` branding. Binary healthcheck follows the active ready path.
+
 ## 1.3.1
 
 Patch after 1.3.0: ARM role assignments at resource scope, Graph owner and ARM RBAC appId/objectId matching. Docker Hub: `kyaxris/noctaxris-az` (`1.3.1`, `1.3`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).

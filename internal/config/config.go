@@ -16,6 +16,7 @@ const (
 	EnvActivityInject         = "NOCTAXRIS_AZ_ACTIVITY_INJECT"
 	EnvLogsInject             = "NOCTAXRIS_AZ_LOGS_INJECT"
 	EnvDefenderInject         = "NOCTAXRIS_AZ_DEFENDER_INJECT"
+	EnvStripProduct           = "NOCTAXRIS_AZ_STRIP_PRODUCT"
 
 	DefaultListenAddr           = "127.0.0.1:4599"
 	DefaultAMQPListenAddr       = "127.0.0.1:5672"
@@ -24,6 +25,15 @@ const (
 	// Fixed lab GUIDs (not secrets).
 	DefaultTenantID       = "00000000-0000-0000-0000-000000000001"
 	DefaultSubscriptionID = "00000000-0000-0000-0000-000000000002"
+
+	productOpsPathPrefix = "/_noctaxris-az"
+	labOpsPathPrefix     = "/_lab"
+	productLabDisplay    = "Noctaxris-AZ Lab"
+	stripLabDisplay      = "Lab"
+	productLabCACN       = "Noctaxris-AZ Lab CA"
+	stripLabCACN         = "Lab CA"
+	productLabCAOrg      = "Noctaxris-AZ"
+	stripLabCAOrg        = "Lab"
 )
 
 const (
@@ -58,6 +68,8 @@ type Config struct {
 	LogsInject bool
 	// DefenderInject enables ARG SecurityResources assessment inject (default off).
 	DefenderInject bool
+	// StripProduct hides product-branded ops paths and display labels (default off).
+	StripProduct bool
 }
 
 // LoadFromEnv reads configuration from the process environment.
@@ -82,6 +94,7 @@ func LoadFromEnv() (Config, error) {
 		ActivityInject:         envTruthy(EnvActivityInject),
 		LogsInject:             envTruthy(EnvLogsInject),
 		DefenderInject:         envTruthy(EnvDefenderInject),
+		StripProduct:           envTruthy(EnvStripProduct),
 	}
 	if cfg.CloudHosts && strings.TrimSpace(cfg.CloudHostsListen) == "" {
 		cfg.CloudHostsListen = DefaultCloudHostsListenAddr
@@ -111,6 +124,79 @@ func getenv(key, fallback string) string {
 func envTruthy(key string) bool {
 	return strings.EqualFold(os.Getenv(key), "1") ||
 		strings.EqualFold(os.Getenv(key), "true")
+}
+
+// StripProductEnabled reports whether NOCTAXRIS_AZ_STRIP_PRODUCT is truthy.
+func StripProductEnabled() bool {
+	return envTruthy(EnvStripProduct)
+}
+
+// OpsPathPrefix returns the ops path prefix for health/ready/version.
+func OpsPathPrefix() string {
+	if StripProductEnabled() {
+		return labOpsPathPrefix
+	}
+	return productOpsPathPrefix
+}
+
+// OpsPathPrefix returns the ops path prefix for this config.
+func (c Config) OpsPathPrefix() string {
+	if c.StripProduct {
+		return labOpsPathPrefix
+	}
+	return productOpsPathPrefix
+}
+
+// ReadyPath is the readiness probe path for the process environment.
+func ReadyPath() string {
+	return OpsPathPrefix() + "/ready"
+}
+
+// ReadyPath is the readiness probe path for this config.
+func (c Config) ReadyPath() string {
+	return c.OpsPathPrefix() + "/ready"
+}
+
+// HealthPath is the liveness probe path for this config.
+func (c Config) HealthPath() string {
+	return c.OpsPathPrefix() + "/health"
+}
+
+// VersionPath is the version probe path for this config.
+func (c Config) VersionPath() string {
+	return c.OpsPathPrefix() + "/version"
+}
+
+// LabDisplayName is the subscription/tenant/org display name for the process environment.
+func LabDisplayName() string {
+	if StripProductEnabled() {
+		return stripLabDisplay
+	}
+	return productLabDisplay
+}
+
+// LabDisplayName is the subscription/tenant/org display name for this config.
+func (c Config) LabDisplayName() string {
+	if c.StripProduct {
+		return stripLabDisplay
+	}
+	return productLabDisplay
+}
+
+// LabCACommonName is the lab CA certificate CN for the process environment.
+func LabCACommonName() string {
+	if StripProductEnabled() {
+		return stripLabCACN
+	}
+	return productLabCACN
+}
+
+// LabCAOrganization is the lab CA Organization for the process environment.
+func LabCAOrganization() string {
+	if StripProductEnabled() {
+		return stripLabCAOrg
+	}
+	return productLabCAOrg
 }
 
 // ExampleRootCredentials reports whether id and token match docker/.env.example.

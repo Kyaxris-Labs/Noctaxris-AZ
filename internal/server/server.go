@@ -26,9 +26,6 @@ import (
 )
 
 const (
-	healthPath      = "/_noctaxris-az/health"
-	readyPath       = "/_noctaxris-az/ready"
-	versionPath     = "/_noctaxris-az/version"
 	requestIDHeader = "X-Request-Id"
 	shutdownTimeout = 10 * time.Second
 )
@@ -89,9 +86,9 @@ func RequestIDFromContext(ctx context.Context) string {
 }
 
 func (s *Server) registerREST() {
-	s.mux.HandleFunc(healthPath, s.handleHealth)
-	s.mux.HandleFunc(readyPath, s.handleReady)
-	s.mux.HandleFunc(versionPath, s.handleVersion)
+	s.mux.HandleFunc(s.cfg.HealthPath(), s.handleHealth)
+	s.mux.HandleFunc(s.cfg.ReadyPath(), s.handleReady)
+	s.mux.HandleFunc(s.cfg.VersionPath(), s.handleVersion)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
