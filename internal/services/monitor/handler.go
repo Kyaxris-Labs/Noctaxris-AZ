@@ -156,6 +156,14 @@ func (h *Handler) listActivity(w http.ResponseWriter, r *http.Request, p authn.P
 		}
 		if ident != nil {
 			ev["identity"] = ident
+		} else if caller := strings.TrimSpace(row["caller"]); caller != "" {
+			// Azure CLI / KQL often project identity.claims.appid; surface caller as appid when unset.
+			ev["identity"] = map[string]any{
+				"claims": map[string]any{
+					"appid": caller,
+					"http://schemas.microsoft.com/identity/claims/objectidentifier": caller,
+				},
+			}
 		}
 		value = append(value, ev)
 	}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"os"
@@ -86,9 +87,22 @@ func runHealthcheck() error {
 	}
 	if strings.HasPrefix(addr, "0.0.0.0:") {
 		addr = "127.0.0.1:" + strings.TrimPrefix(addr, "0.0.0.0:")
+	} else if strings.HasPrefix(addr, "[::]:") {
+		addr = "[::1]:" + strings.TrimPrefix(addr, "[::]:")
+	} else if strings.HasPrefix(addr, ":") {
+		addr = "127.0.0.1" + addr
 	}
-	url := "http://" + addr + config.ReadyPath()
+	scheme := "http"
 	client := &http.Client{Timeout: 3 * time.Second}
+	tlsOn := envTruthy("NOCTAXRIS_AZ_TLS_AUTO") ||
+		(strings.TrimSpace(os.Getenv("NOCTAXRIS_AZ_TLS_CERT")) != "" && strings.TrimSpace(os.Getenv("NOCTAXRIS_AZ_TLS_KEY")) != "")
+	if tlsOn {
+		scheme = "https"
+		client.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // lab CA; probe only
+		}
+	}
+	url := scheme + "://" + addr + config.ReadyPath()
 	resp, err := client.Get(url)
 	if err != nil {
 		return fmt.Errorf("healthcheck: %w", err)
@@ -98,4 +112,9 @@ func runHealthcheck() error {
 		return fmt.Errorf("healthcheck: status %d", resp.StatusCode)
 	}
 	return nil
+}
+
+func envTruthy(k string) bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv(k)))
+	return v == "1" || v == "true" || v == "yes" || v == "on"
 }

@@ -33,3 +33,24 @@ func TestValidateListenSecurity(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestPublicBaseRewritesWildcardListen(t *testing.T) {
+	cfg := Config{ListenAddr: "0.0.0.0:4599"}
+	if got := cfg.PublicBase(); got != "http://127.0.0.1:4599" {
+		t.Fatalf("PublicBase=%q", got)
+	}
+	cfg.TLSAuto = true
+	if got := cfg.PublicBase(); got != "https://127.0.0.1:4599" {
+		t.Fatalf("TLS PublicBase=%q", got)
+	}
+	cfg.PublicURL = "https://lab.example:8443/"
+	if got := cfg.IssuerBase(); got != "https://lab.example:8443" {
+		t.Fatalf("IssuerBase=%q", got)
+	}
+	if got := cfg.ResourceManagerBase(); got != "https://lab.example:8443" {
+		t.Fatalf("ResourceManagerBase=%q", got)
+	}
+	if cfg.CAPath() != "/_noctaxris-az/ca.pem" {
+		t.Fatalf("CAPath=%q", cfg.CAPath())
+	}
+}

@@ -16,7 +16,13 @@ func (s *Service) listSubscriptions(w http.ResponseWriter, r *http.Request) {
 	if !requireAPIVersion(w, r) {
 		return
 	}
-	if _, ok := s.require(w, r, "Microsoft.Resources/subscriptions/read", "/subscriptions"); !ok {
+	p, ok := s.principal(r.Context())
+	if !ok {
+		azerrors.Unauthenticated(w, "")
+		return
+	}
+	if !p.AllowsARM() {
+		azerrors.InvalidAuthenticationTokenAudience(w, "")
 		return
 	}
 	list, err := s.Store.ListSubscriptions()
@@ -27,14 +33,24 @@ func (s *Service) listSubscriptions(w http.ResponseWriter, r *http.Request) {
 	value := make([]map[string]any, 0, len(list))
 	for _, row := range list {
 		id := row["id"]
+		scope := "/subscriptions/" + id
+		allowed, err := s.Authz.Evaluate(p.ID, p.IsRoot, "Microsoft.Resources/subscriptions/read", scope)
+		if err != nil {
+			azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+			return
+		}
+		if !allowed {
+			continue
+		}
 		value = append(value, map[string]any{
-			"id":             "/subscriptions/" + id,
+			"id":             scope,
 			"subscriptionId": id,
 			"displayName":    row["displayName"],
 			"state":          row["state"],
 			"tenantId":       row["tenantId"],
 		})
 	}
+	// Azure returns 200 with the subscriptions the principal can read (possibly empty).
 	writeJSON(w, http.StatusOK, map[string]any{"value": value})
 }
 

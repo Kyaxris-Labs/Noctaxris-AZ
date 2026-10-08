@@ -6,9 +6,10 @@ Noctaxris-AZ fails closed. Defaults favor a loopback lab on a single laptop.
 
 | Setting | Default | Notes |
 |---------|---------|-------|
-| HTTP listen | `127.0.0.1:4599` | Non-loopback without TLS requires `NOCTAXRIS_AZ_ALLOW_NONLOOPBACK_LISTEN=1` |
+| API listen | `127.0.0.1:4599` | Non-loopback without TLS requires `NOCTAXRIS_AZ_ALLOW_NONLOOPBACK_LISTEN=1`. Stock Compose enables `NOCTAXRIS_AZ_TLS_AUTO=1` (HTTPS) |
 | AMQP listen | `127.0.0.1:5672` | Non-loopback requires the same allow opt-in |
 | Compose publish | `127.0.0.1:4599` and `127.0.0.1:5672` | Stock Compose always publishes both. Container bind may be `0.0.0.0` with the opt-in above |
+| Public URL | unset (loopback rewrite) | `NOCTAXRIS_AZ_PUBLIC_URL` sets OIDC `iss` and `/metadata/endpoints`. Wildcard binds never appear as `0.0.0.0` in issuers |
 | Host Docker socket | never mounted | Nested DinD is opt-in only via `docker/compose.engine.yaml` |
 
 ## Nested engine (opt-in)
@@ -49,14 +50,16 @@ Noctaxris-AZ fails closed. Defaults favor a loopback lab on a single laptop.
 - Storage SAS that fails HMAC, expiry, or `sp` checks returns HTTP 403 `AuthenticationFailed`. Shared Key with a missing account stays HTTP 404 `AccountNotFound`.
 - Global Bearer middleware skips `/blob/`, `/queue/`, and `/table/` when the request already carries `Authorization: SharedKey …` or a SAS query so handlers can verify HMAC. That skip is intentional; do not force Bearer-only on those prefixes.
 - Global Bearer middleware skips `/cosmos/` when the request already carries `x-ms-cosmos-account-key` so the handler can verify the account key. That skip is intentional; do not force Bearer-only on those prefixes.
-- Public paths: `/_noctaxris-az/health`, `/_noctaxris-az/ready`, `/_noctaxris-az/version`
-  (or `/_lab/health|ready|version` only when `NOCTAXRIS_AZ_STRIP_PRODUCT=1`; the other trio is not registered),
+- Public paths: `/_noctaxris-az/health`, `/_noctaxris-az/ready`, `/_noctaxris-az/version`, `/_noctaxris-az/ca.pem`
+  (or `/_lab/health|ready|version|ca.pem` only when `NOCTAXRIS_AZ_STRIP_PRODUCT=1`; the inactive ops prefix is not registered for probes),
+  anonymous `GET /metadata/endpoints`,
   Entra token/OIDC discovery/JWKS, `POST /device`,
   `/_noctaxris-az/oidc-lab/*` (intentional public WIF lab IdP, including unauthenticated
   `POST …/oidc-lab/token` assertion mint for federated credential theatre),
   and IMDS `/metadata/identity/oauth2/token`
   (IMDS still requires Metadata, a known identity, and a loopback/link-local peer;
   RFC1918 peers are denied even when Host is the metadata address).
+- Azure CLI and azure-core based SDKs require HTTPS for Bearer. Cleartext HTTP on `:4599` is not a supported client path when those tools must work.
 - ACR Registry `/v2/` and `/oauth2/token` skip the ARM Bearer envelope so handlers
   can return Docker `WWW-Authenticate`; registry auth + RBAC still apply.
 - Nested image pulls fail closed unless allowlisted (`NOCTAXRIS_AZ_IMAGE_PULL_ALLOWLIST`).

@@ -21,8 +21,9 @@ type Service struct {
 	SubscriptionID string
 }
 
-// Mount registers role assignment routes.
+// Mount registers role assignment and role definition routes.
 func (s *Service) Mount(mux *http.ServeMux) {
+	s.mountRoleDefinitions(mux)
 	mux.HandleFunc("PUT /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/roleAssignments/{roleAssignmentName}", s.putAtSubscription)
 	mux.HandleFunc("GET /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/roleAssignments/{roleAssignmentName}", s.getAtSubscription)
 	mux.HandleFunc("DELETE /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/roleAssignments/{roleAssignmentName}", s.deleteAtSubscription)

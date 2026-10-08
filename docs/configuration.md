@@ -4,12 +4,14 @@ All settings use the `NOCTAXRIS_AZ_*` prefix.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `NOCTAXRIS_AZ_LISTEN` | `127.0.0.1:4599` | HTTP bind address |
+| `NOCTAXRIS_AZ_LISTEN` | `127.0.0.1:4599` | API bind address (HTTPS when TLS is on) |
 | `NOCTAXRIS_AZ_AMQP_LISTEN` | `127.0.0.1:5672` | Service Bus AMQP lite bind |
 | `NOCTAXRIS_AZ_DATA_ROOT` | `/var/lib/noctaxris-az` | SQLite + object blobs + audit |
 | `NOCTAXRIS_AZ_MASTER_KEY_FILE` | sibling `…-secrets/master.key` | 32-byte ChaCha20-Poly1305 key path (outside data root) |
-| `NOCTAXRIS_AZ_TLS_CERT` | empty | Optional TLS certificate PEM |
+| `NOCTAXRIS_AZ_TLS_CERT` | empty | Optional TLS certificate PEM (pair with `NOCTAXRIS_AZ_TLS_KEY`) |
 | `NOCTAXRIS_AZ_TLS_KEY` | empty | Optional TLS private key PEM |
+| `NOCTAXRIS_AZ_TLS_AUTO` | unset / false | Mint lab CA + `listen.crt` / `listen.key` under the secrets dir and serve TLS on the main listener. Stock Compose sets `1`. |
+| `NOCTAXRIS_AZ_PUBLIC_URL` | empty | Client-facing origin for OIDC `iss`, `/metadata/endpoints`, and ARM resource-manager URLs (no trailing slash required). Stock Compose sets `https://127.0.0.1:4599`. When unset, wildcard listen hosts rewrite to loopback. |
 | `NOCTAXRIS_AZ_ROOT_CLIENT_ID` | required at startup | Root principal / app client id |
 | `NOCTAXRIS_AZ_ROOT_ACCESS_TOKEN` | required at startup | Root Bearer token (held in memory) |
 | `NOCTAXRIS_AZ_TENANT_ID` | `00000000-0000-0000-0000-000000000001` | Lab tenant seeded by EnsureRoot |
@@ -28,7 +30,9 @@ All settings use the `NOCTAXRIS_AZ_*` prefix.
 
 ## HTTP auth
 
-Discovery, JWKS, token, device code, `POST /device`, lab OIDC discovery/JWKS/token (`/_noctaxris-az/oidc-lab/*`, intentional public WIF assertion mint), health/ready/version (`/_noctaxris-az/…` by default, or `/_lab/…` when `NOCTAXRIS_AZ_STRIP_PRODUCT=1`), and IMDS token skip Bearer. IMDS still requires `Metadata: true`, a known managed identity, and a loopback or link-local peer (RFC1918 peers are denied even when Host is the metadata address). `POST /provisioningwebservice.svc` does not skip Bearer; send a directory Bearer (`aud` `https://graph.microsoft.com` or `https://graph.windows.net`). Graph rejects tokens whose `aud` is ARM (`https://management.azure.com`, `https://management.core.windows.net`) or the token `iss`. ARM control-plane routes reject Graph `aud` (HTTP 403 `InvalidAuthenticationTokenAudience`). Key Vault data plane requires vault `aud` (`https://vault.azure.net`) plus data-plane RBAC. Storage `/blob|/queue|/table` skip the global Bearer envelope when the request already has `SharedKey` or SAS so handlers verify HMAC; Entra Bearer on those paths needs storage `aud` plus Storage Blob / Queue / Table data roles (Owner/Contributor alone do not authorize). Event Hubs HTTP send/receive accept root or Event Hubs Data Sender / Receiver / Data Owner; captured-events accept root or Data Receiver / Data Owner. Graph and SOAP do not require ARM `aud`. Root Bearer skips audience. Cloud-hosts TLS (`NOCTAXRIS_AZ_CLOUD_HOSTS=1`) enforces Host/SNI against the AzureCloud lab SAN list.
+Discovery, JWKS, token, device code, `POST /device`, lab OIDC discovery/JWKS/token (`/_noctaxris-az/oidc-lab/*`, intentional public WIF assertion mint), health/ready/version (`/_noctaxris-az/…` by default, or `/_lab/…` when `NOCTAXRIS_AZ_STRIP_PRODUCT=1`), lab CA PEM (`/_noctaxris-az/ca.pem` or `/_lab/ca.pem`), anonymous `GET /metadata/endpoints`, and IMDS token skip Bearer. IMDS still requires `Metadata: true`, a known managed identity, and a loopback or link-local peer (RFC1918 peers are denied even when Host is the metadata address). `POST /provisioningwebservice.svc` does not skip Bearer; send a directory Bearer (`aud` `https://graph.microsoft.com` or `https://graph.windows.net`). Graph rejects tokens whose `aud` is ARM (`https://management.azure.com`, `https://management.core.windows.net`) or the token `iss`. ARM control-plane routes reject Graph `aud` (HTTP 403 `InvalidAuthenticationTokenAudience`). Key Vault data plane requires vault `aud` (`https://vault.azure.net`) plus data-plane RBAC. Storage `/blob|/queue|/table` skip the global Bearer envelope when the request already has `SharedKey` or SAS so handlers verify HMAC; Entra Bearer on those paths needs storage `aud` plus Storage Blob / Queue / Table data roles (Owner/Contributor alone do not authorize). Event Hubs HTTP send/receive accept root or Event Hubs Data Sender / Receiver / Data Owner; captured-events accept root or Data Receiver / Data Owner. Graph and SOAP do not require ARM `aud`. Root Bearer skips audience. Cloud-hosts TLS (`NOCTAXRIS_AZ_CLOUD_HOSTS=1`) enforces Host/SNI against the AzureCloud lab SAN list.
+
+Azure CLI and azure-core based SDKs refuse Bearer tokens over cleartext HTTP. Prefer `NOCTAXRIS_AZ_TLS_AUTO=1` (or explicit `NOCTAXRIS_AZ_TLS_CERT` / `NOCTAXRIS_AZ_TLS_KEY`), set `NOCTAXRIS_AZ_PUBLIC_URL` to the HTTPS origin clients use, download the lab CA from `GET …/ca.pem`, and trust it before `az cloud register` / `az login`.
 
 ## Compose
 
@@ -36,6 +40,8 @@ When `docker/compose.yaml` is present it typically sets:
 
 - `NOCTAXRIS_AZ_LISTEN=0.0.0.0:4599`
 - `NOCTAXRIS_AZ_ALLOW_NONLOOPBACK_LISTEN=1`
+- `NOCTAXRIS_AZ_TLS_AUTO=1`
+- `NOCTAXRIS_AZ_PUBLIC_URL=https://127.0.0.1:4599`
 - `NOCTAXRIS_AZ_DATA_ROOT=/var/lib/noctaxris-az`
 - `NOCTAXRIS_AZ_MASTER_KEY_FILE=/var/lib/noctaxris-az-secrets/master.key`
 - Host publish `127.0.0.1:4599:4599` and `127.0.0.1:5672:5672` (AMQP lite always published on stock Compose)
@@ -49,19 +55,21 @@ before starting. Startup refuses that pair on the non-loopback container bind.
 
 ## Client endpoints
 
+Stock Compose and the TLS-auto path use `https://127.0.0.1:4599`. Cleartext `http://` remains available only when TLS is off (not usable by Azure CLI / azure-core Bearer clients).
+
 | Client | How to point at the lab |
 |--------|-------------------------|
-| curl / raw HTTP | `http://127.0.0.1:4599` + `Authorization: Bearer <token>` |
-| Azure CLI | `az rest` / ARM against `http://127.0.0.1:4599` with Bearer, or `az cloud register` (`--name`, `--endpoint-resource-manager`, `--endpoint-active-directory`, `--endpoint-microsoft-graph-resource-id`, `--skip-endpoint-discovery`; see README) |
-| Az PowerShell | `Add-AzEnvironment -Name ... -ResourceManagerEndpoint ... -ActiveDirectoryEndpoint ... -MicrosoftGraphUrl ... -MicrosoftGraphEndpointResourceId ...` then `Connect-AzAccount -Environment ...` (see README) |
-| Storage SDK | account endpoint `http://127.0.0.1:4599/blob/{account}` (Shared Key HMAC, SAS HMAC with `se`/`sp`, or Entra Bearer + Storage data roles) |
-| Key Vault SDK | vault base `http://127.0.0.1:4599/keyvault/{name}` + Bearer |
+| curl / raw HTTPS | `https://127.0.0.1:4599` + lab CA (`/_noctaxris-az/ca.pem`) + `Authorization: Bearer <token>` |
+| Azure CLI | Trust the lab CA, then `az cloud register` against `https://127.0.0.1:4599` (resource-manager, active-directory, microsoft-graph). Prefer discovery via anonymous `/metadata/endpoints`, or pass `--skip-endpoint-discovery` with explicit endpoints. Login with a seeded app registration secret: `az login --service-principal -u <appId> -p <secret> --tenant <tenant>` |
+| Az PowerShell | `Add-AzEnvironment` with HTTPS endpoints, then `Connect-AzAccount -Environment ... -ServicePrincipal ...` |
+| Storage SDK | account endpoint `https://127.0.0.1:4599/blob/{account}` (Shared Key HMAC, SAS HMAC with `se`/`sp`, or Entra Bearer + Storage data roles) |
+| Key Vault SDK | vault base `https://127.0.0.1:4599/keyvault/{name}` + Bearer |
 | Service Bus | AMQP `amqp://127.0.0.1:5672` (stock Compose always publishes this port) with signed SAS on attach; HTTP messages need Service Bus `aud` + data roles |
-| App Configuration | data plane `http://127.0.0.1:4599/appconfig/{store}` + Bearer |
-| Functions mock invoke | `POST http://127.0.0.1:4599/functions/{name}/invoke` + Bearer |
+| App Configuration | data plane `https://127.0.0.1:4599/appconfig/{store}` + Bearer |
+| Functions mock invoke | `POST https://127.0.0.1:4599/functions/{name}/invoke` + Bearer |
 | Monitor / Activity Log | ARM paths under `/subscriptions/.../providers/Microsoft.Insights/...` + Bearer |
-| Microsoft Graph PowerShell | `Add-MgEnvironment -Name ... -AzureADEndpoint ... -GraphEndpoint ...` then `Connect-MgGraph -Environment ... -AccessToken` |
-| Host/SNI AzureCloud | `NOCTAXRIS_AZ_CLOUD_HOSTS=1` on `127.0.0.1:8443`; HTTP `:4599` stays the default |
+| Microsoft Graph PowerShell | `Add-MgEnvironment` with HTTPS Graph/AAD endpoints, then `Connect-MgGraph -Environment ...` |
+| Host/SNI AzureCloud | Optional second listener: `NOCTAXRIS_AZ_CLOUD_HOSTS=1` on `127.0.0.1:8443` |
 | Lab inject flags | Process env (default off): `NOCTAXRIS_AZ_LAB_FORENSICS`, `NOCTAXRIS_AZ_ACTIVITY_INJECT`, `NOCTAXRIS_AZ_LOGS_INJECT`, `NOCTAXRIS_AZ_DEFENDER_INJECT`. Bearer root required. |
 
 ## Official CLI and PowerShell recipes
@@ -69,37 +77,50 @@ before starting. Startup refuses that pair on the non-loopback container bind.
 Learn flag names: `az cloud register` uses `--endpoint-resource-manager`, `--endpoint-active-directory`, `--endpoint-microsoft-graph-resource-id`, `--skip-endpoint-discovery`. Az.Accounts uses `-ResourceManagerEndpoint`, `-ActiveDirectoryEndpoint`, `-MicrosoftGraphUrl`, `-MicrosoftGraphEndpointResourceId`. Microsoft.Graph uses `-AzureADEndpoint` and `-GraphEndpoint`.
 
 ```bash
+curl -fsS -o lab-ca.pem https://127.0.0.1:4599/_noctaxris-az/ca.pem
+# trust lab-ca.pem in the OS / REQUESTS_CA_BUNDLE / SSL_CERT_FILE as appropriate
+
 az cloud register -n NoctaxrisAZ \
-  --endpoint-resource-manager http://127.0.0.1:4599 \
-  --endpoint-active-directory http://127.0.0.1:4599 \
-  --endpoint-microsoft-graph-resource-id http://127.0.0.1:4599 \
-  --skip-endpoint-discovery
+  --endpoint-resource-manager https://127.0.0.1:4599 \
+  --endpoint-active-directory https://127.0.0.1:4599 \
+  --endpoint-microsoft-graph-resource-id https://127.0.0.1:4599
 az cloud set -n NoctaxrisAZ
+# Prefer a seeded app registration + secret (durable session) over a static one-hour JWT:
+# az login --service-principal -u "$APP_ID" -p "$SECRET" --tenant "$TENANT_ID"
 ```
 
 ```powershell
 Add-AzEnvironment -Name NoctaxrisAZ `
-  -ResourceManagerEndpoint http://127.0.0.1:4599 `
-  -ActiveDirectoryEndpoint http://127.0.0.1:4599/ `
-  -MicrosoftGraphUrl http://127.0.0.1:4599 `
-  -MicrosoftGraphEndpointResourceId http://127.0.0.1:4599
-Connect-AzAccount -Environment NoctaxrisAZ
+  -ResourceManagerEndpoint https://127.0.0.1:4599 `
+  -ActiveDirectoryEndpoint https://127.0.0.1:4599/ `
+  -MicrosoftGraphUrl https://127.0.0.1:4599 `
+  -MicrosoftGraphEndpointResourceId https://127.0.0.1:4599
+Connect-AzAccount -Environment NoctaxrisAZ -ServicePrincipal `
+  -ApplicationId $AppId -Credential $SecretCredential -Tenant $TenantId
 
 Add-MgEnvironment -Name NoctaxrisAZ `
-  -AzureADEndpoint http://127.0.0.1:4599 `
-  -GraphEndpoint http://127.0.0.1:4599
-Connect-MgGraph -Environment NoctaxrisAZ -AccessToken $token
+  -AzureADEndpoint https://127.0.0.1:4599 `
+  -GraphEndpoint https://127.0.0.1:4599
+Connect-MgGraph -Environment NoctaxrisAZ
 ```
 
-Live `az`, AzureHound, `Connect-MgGraph`, and `prowler` runs are not executed in this cut. SDK smokes skip when those binaries are missing. Host/SNI plus lab CA steps are below.
+Live `az`, AzureHound, `Connect-MgGraph`, and `prowler` runs are not executed in CI. SDK smokes skip when those binaries are missing. Main-listener TLS auto and optional Host/SNI cloud-hosts share the same lab CA file.
 
-## Cloud hosts TLS
+## Main listener TLS (`NOCTAXRIS_AZ_TLS_AUTO`)
 
-HTTP `:4599` remains the default. Set `NOCTAXRIS_AZ_CLOUD_HOSTS=1` to start a second listener on `127.0.0.1:8443` (override with `NOCTAXRIS_AZ_CLOUD_HOSTS_LISTEN`). The process writes a lab CA and server cert into the secrets directory next to `master.key`:
+When TLS auto is on (stock Compose), the process writes PEMs next to `master.key`:
 
 | File | Role |
 |------|------|
-| `lab-ca.crt` | Lab CA (install this if a client verifies TLS) |
+| `lab-ca.crt` | Lab CA (also served at `GET /_noctaxris-az/ca.pem`) |
+| `listen.crt` / `listen.key` | Main API server cert (SANs include loopback plus any host from `NOCTAXRIS_AZ_PUBLIC_URL`) |
+
+## Cloud hosts TLS
+
+Optional second listener. Set `NOCTAXRIS_AZ_CLOUD_HOSTS=1` for `127.0.0.1:8443` (override with `NOCTAXRIS_AZ_CLOUD_HOSTS_LISTEN`). Shares `lab-ca.crt` and adds:
+
+| File | Role |
+|------|------|
 | `cloud-hosts.crt` | Server cert with AzureCloud DNS SANs plus `127.0.0.1` / `::1` |
 | `cloud-hosts.key` | Server private key (mode `0600`; do not commit) |
 

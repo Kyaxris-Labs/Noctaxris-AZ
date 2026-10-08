@@ -11,12 +11,23 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
 )
+
+// HostnamesFromPublicURL returns DNS names (no ports) from a public origin URL.
+func HostnamesFromPublicURL(publicURL string) []string {
+	u, err := url.Parse(strings.TrimSpace(publicURL))
+	if err != nil || u.Hostname() == "" {
+		return nil
+	}
+	return []string{u.Hostname()}
+}
 
 // DefaultCloudHostSANs are Microsoft AzureCloud hostnames tools call on 443.
 func DefaultCloudHostSANs() []string {
@@ -57,13 +68,111 @@ type Paths struct {
 	ServerKey  string
 }
 
-// DefaultPaths returns PEM paths under secretsDir.
+// DefaultPaths returns PEM paths under secretsDir (cloud-hosts listener).
 func DefaultPaths(secretsDir string) Paths {
 	return Paths{
 		CACert:     filepath.Join(secretsDir, "lab-ca.crt"),
 		ServerCert: filepath.Join(secretsDir, "cloud-hosts.crt"),
 		ServerKey:  filepath.Join(secretsDir, "cloud-hosts.key"),
 	}
+}
+
+// ListenPaths returns PEM paths for the main API listener (TLS auto).
+func ListenPaths(secretsDir string) Paths {
+	return Paths{
+		CACert:     filepath.Join(secretsDir, "lab-ca.crt"),
+		ServerCert: filepath.Join(secretsDir, "listen.crt"),
+		ServerKey:  filepath.Join(secretsDir, "listen.key"),
+	}
+}
+
+// EnsureListenCert writes a lab CA and server cert for the main listener when missing.
+// extraDNS hosts come from NOCTAXRIS_AZ_PUBLIC_URL (hostname only).
+func EnsureListenCert(secretsDir string, notAfter time.Time, extraDNS ...string) (Paths, error) {
+	if err := os.MkdirAll(secretsDir, 0o700); err != nil {
+		return Paths{}, err
+	}
+	p := ListenPaths(secretsDir)
+	if fileExists(p.ServerCert) && fileExists(p.ServerKey) && fileExists(p.CACert) {
+		return p, nil
+	}
+	if notAfter.IsZero() {
+		notAfter = time.Now().UTC().Add(365 * 24 * time.Hour)
+	}
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return Paths{}, err
+	}
+	caSerial, err := randSerial()
+	if err != nil {
+		return Paths{}, err
+	}
+	caTpl := &x509.Certificate{
+		SerialNumber:          caSerial,
+		Subject:               pkix.Name{CommonName: config.LabCACommonName(), Organization: []string{config.LabCAOrganization()}},
+		NotBefore:             time.Now().UTC().Add(-time.Hour),
+		NotAfter:              notAfter,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}
+	caDER, err := x509.CreateCertificate(rand.Reader, caTpl, caTpl, &caKey.PublicKey, caKey)
+	if err != nil {
+		return Paths{}, err
+	}
+	srvKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return Paths{}, err
+	}
+	srvSerial, err := randSerial()
+	if err != nil {
+		return Paths{}, err
+	}
+	dns := []string{"localhost"}
+	seen := map[string]struct{}{"localhost": {}}
+	for _, h := range extraDNS {
+		h = strings.TrimSpace(h)
+		if h == "" {
+			continue
+		}
+		if _, ok := seen[h]; ok {
+			continue
+		}
+		seen[h] = struct{}{}
+		dns = append(dns, h)
+	}
+	srvTpl := &x509.Certificate{
+		SerialNumber: srvSerial,
+		Subject:      pkix.Name{CommonName: "localhost"},
+		NotBefore:    time.Now().UTC().Add(-time.Hour),
+		NotAfter:     notAfter,
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames:     dns,
+		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")},
+	}
+	caCert, err := x509.ParseCertificate(caDER)
+	if err != nil {
+		return Paths{}, err
+	}
+	srvDER, err := x509.CreateCertificate(rand.Reader, srvTpl, caCert, &srvKey.PublicKey, caKey)
+	if err != nil {
+		return Paths{}, err
+	}
+	if err := writePEM(p.CACert, "CERTIFICATE", caDER, 0o644); err != nil {
+		return Paths{}, err
+	}
+	if err := writePEM(p.ServerCert, "CERTIFICATE", srvDER, 0o644); err != nil {
+		return Paths{}, err
+	}
+	keyDER, err := x509.MarshalECPrivateKey(srvKey)
+	if err != nil {
+		return Paths{}, err
+	}
+	if err := writePEM(p.ServerKey, "EC PRIVATE KEY", keyDER, 0o600); err != nil {
+		return Paths{}, err
+	}
+	return p, nil
 }
 
 // EnsureServerCert writes a lab CA and server cert with cloud-host SANs when missing.

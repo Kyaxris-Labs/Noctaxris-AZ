@@ -53,7 +53,7 @@ BulkSeed `scenarioId` values: `suspicious-signin`, `blob-exfil`, `crypto-mining`
 | `NOCTAXRIS_AZ_LOGS_INJECT` | `POST /_noctaxris-az/lab/logs:inject` and `POST /loganalytics/{workspace}/ingest/{table}` | Named Log Analytics tables (and any table name on the ingest route) |
 | `NOCTAXRIS_AZ_DEFENDER_INJECT` | `POST /_noctaxris-az/lab/securityAssessments:inject` | ARG `SecurityResources` (`microsoft.security/assessments` and `.../subassessments`) |
 
-Activity inject fields: `eventTimestamp`, `caller`, `operationName`, `status`, `resourceId`, `callerIpAddress` / `clientIp`, `identity`. List output includes `callerIpAddress`, `httpRequest.clientIpAddress`, and parsed `identity` when present. Client IP is taken from the TCP peer (`RemoteAddr`). Forwarded headers are ignored.
+Activity inject fields: `eventTimestamp`, `caller`, `operationName`, `status`, `resourceId`, `callerIpAddress` / `clientIp`, `identity`. List output includes `callerIpAddress`, `httpRequest.clientIpAddress`, and parsed `identity` when present. When inject `identity` is omitted, list synthesizes `identity.claims.appid` and the objectidentifier claim from `caller` so CLI / KQL projections that expect `appid` still work. Client IP is taken from the TCP peer (`RemoteAddr`). Forwarded headers are ignored.
 
 Log inject body: `{"workspace":"default","table":"<named>","rows":[{...}]}`. Missing `TimeGenerated` is filled from the lab clock. Named tables: `ApiManagementGatewayLogs`, `AADManagedIdentitySignInLogs`, `AADServicePrincipalSignInLogs`, `AzureActivity`, `ContainerAppSystemLogs`, `DataPlaneRequests`, `ContainerRegistryRepositoryEvents`.
 

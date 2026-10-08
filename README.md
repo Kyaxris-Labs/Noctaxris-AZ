@@ -15,10 +15,12 @@ docker run -d --name noctaxris-az -p 127.0.0.1:4599:4599 -p 127.0.0.1:5672:5672 
   -e NOCTAXRIS_AZ_LISTEN=0.0.0.0:4599 \
   -e NOCTAXRIS_AZ_AMQP_LISTEN=0.0.0.0:5672 \
   -e NOCTAXRIS_AZ_ALLOW_NONLOOPBACK_LISTEN=1 \
+  -e NOCTAXRIS_AZ_TLS_AUTO=1 \
+  -e NOCTAXRIS_AZ_PUBLIC_URL=https://127.0.0.1:4599 \
   -e NOCTAXRIS_AZ_ROOT_CLIENT_ID="$ROOT_ID" \
   -e NOCTAXRIS_AZ_ROOT_ACCESS_TOKEN="$ROOT_TOKEN" \
   kyaxris/noctaxris-az:latest
-curl http://127.0.0.1:4599/_noctaxris-az/health
+curl -k https://127.0.0.1:4599/_noctaxris-az/health
 # ok
 ```
 
@@ -29,7 +31,7 @@ curl http://127.0.0.1:4599/_noctaxris-az/health
   <a href="LICENSE"><img src="https://img.shields.io/github/license/Kyaxris-Labs/Noctaxris-AZ" alt="MIT License"></a>
 </p>
 
-Point Azure clients at `http://127.0.0.1:4599` with `Authorization: Bearer <token>` (Storage Shared Key / SAS; Service Bus AMQP on `:5672`).
+Point Azure clients at `https://127.0.0.1:4599` with the lab CA and `Authorization: Bearer <token>` (Storage Shared Key / SAS; Service Bus AMQP on `:5672`). Azure CLI and azure-core require HTTPS for Bearer.
 
 Go module: [`github.com/Kyaxris-Labs/Noctaxris-AZ`](https://github.com/Kyaxris-Labs/Noctaxris-AZ). Image tags: `latest`, semver releases, and `nightly` from CI.
 
@@ -39,12 +41,12 @@ Go module: [`github.com/Kyaxris-Labs/Noctaxris-AZ`](https://github.com/Kyaxris-L
 |---|---|
 | Lab fidelity | Entra (ROPC + apps lite), Managed Identity (user + system), ARM/RBAC, Key Vault (+ certs), Storage, Cosmos, Service Bus/Event Hubs/Event Grid, nested SQL/Postgres/Redis/ACR theatre, Network/VM/AKS, App/edge/AI labs, Monitor/Log Analytics |
 | Secure defaults | Loopback publish only. No host `docker.sock`. Master key outside the data root |
-| Dual listeners | HTTP `:4599` plus AMQP lite `:5672` for Service Bus clients |
+| Dual listeners | HTTPS `:4599` (TLS auto in stock Compose) plus AMQP lite `:5672` for Service Bus clients |
 | Nested compute | DinD via Compose engine over TLS is opt-in when present. Default Functions invoke stays mock |
 
 ## Quick start
 
-Pull the Hub image, run it on loopback `:4599`, then hit the subscription with the same root Bearer you passed in.
+Pull the Hub image, run TLS on loopback `:4599`, trust the lab CA, then hit the subscription with the same root Bearer you passed in.
 
 ```bash
 docker pull kyaxris/noctaxris-az:latest
@@ -56,30 +58,33 @@ docker run -d --name noctaxris-az -p 127.0.0.1:4599:4599 -p 127.0.0.1:5672:5672 
   -e NOCTAXRIS_AZ_LISTEN=0.0.0.0:4599 \
   -e NOCTAXRIS_AZ_AMQP_LISTEN=0.0.0.0:5672 \
   -e NOCTAXRIS_AZ_ALLOW_NONLOOPBACK_LISTEN=1 \
+  -e NOCTAXRIS_AZ_TLS_AUTO=1 \
+  -e NOCTAXRIS_AZ_PUBLIC_URL=https://127.0.0.1:4599 \
   -e NOCTAXRIS_AZ_ROOT_CLIENT_ID="$ROOT_ID" \
   -e NOCTAXRIS_AZ_ROOT_ACCESS_TOKEN="$ROOT_TOKEN" \
   kyaxris/noctaxris-az:latest
 
-curl http://127.0.0.1:4599/_noctaxris-az/health
-curl http://127.0.0.1:4599/_noctaxris-az/ready
+curl -k https://127.0.0.1:4599/_noctaxris-az/health
+curl -k https://127.0.0.1:4599/_noctaxris-az/ready
+curl -k -o lab-ca.pem https://127.0.0.1:4599/_noctaxris-az/ca.pem
 
 SUB=00000000-0000-0000-0000-000000000002
-curl -H "Authorization: Bearer $ROOT_TOKEN" \
-  "http://127.0.0.1:4599/subscriptions/$SUB?api-version=2022-12-01"
+curl --cacert lab-ca.pem -H "Authorization: Bearer $ROOT_TOKEN" \
+  "https://127.0.0.1:4599/subscriptions/$SUB?api-version=2022-12-01"
 ```
 
-When Compose files are present, copy `docker/.env.example` to `docker/.env`, replace both root values with unique lab credentials, then `docker compose -f docker/compose.yaml --env-file docker/.env up --build`. Default host publish is `127.0.0.1:4599` and `127.0.0.1:5672` (AMQP lite). Per-service smoke: [docs/services/](docs/services/index.md).
+When Compose files are present, copy `docker/.env.example` to `docker/.env`, replace both root values with unique lab credentials, then `docker compose -f docker/compose.yaml --env-file docker/.env up --build`. Stock Compose enables TLS auto and `NOCTAXRIS_AZ_PUBLIC_URL=https://127.0.0.1:4599`. Host publish is `127.0.0.1:4599` and `127.0.0.1:5672` (AMQP lite). Per-service smoke: [docs/services/](docs/services/index.md).
 
 ## Client environments
 
-HTTP `:4599` is the default. Cloud-hosts TLS (`NOCTAXRIS_AZ_CLOUD_HOSTS=1`) listens on `127.0.0.1:8443` with a lab CA. Mapping AzureCloud names in the hosts file hijacks those names for the whole machine; use a lab VM and uninstall the lab CA when finished. Details: [docs/configuration.md](docs/configuration.md).
+HTTPS `:4599` with TLS auto is the stock path. Download `GET /_noctaxris-az/ca.pem` and trust it before Azure CLI or SDK calls. Optional cloud-hosts TLS (`NOCTAXRIS_AZ_CLOUD_HOSTS=1`) listens on `127.0.0.1:8443` with the same lab CA. Mapping AzureCloud names in the hosts file hijacks those names for the whole machine; use a lab VM and uninstall the lab CA when finished. Details: [docs/configuration.md](docs/configuration.md).
 
 | Client | Point it at the lab |
 |--------|---------------------|
-| Azure CLI | `az cloud register -n NoctaxrisAZ --endpoint-resource-manager http://127.0.0.1:4599 --endpoint-active-directory http://127.0.0.1:4599 --endpoint-microsoft-graph-resource-id http://127.0.0.1:4599 --skip-endpoint-discovery` then `az cloud set -n NoctaxrisAZ` |
-| Az PowerShell | `Add-AzEnvironment -Name NoctaxrisAZ -ResourceManagerEndpoint http://127.0.0.1:4599 -ActiveDirectoryEndpoint http://127.0.0.1:4599/ -MicrosoftGraphUrl http://127.0.0.1:4599 -MicrosoftGraphEndpointResourceId http://127.0.0.1:4599` then `Connect-AzAccount -Environment NoctaxrisAZ` |
-| Microsoft Graph PowerShell | `Add-MgEnvironment -Name NoctaxrisAZ -AzureADEndpoint http://127.0.0.1:4599 -GraphEndpoint http://127.0.0.1:4599` then `Connect-MgGraph -Environment NoctaxrisAZ -AccessToken $token` |
-| Host/SNI AzureCloud | `NOCTAXRIS_AZ_CLOUD_HOSTS=1`; lab CA from `go run ./scripts/generatelabca ./lab-ca` or secrets next to `master.key` |
+| Azure CLI | Trust the lab CA, then `az cloud register -n NoctaxrisAZ --endpoint-resource-manager https://127.0.0.1:4599 --endpoint-active-directory https://127.0.0.1:4599 --endpoint-microsoft-graph-resource-id https://127.0.0.1:4599` and `az cloud set -n NoctaxrisAZ`. Prefer `az login --service-principal` with a seeded app registration secret (not a static one-hour JWT). |
+| Az PowerShell | `Add-AzEnvironment` with HTTPS endpoints, then `Connect-AzAccount -Environment NoctaxrisAZ -ServicePrincipal ...` |
+| Microsoft Graph PowerShell | `Add-MgEnvironment` with HTTPS Graph/AAD endpoints, then `Connect-MgGraph -Environment NoctaxrisAZ` |
+| Host/SNI AzureCloud | `NOCTAXRIS_AZ_CLOUD_HOSTS=1`; lab CA from `GET /_noctaxris-az/ca.pem` or secrets next to `master.key` |
 | Prowler Azure | Same Host/SNI path (AzureCloud URLs). Live `prowler` is not executed; smokes skip when the binary is missing. |
 | Lab inject | `NOCTAXRIS_AZ_LAB_FORENSICS`, `NOCTAXRIS_AZ_ACTIVITY_INJECT`, `NOCTAXRIS_AZ_LOGS_INJECT` (also `POST /loganalytics/{workspace}/ingest/{table}`), `NOCTAXRIS_AZ_DEFENDER_INJECT` (default off; Bearer root) |
 
@@ -238,7 +243,7 @@ Open the service matrix for detailed actions and gaps. Full notes and CLI smoke:
 
 | Setting | Value |
 |---------|--------|
-| Listen | `127.0.0.1:4599` and `127.0.0.1:5672` |
+| Listen | `127.0.0.1:4599` (HTTPS with TLS auto in stock Compose) and `127.0.0.1:5672` |
 | Docker | No host `docker.sock` (nested DinD opt-in via Compose engine overlay) |
 | Nested compute | Opt-in (`compose.engine.yaml`). Default Functions invoke stays mock |
 | Data ports | Compose publishes `127.0.0.1:4599` and `127.0.0.1:5672` |

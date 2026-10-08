@@ -14,8 +14,12 @@ Azure RBAC role assignments lite on ARM scopes.
 | `GET` | `/{scope}/providers/Microsoft.Authorization/roleAssignments/{name}` |
 | `DELETE` | `/{scope}/providers/Microsoft.Authorization/roleAssignments/{name}` |
 | `GET` | `/{scope}/providers/Microsoft.Authorization/roleAssignments` |
+| `GET` | `/subscriptions/{sub}/providers/Microsoft.Authorization/roleDefinitions` |
+| `GET` | `/subscriptions/{sub}/providers/Microsoft.Authorization/roleDefinitions/{roleDefinitionId}` |
+| `GET` | `/providers/Microsoft.Authorization/roleDefinitions` |
+| `GET` | `/providers/Microsoft.Authorization/roleDefinitions/{roleDefinitionId}` |
 
-`scope` is `/subscriptions/{sub}`, `/subscriptions/{sub}/resourceGroups/{rg}`, or a resource id such as `/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.KeyVault/vaults/{name}`. `api-version` is required.
+`scope` is `/subscriptions/{sub}`, `/subscriptions/{sub}/resourceGroups/{rg}`, or a resource id such as `/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.KeyVault/vaults/{name}`. `api-version` is required. Role definition routes authorize `Microsoft.Authorization/roleDefinitions/read`.
 
 ## Authz
 
@@ -28,6 +32,7 @@ Azure RBAC role assignments lite on ARM scopes.
 - Upsert role assignment with `roleDefinitionId` + `principalId`
 - Delete a role assignment (HTTP 200 with the deleted body). Appends Activity Log `Microsoft.Authorization/roleAssignments/delete`
 - List role assignments by subscription or resource group scope prefix
+- List/get built-in role definitions (lab catalogue; not custom role CRUD)
 - Exact scope match for each ancestor in the ARM scope chain (sibling resource group names do not share a prefix)
 - Role definition IDs match built-in GUIDs (or the full roleDefinitions path). Display-name substrings such as `owner` are not Owner.
 - Group principal assignments expand `entra_group_members` (nested groups, depth cap 8)
@@ -65,7 +70,7 @@ Built-in GUIDs the evaluator maps (full `/providers/Microsoft.Authorization/role
 
 ## Deferred depth
 
-- Full role definition catalogue
+- Custom role definitions CRUD and permissions arrays beyond the lab catalogue
 - Management group scoped assignments
 
 ## Verification / CLI smoke
@@ -74,6 +79,9 @@ Built-in GUIDs the evaluator maps (full `/providers/Microsoft.Authorization/role
 TOKEN=$NOCTAXRIS_AZ_ROOT_ACCESS_TOKEN
 SUB=$NOCTAXRIS_AZ_SUBSCRIPTION_ID
 SCOPE="/subscriptions/$SUB"
-curl -s -H "Authorization: Bearer $TOKEN" \
-  "http://127.0.0.1:4599$SCOPE/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01"
+BASE="${NOCTAXRIS_AZ_PUBLIC_URL:-https://127.0.0.1:4599}"
+curl -s --cacert lab-ca.pem -H "Authorization: Bearer $TOKEN" \
+  "$BASE$SCOPE/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01"
+curl -s --cacert lab-ca.pem -H "Authorization: Bearer $TOKEN" \
+  "$BASE$SCOPE/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01"
 ```

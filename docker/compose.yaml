@@ -18,8 +18,11 @@ services:
       NOCTAXRIS_AZ_LISTEN: "0.0.0.0:4599"
       NOCTAXRIS_AZ_AMQP_LISTEN: "0.0.0.0:5672"
       # Required for the container binds above. Stock host publish is always
-      # 127.0.0.1:4599 (HTTP) and 127.0.0.1:5672 (AMQP lite).
+      # 127.0.0.1:4599 and 127.0.0.1:5672 (AMQP lite).
       NOCTAXRIS_AZ_ALLOW_NONLOOPBACK_LISTEN: "1"
+      # TLS on :4599 so Azure CLI / azure-core Bearer clients work (HTTPS required).
+      NOCTAXRIS_AZ_TLS_AUTO: "1"
+      NOCTAXRIS_AZ_PUBLIC_URL: "https://127.0.0.1:4599"
       NOCTAXRIS_AZ_DATA_ROOT: "/var/lib/noctaxris-az"
       # Sibling secrets volume (outside data root; required under read_only rootfs).
       NOCTAXRIS_AZ_MASTER_KEY_FILE: "/var/lib/noctaxris-az-secrets/master.key"

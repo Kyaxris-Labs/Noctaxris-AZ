@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -89,6 +90,14 @@ func (s *Server) registerREST() {
 	s.mux.HandleFunc(s.cfg.HealthPath(), s.handleHealth)
 	s.mux.HandleFunc(s.cfg.ReadyPath(), s.handleReady)
 	s.mux.HandleFunc(s.cfg.VersionPath(), s.handleVersion)
+	s.mux.HandleFunc(s.cfg.CAPath(), s.handleCA)
+	// Always register the inactive ops CA path as public 404-capable sibling for strip mode.
+	if s.cfg.StripProduct {
+		s.mux.HandleFunc("/_noctaxris-az/ca.pem", s.handleCA)
+	} else {
+		s.mux.HandleFunc("/_lab/ca.pem", s.handleCA)
+	}
+	s.mux.HandleFunc("GET /metadata/endpoints", s.handleMetadataEndpoints)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -121,6 +130,70 @@ func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"version": version.Version})
+}
+
+func (s *Server) secretsDir() string {
+	if s.cfg.MasterKeyPath != "" {
+		return filepath.Dir(s.cfg.MasterKeyPath)
+	}
+	return filepath.Dir(store.DefaultMasterKeyPath(s.cfg.DataRoot))
+}
+
+func (s *Server) handleCA(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		azerrors.BadRequest(w, "method not allowed")
+		return
+	}
+	path := tlsutil.DefaultPaths(s.secretsDir()).CACert
+	if _, err := os.Stat(path); err != nil {
+		// Generate listen certs (writes lab-ca.crt) when TLS auto or cloud-hosts would.
+		if s.cfg.TLSAuto || s.cfg.CloudHosts || s.cfg.TLSEnabled() {
+			extra := tlsutil.HostnamesFromPublicURL(s.cfg.PublicURL)
+			if _, err := tlsutil.EnsureListenCert(s.secretsDir(), time.Time{}, extra...); err != nil {
+				azerrors.WriteARM(w, http.StatusServiceUnavailable, "ServiceUnavailable", "lab CA unavailable")
+				return
+			}
+		} else {
+			azerrors.WriteARM(w, http.StatusNotFound, "ResourceNotFound", "lab CA not generated; set NOCTAXRIS_AZ_TLS_AUTO=1 or NOCTAXRIS_AZ_CLOUD_HOSTS=1")
+			return
+		}
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusServiceUnavailable, "ServiceUnavailable", "lab CA unreadable")
+		return
+	}
+	w.Header().Set("Content-Type", "application/x-pem-file")
+	w.Header().Set("Content-Disposition", `attachment; filename="lab-ca.pem"`)
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(raw)
+}
+
+func (s *Server) handleMetadataEndpoints(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		azerrors.BadRequest(w, "method not allowed")
+		return
+	}
+	base := s.cfg.PublicBase()
+	rm := s.cfg.ResourceManagerBase()
+	login := base + "/"
+	writeJSONMeta(w, http.StatusOK, map[string]any{
+		"galleryEndpoint": rm + "/gallery",
+		"graphEndpoint":   base,
+		"portalEndpoint":  base,
+		"authentication": map[string]any{
+			"loginEndpoint":    login,
+			"audiences":        []string{rm, "https://management.core.windows.net/", "https://management.azure.com/"},
+			"tenant":           "common",
+			"identityProvider": "AAD",
+		},
+	})
+}
+
+func writeJSONMeta(w http.ResponseWriter, code int, v any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 // Handler returns the HTTP handler with auth middleware.
@@ -190,6 +263,17 @@ func (s *Server) StartAMQP(ctx context.Context) error {
 // ListenAndServeContext serves until ctx is cancelled, then drains with a timeout.
 func (s *Server) ListenAndServeContext(ctx context.Context) error {
 	handler := s.Handler()
+	certFile := strings.TrimSpace(s.cfg.TLSCertFile)
+	keyFile := strings.TrimSpace(s.cfg.TLSKeyFile)
+	if s.cfg.TLSAuto && (certFile == "" || keyFile == "") {
+		extra := tlsutil.HostnamesFromPublicURL(s.cfg.PublicURL)
+		paths, err := tlsutil.EnsureListenCert(s.secretsDir(), time.Time{}, extra...)
+		if err != nil {
+			return fmt.Errorf("tls auto cert: %w", err)
+		}
+		certFile, keyFile = paths.ServerCert, paths.ServerKey
+	}
+	useTLS := certFile != "" && keyFile != ""
 	main := &http.Server{
 		Addr:              s.cfg.ListenAddr,
 		Handler:           handler,
@@ -198,8 +282,8 @@ func (s *Server) ListenAndServeContext(ctx context.Context) error {
 	errCh := make(chan error, 2)
 	go func() {
 		var err error
-		if s.cfg.TLSEnabled() {
-			err = main.ListenAndServeTLS(s.cfg.TLSCertFile, s.cfg.TLSKeyFile)
+		if useTLS {
+			err = main.ListenAndServeTLS(certFile, keyFile)
 		} else {
 			err = main.ListenAndServe()
 		}
@@ -208,10 +292,7 @@ func (s *Server) ListenAndServeContext(ctx context.Context) error {
 
 	var cloud *http.Server
 	if s.cfg.CloudHosts {
-		secretsDir := filepath.Dir(store.DefaultMasterKeyPath(s.cfg.DataRoot))
-		if s.cfg.MasterKeyPath != "" {
-			secretsDir = filepath.Dir(s.cfg.MasterKeyPath)
-		}
+		secretsDir := s.secretsDir()
 		paths, err := tlsutil.EnsureServerCert(secretsDir, time.Time{})
 		if err != nil {
 			return fmt.Errorf("cloud-hosts cert: %w", err)

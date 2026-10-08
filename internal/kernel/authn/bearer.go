@@ -66,8 +66,11 @@ func HashToken(token string) string {
 func IsPublicPath(path string) bool {
 	switch path {
 	case "/_noctaxris-az/health", "/_noctaxris-az/ready", "/_noctaxris-az/version",
+		"/_noctaxris-az/ca.pem",
 		"/_lab/health", "/_lab/ready", "/_lab/version",
+		"/_lab/ca.pem",
 		"/metadata/identity/oauth2/token",
+		"/metadata/endpoints",
 		"/device":
 		return true
 	default:

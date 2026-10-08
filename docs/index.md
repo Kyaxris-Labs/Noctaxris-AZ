@@ -2,7 +2,7 @@
 
 Public reference for **Noctaxris-AZ** (module `github.com/Kyaxris-Labs/Noctaxris-AZ`). Product name is PascalCase `Noctaxris-AZ`.
 
-Noctaxris-AZ is a Docker-first Azure-shaped emulator for cloud security labs. Lab cores ship loopback by default (`:4599` HTTP, `:5672` AMQP lite), no host `docker.sock`, master key outside the data root, Bearer auth with Azure RBAC evaluation, Shared Key / SAS for Storage, and connection-string / SAS for Service Bus. Nested DinD is opt-in via Compose when present.
+Noctaxris-AZ is a Docker-first Azure-shaped emulator for cloud security labs. Lab cores ship loopback by default (`:4599` HTTPS with TLS auto in stock Compose, `:5672` AMQP lite), no host `docker.sock`, master key outside the data root, Bearer auth with Azure RBAC evaluation, Shared Key / SAS for Storage, and connection-string / SAS for Service Bus. Nested DinD is opt-in via Compose when present.
 
 ## Reference
 

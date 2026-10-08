@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 1.4.0
+
+Minor after 1.3.2: TLS and public URL so Azure CLI / SDK Bearer clients work against the main listener, anonymous cloud metadata and lab CA, RBAC-filtered subscription list, built-in role definitions, Activity Log `appid`. Docker Hub: `kyaxris/noctaxris-az` (`1.4.0`, `1.4`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
+
+- TLS auto on the main listener (`NOCTAXRIS_AZ_TLS_AUTO=1`) mints `listen.crt` / `listen.key` plus lab CA under the secrets dir. Stock Compose enables TLS auto and `NOCTAXRIS_AZ_PUBLIC_URL=https://127.0.0.1:4599` so Azure CLI and azure-core Bearer clients can use HTTPS (cleartext Bearer is rejected by those stacks).
+- `NOCTAXRIS_AZ_PUBLIC_URL` drives OIDC `iss`, `/metadata/endpoints`, and ARM resource-manager URLs. Without it, wildcard binds (`0.0.0.0`, `[::]`, bare `:port`) rewrite to loopback in `PublicBase` / `IssuerBase` (no more `http://0.0.0.0:4599` issuers).
+- Anonymous `GET /metadata/endpoints` (Azure cloud metadata shape from the public URL). Anonymous lab CA download at `GET /_noctaxris-az/ca.pem` (or `/_lab/ca.pem` when `NOCTAXRIS_AZ_STRIP_PRODUCT=1`); generated on demand when TLS auto or cloud-hosts is on.
+- `GET /subscriptions` returns HTTP 200 with only subscriptions the principal can `Microsoft.Resources/subscriptions/read` (empty `value` when none). Matches `az login` / `az account list` without `--allow-no-subscriptions`.
+- Built-in role definition list/get under `/subscriptions/{sub}/providers/Microsoft.Authorization/roleDefinitions` and tenant `/providers/Microsoft.Authorization/roleDefinitions`.
+- Activity Log list synthesizes `identity.claims.appid` (and objectidentifier) from `caller` when inject identity JSON is absent.
+- Binary `healthcheck` probes HTTPS with TLS verify skipped when TLS auto or PEM paths are set.
+
 ## 1.3.2
 
 Patch after 1.3.1: opt-in product strip for challenge images. Docker Hub: `kyaxris/noctaxris-az` (`1.3.2`, `1.3`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).

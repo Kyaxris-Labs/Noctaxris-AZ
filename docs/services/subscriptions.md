@@ -43,7 +43,8 @@ ARG `POST /providers/Microsoft.ResourceGraph/resources` evaluates `Microsoft.Res
 ## Authz
 
 - Bearer required. Token `aud` must be `https://management.azure.com` or `https://management.core.windows.net` (Graph `aud` is HTTP 403 `InvalidAuthenticationTokenAudience`). Root Bearer skips audience.
-- `Microsoft.Resources/subscriptions/read`
+- `GET /subscriptions` evaluates `Microsoft.Resources/subscriptions/read` per row and returns HTTP 200 with only visible subscriptions (possibly empty). No grant is not HTTP 403 on the list route.
+- `Microsoft.Resources/subscriptions/read` (get and list filter)
 - `Microsoft.Resources/subscriptions/resourceGroups/read|write`
 - `Microsoft.Resources/tenants/read`
 - `Microsoft.Management/managementGroups/read` (descendants authorize `/providers/Microsoft.Management/managementGroups/{id}`)
@@ -52,7 +53,7 @@ ARG `POST /providers/Microsoft.ResourceGraph/resources` evaluates `Microsoft.Res
 
 ## Detailed actions
 
-- List and get subscription display name / state / tenant
+- List and get subscription display name / state / tenant (list is RBAC-filtered)
 - List tenants (lab tenant from the seeded subscription)
 - List management groups and descendants (direct child groups, plus same-tenant subscriptions under the tenant-root group). Unknown `{id}` returns 404.
 - Upsert and get resource group location
@@ -83,20 +84,21 @@ ARG `POST /providers/Microsoft.ResourceGraph/resources` evaluates `Microsoft.Res
 ```bash
 TOKEN=$NOCTAXRIS_AZ_ROOT_ACCESS_TOKEN
 SUB=${NOCTAXRIS_AZ_SUBSCRIPTION_ID:-00000000-0000-0000-0000-000000000002}
-curl -s -H "Authorization: Bearer $TOKEN" \
-  "http://127.0.0.1:4599/subscriptions?api-version=2022-12-01"
-curl -s -H "Authorization: Bearer $TOKEN" \
-  "http://127.0.0.1:4599/subscriptions/$SUB?api-version=2022-12-01"
-curl -s -H "Authorization: Bearer $TOKEN" \
-  "http://127.0.0.1:4599/tenants?api-version=2022-12-01"
-curl -s -H "Authorization: Bearer $TOKEN" \
-  "http://127.0.0.1:4599/providers/Microsoft.Management/managementGroups/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/descendants?api-version=2020-05-01"
-curl -s -H "Authorization: Bearer $TOKEN" -X POST \
+BASE="${NOCTAXRIS_AZ_PUBLIC_URL:-https://127.0.0.1:4599}"
+curl -s --cacert lab-ca.pem -H "Authorization: Bearer $TOKEN" \
+  "$BASE/subscriptions?api-version=2022-12-01"
+curl -s --cacert lab-ca.pem -H "Authorization: Bearer $TOKEN" \
+  "$BASE/subscriptions/$SUB?api-version=2022-12-01"
+curl -s --cacert lab-ca.pem -H "Authorization: Bearer $TOKEN" \
+  "$BASE/tenants?api-version=2022-12-01"
+curl -s --cacert lab-ca.pem -H "Authorization: Bearer $TOKEN" \
+  "$BASE/providers/Microsoft.Management/managementGroups/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/descendants?api-version=2020-05-01"
+curl -s --cacert lab-ca.pem -H "Authorization: Bearer $TOKEN" -X POST \
   -H "Content-Type: application/json" \
   -d '{"subscriptions":["'"$SUB"'"],"query":"Resources"}' \
-  "http://127.0.0.1:4599/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01"
-curl -s -H "Authorization: Bearer $TOKEN" -X PUT \
+  "$BASE/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01"
+curl -s --cacert lab-ca.pem -H "Authorization: Bearer $TOKEN" -X PUT \
   -H "Content-Type: application/json" \
   -d '{"location":"eastus"}' \
-  "http://127.0.0.1:4599/subscriptions/$SUB/resourcegroups/rg1?api-version=2022-09-01"
+  "$BASE/subscriptions/$SUB/resourcegroups/rg1?api-version=2022-09-01"
 ```

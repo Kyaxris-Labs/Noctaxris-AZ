@@ -17,6 +17,8 @@ const (
 	EnvLogsInject             = "NOCTAXRIS_AZ_LOGS_INJECT"
 	EnvDefenderInject         = "NOCTAXRIS_AZ_DEFENDER_INJECT"
 	EnvStripProduct           = "NOCTAXRIS_AZ_STRIP_PRODUCT"
+	EnvPublicURL              = "NOCTAXRIS_AZ_PUBLIC_URL"
+	EnvTLSAuto                = "NOCTAXRIS_AZ_TLS_AUTO"
 
 	DefaultListenAddr           = "127.0.0.1:4599"
 	DefaultAMQPListenAddr       = "127.0.0.1:5672"
@@ -51,6 +53,8 @@ type Config struct {
 	MasterKeyPath          string
 	TLSCertFile            string
 	TLSKeyFile             string
+	TLSAuto                bool
+	PublicURL              string
 	RootClientID           string
 	RootAccessToken        string
 	TenantID               string
@@ -81,6 +85,8 @@ func LoadFromEnv() (Config, error) {
 		MasterKeyPath:          getenv("NOCTAXRIS_AZ_MASTER_KEY_FILE", ""),
 		TLSCertFile:            getenv("NOCTAXRIS_AZ_TLS_CERT", ""),
 		TLSKeyFile:             getenv("NOCTAXRIS_AZ_TLS_KEY", ""),
+		TLSAuto:                envTruthy(EnvTLSAuto),
+		PublicURL:              strings.TrimSpace(getenv(EnvPublicURL, "")),
 		RootClientID:           getenv("NOCTAXRIS_AZ_ROOT_CLIENT_ID", ""),
 		RootAccessToken:        getenv("NOCTAXRIS_AZ_ROOT_ACCESS_TOKEN", ""),
 		TenantID:               getenv("NOCTAXRIS_AZ_TENANT_ID", DefaultTenantID),
@@ -236,9 +242,53 @@ func ListenIsLoopback(addr string) bool {
 	return ip.IsLoopback()
 }
 
-// TLSEnabled reports whether both TLS PEM paths are set.
+// TLSEnabled reports whether both TLS PEM paths are set, or TLS auto is on.
 func (c Config) TLSEnabled() bool {
-	return strings.TrimSpace(c.TLSCertFile) != "" && strings.TrimSpace(c.TLSKeyFile) != ""
+	if strings.TrimSpace(c.TLSCertFile) != "" && strings.TrimSpace(c.TLSKeyFile) != "" {
+		return true
+	}
+	return c.TLSAuto
+}
+
+// PublicBase is the client-facing origin for OIDC iss, cloud metadata, and CLI register.
+// Prefer NOCTAXRIS_AZ_PUBLIC_URL. Otherwise rewrite wildcard binds to loopback.
+func (c Config) PublicBase() string {
+	if u := strings.TrimSpace(c.PublicURL); u != "" {
+		return strings.TrimRight(u, "/")
+	}
+	if c.CloudHosts {
+		return "https://login.microsoftonline.com"
+	}
+	scheme := "http"
+	if c.TLSEnabled() {
+		scheme = "https"
+	}
+	return scheme + "://" + publicListenHost(c.ListenAddr)
+}
+
+// ResourceManagerBase is the ARM origin advertised in /metadata/endpoints.
+func (c Config) ResourceManagerBase() string {
+	if u := strings.TrimSpace(c.PublicURL); u != "" {
+		return strings.TrimRight(u, "/")
+	}
+	if c.CloudHosts {
+		return "https://management.azure.com"
+	}
+	return c.PublicBase()
+}
+
+func publicListenHost(listenAddr string) string {
+	host := strings.TrimSpace(listenAddr)
+	switch {
+	case strings.HasPrefix(host, "0.0.0.0:"):
+		return "127.0.0.1" + strings.TrimPrefix(host, "0.0.0.0")
+	case strings.HasPrefix(host, "[::]:"):
+		return "[::1]" + strings.TrimPrefix(host, "[::]")
+	case strings.HasPrefix(host, ":"):
+		return "127.0.0.1" + host
+	default:
+		return host
+	}
 }
 
 // ValidateListenSecurity fails closed for non-loopback HTTP without TLS/allow.
@@ -271,16 +321,14 @@ func ValidateCloudHostsListen(c Config) error {
 		c.CloudHostsListen, EnvAllowNonLoopbackListen)
 }
 
-// IssuerBase is the OIDC issuer origin. Cloud-hosts mode uses the public login host.
+// IssuerBase is the OIDC issuer origin (iss / discovery). Uses PublicBase.
 func (c Config) IssuerBase() string {
-	if c.CloudHosts {
-		return "https://login.microsoftonline.com"
-	}
-	scheme := "http"
-	if c.TLSEnabled() {
-		scheme = "https"
-	}
-	return scheme + "://" + c.ListenAddr
+	return c.PublicBase()
+}
+
+// CAPath returns the ops path that serves the lab CA PEM.
+func (c Config) CAPath() string {
+	return c.OpsPathPrefix() + "/ca.pem"
 }
 
 // ValidateAMQPListenSecurity fails closed for non-loopback AMQP without allow.
