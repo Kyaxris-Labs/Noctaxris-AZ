@@ -13,6 +13,7 @@ Minor after 1.3.2: TLS and public URL so Azure CLI / SDK Bearer clients work aga
 - Built-in role definition list/get under `/subscriptions/{sub}/providers/Microsoft.Authorization/roleDefinitions` and tenant `/providers/Microsoft.Authorization/roleDefinitions`.
 - Activity Log list synthesizes `identity.claims.appid` (and objectidentifier) from `caller` when inject identity JSON is absent.
 - Binary `healthcheck` probes HTTPS with TLS verify skipped when TLS auto or PEM paths are set.
+- CI `smoke-core` (and integration wait) uses `https://127.0.0.1:4599` with `curl -k` so readiness matches stock Compose TLS auto.
 
 ## 1.3.2
 

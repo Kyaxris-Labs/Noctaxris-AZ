@@ -107,8 +107,9 @@ jobs:
         run: docker compose -f docker/compose.yaml --env-file docker/.env up --build -d
       - name: Wait for readiness
         run: |
+          # Stock compose serves HTTPS (NOCTAXRIS_AZ_TLS_AUTO=1). Use -k for the lab CA.
           for i in $(seq 1 60); do
-            if curl -fsS http://127.0.0.1:4599/_noctaxris-az/ready | grep -q ok; then
+            if curl -fsSk https://127.0.0.1:4599/_noctaxris-az/ready | grep -q ok; then
               echo "ready"
               exit 0
             fi
@@ -119,25 +120,25 @@ jobs:
           exit 1
       - name: Core REST smoke (subscription / RG / Storage / Key Vault)
         env:
-          EP: http://127.0.0.1:4599
+          EP: https://127.0.0.1:4599
         run: |
           set -euo pipefail
           AUTH="Authorization: Bearer ${ROOT_TOKEN}"
-          curl -fsS -H "$AUTH" \
+          curl -fsSk -H "$AUTH" \
             "${EP}/subscriptions/${SUB}?api-version=2022-12-01" | grep -q "${SUB}"
-          curl -fsS -H "$AUTH" -H "Content-Type: application/json" \
+          curl -fsSk -H "$AUTH" -H "Content-Type: application/json" \
             -X PUT \
             -d '{"location":"eastus"}' \
             "${EP}/subscriptions/${SUB}/resourcegroups/rg-ci?api-version=2022-09-01" | grep -q rg-ci
-          curl -fsS -H "$AUTH" -H "Content-Type: application/json" \
+          curl -fsSk -H "$AUTH" -H "Content-Type: application/json" \
             -X PUT \
             -d '{"location":"eastus","kind":"StorageV2","sku":{"name":"Standard_LRS"}}' \
             "${EP}/subscriptions/${SUB}/resourcegroups/rg-ci/providers/Microsoft.Storage/storageAccounts/stci?api-version=2023-01-01" | grep -q stci
-          curl -fsS -H "$AUTH" -H "Content-Type: application/json" \
+          curl -fsSk -H "$AUTH" -H "Content-Type: application/json" \
             -X PUT \
             -d '{"location":"eastus","properties":{}}' \
             "${EP}/subscriptions/${SUB}/resourcegroups/rg-ci/providers/Microsoft.KeyVault/vaults/kv-ci?api-version=2022-07-01" | grep -q kv-ci
-          curl -fsS -H "$AUTH" -H "Content-Type: application/json" \
+          curl -fsSk -H "$AUTH" -H "Content-Type: application/json" \
             -X PUT \
             -d '{"value":"smoke-core"}' \
             "${EP}/keyvault/kv-ci/secrets/demo" | grep -q demo

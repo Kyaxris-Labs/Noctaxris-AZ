@@ -16,7 +16,8 @@ if [[ -n "${COMPOSE_EXTRA_FILES:-}" ]]; then
   COMPOSE+=("${EXTRA[@]}")
 fi
 COMPOSE+=(--env-file "$ROOT/docker/.env")
-EP="${EP:-http://127.0.0.1:4599}"
+EP="${EP:-https://127.0.0.1:4599}"
+CURL=(curl -fsSk)
 READY_TIMEOUT_SEC="${READY_TIMEOUT_SEC:-240}"
 KEEP_UP="${KEEP_UP:-0}"
 SUB="${NOCTAXRIS_AZ_SUBSCRIPTION_ID:-00000000-0000-0000-0000-000000000002}"
@@ -66,7 +67,7 @@ echo "==> compose up (API + nested engine overlay)"
 
 echo "==> wait for GET $EP/_noctaxris-az/ready"
 deadline=$((SECONDS + READY_TIMEOUT_SEC))
-until curl -fsS "$EP/_noctaxris-az/ready" 2>/dev/null | grep -q ok; do
+until "${CURL[@]}" "$EP/_noctaxris-az/ready" 2>/dev/null | grep -q ok; do
   if (( SECONDS >= deadline )); then
     echo "timeout waiting for ready" >&2
     "${COMPOSE[@]}" ps >&2 || true
@@ -86,11 +87,11 @@ fi
 docker inspect -f '{{.State.Health.Status}}' "$ENGINE_ID" | grep -qx healthy
 
 echo "==> ARM resource group + Redis (API with engine attached)"
-curl -fsS -H "$AUTH" -H "Content-Type: application/json" \
+"${CURL[@]}" -H "$AUTH" -H "Content-Type: application/json" \
   -X PUT \
   -d '{"location":"eastus"}' \
   "${EP}/subscriptions/${SUB}/resourcegroups/rg-${RID}?api-version=2022-09-01" | grep -q "rg-${RID}"
-curl -fsS -H "$AUTH" -H "Content-Type: application/json" \
+"${CURL[@]}" -H "$AUTH" -H "Content-Type: application/json" \
   -X PUT \
   -d '{"location":"eastus","properties":{"sku":{"name":"Basic","family":"C","capacity":0}}}' \
   "${EP}/subscriptions/${SUB}/resourceGroups/rg-${RID}/providers/Microsoft.Cache/Redis/${RID}-redis?api-version=2024-03-01" \
