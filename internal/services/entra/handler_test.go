@@ -53,7 +53,7 @@ func addClientSecret(t *testing.T, st *store.Store, tenant, clientID string) str
 		obj = row.AppID
 	}
 	secret := store.RandomToken(16)
-	if _, err := st.AddPassword(obj, "application", "lab", authn.HashToken(secret), store.HintFromSecret(secret)); err != nil {
+	if _, err := st.AddPassword(obj, "application", "lab", store.HashUserPassword(secret), store.HintFromSecret(secret)); err != nil {
 		t.Fatal(err)
 	}
 	return secret

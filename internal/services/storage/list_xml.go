@@ -7,7 +7,7 @@ import (
 )
 
 // wantsAzureListXML reports Azure CLI / SDK list shapes.
-// Bare ?comp=list without restype keeps JSON for lab curl / challenge parsers.
+// Bare path/list without Azure markers keeps JSON for lab curl / challenge parsers.
 func wantsAzureListXML(r *http.Request) bool {
 	if r == nil {
 		return false
@@ -20,6 +20,10 @@ func wantsAzureListXML(r *http.Request) bool {
 	}
 	accept := strings.ToLower(r.Header.Get("Accept"))
 	if strings.Contains(accept, "application/xml") || strings.Contains(accept, "text/xml") {
+		return true
+	}
+	// Stock az storage / SDKs always send x-ms-version; lab curl SAS lists usually do not.
+	if strings.TrimSpace(r.Header.Get("x-ms-version")) != "" && (comp == "list" || restype == "container" || restype == "service") {
 		return true
 	}
 	return false

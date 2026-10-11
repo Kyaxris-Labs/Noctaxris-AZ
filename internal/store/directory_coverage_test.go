@@ -55,19 +55,19 @@ func TestDirectorySeedListsAndMutations(t *testing.T) {
 	if err := st.SetUserPasswordHash("missing-user", hash); err == nil {
 		t.Fatal("expected set hash missing user")
 	}
-	match, err := st.UserPasswordMatches(admin.ID, hash)
+	match, err := st.UserPasswordMatches(admin.ID, "NewPass!1")
 	if err != nil || !match {
 		t.Fatalf("match: %v %v", match, err)
 	}
-	match, err = st.UserPasswordMatches(admin.ID, store.HashUserPassword("wrong"))
+	match, err = st.UserPasswordMatches(admin.ID, "wrong")
 	if err != nil || match {
 		t.Fatal("wrong password matched")
 	}
 	match, err = st.UserPasswordMatches(admin.ID, "")
 	if err != nil || match {
-		t.Fatal("empty hash matched")
+		t.Fatal("empty password matched")
 	}
-	match, err = st.UserPasswordMatches("missing-user", hash)
+	match, err = st.UserPasswordMatches("missing-user", "NewPass!1")
 	if err != nil || match {
 		t.Fatal("missing user password")
 	}
@@ -223,23 +223,28 @@ VALUES (?,?,?,?,?,?)`, "d1111111-1111-1111-1111-111111111111", tenant, "Lab Lapt
 	if store.NormalizeAppIdFilter("plain") != "plain" {
 		t.Fatal("normalize plain")
 	}
-	pwID, err := st.AddPassword(appObj, "application", "cov", store.HashUserPassword(secret), store.HintFromSecret(secret))
+	storedHash := store.HashUserPassword(secret)
+	pwID, err := st.AddPassword(appObj, "application", "cov", storedHash, store.HintFromSecret(secret))
 	if err != nil || pwID == "" {
 		t.Fatal(err)
 	}
-	exists, err := st.PasswordHashExists([]string{appObj, "", appObj}, store.HashUserPassword(secret))
+	exists, err := st.PasswordSecretMatches([]string{appObj, "", appObj}, secret)
 	if err != nil || !exists {
-		t.Fatalf("password exists: %v %v", exists, err)
+		t.Fatalf("password secret match: %v %v", exists, err)
 	}
-	exists, err = st.PasswordHashExists(nil, store.HashUserPassword(secret))
+	exists, err = st.PasswordHashExists([]string{appObj}, storedHash)
+	if err != nil || !exists {
+		t.Fatalf("exact hash exists: %v %v", exists, err)
+	}
+	exists, err = st.PasswordSecretMatches(nil, secret)
 	if err != nil || exists {
 		t.Fatal("empty ids")
 	}
-	exists, err = st.PasswordHashExists([]string{appObj}, "")
+	exists, err = st.PasswordSecretMatches([]string{appObj}, "")
 	if err != nil || exists {
-		t.Fatal("empty hash")
+		t.Fatal("empty secret")
 	}
-	exists, err = st.PasswordHashExists([]string{"other"}, store.HashUserPassword(secret))
+	exists, err = st.PasswordSecretMatches([]string{"other"}, secret)
 	if err != nil || exists {
 		t.Fatal("wrong resource")
 	}

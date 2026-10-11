@@ -47,7 +47,10 @@ func applyOData(r *http.Request, items []map[string]any) (page []map[string]any,
 
 func (s *Service) writeOData(w http.ResponseWriter, r *http.Request, items []map[string]any) {
 	page, nextSkip, hasMore := applyOData(r, items)
-	body := map[string]any{"value": page}
+	body := map[string]any{
+		"@odata.context": s.base() + "/v1.0/$metadata#Collection(microsoft.graph.directoryObject)",
+		"value":          page,
+	}
 	if hasMore {
 		body["@odata.nextLink"] = s.base() + r.URL.Path + "?$skiptoken=" + strconv.Itoa(nextSkip)
 	}

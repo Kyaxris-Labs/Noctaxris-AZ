@@ -153,7 +153,7 @@ func (s *Service) clientSecretMatches(clientID, secret string) (bool, error) {
 			ids = append(ids, obj, appID)
 		}
 	}
-	return s.Store.PasswordHashExists(ids, authn.HashToken(secret))
+	return s.Store.PasswordSecretMatches(ids, secret)
 }
 
 func (s *Service) tokenPassword(w http.ResponseWriter, r *http.Request) {
@@ -172,7 +172,7 @@ func (s *Service) tokenPassword(w http.ResponseWriter, r *http.Request) {
 		azerrors.WriteOAuth(w, http.StatusUnauthorized, "invalid_grant", "AADSTS50126: Invalid username or password.")
 		return
 	}
-	match, err := s.Store.UserPasswordMatches(u.ID, store.HashUserPassword(password))
+	match, err := s.Store.UserPasswordMatches(u.ID, password)
 	if err != nil {
 		azerrors.WriteOAuth(w, http.StatusInternalServerError, "server_error", err.Error())
 		return
@@ -250,7 +250,7 @@ func (s *Service) handleDeviceApprove(w http.ResponseWriter, r *http.Request) {
 		azerrors.WriteOAuth(w, http.StatusUnauthorized, "invalid_grant", "AADSTS50126: Invalid username or password.")
 		return
 	}
-	match, err := s.Store.UserPasswordMatches(u.ID, store.HashUserPassword(password))
+	match, err := s.Store.UserPasswordMatches(u.ID, password)
 	if err != nil {
 		azerrors.WriteOAuth(w, http.StatusInternalServerError, "server_error", err.Error())
 		return

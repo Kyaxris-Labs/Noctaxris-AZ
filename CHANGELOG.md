@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 1.4.3
+
+Patch after 1.4.2: salted directory/app secrets, storage list XML for `x-ms-version`, Graph/App Config response polish. Docker Hub: `kyaxris/noctaxris-az` (`1.4.3`, `1.4`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
+
+- Directory user passwords and Graph `addPassword` client secrets store bcrypt hashes. Verify accepts bcrypt and legacy unsalted SHA-256 hex (challenge seeds that write hex digests keep working).
+- Storage container/blob list returns Azure `EnumerationResults` XML when `x-ms-version` is set with `comp=list` (or `restype=container|service`), in addition to explicit restype/Accept triggers. Bare lab curl lists without those markers stay JSON.
+- Graph OData list pages include `@odata.context`. App Configuration KV responses use `application/vnd.microsoft.appconfig.kv+json` / `kvset+json` with `last_modified` and `tags`.
+
 ## 1.4.2
 
 Patch after 1.4.1: Go 1.27.2 for stdlib net/http govulncheck clear. Docker Hub: `kyaxris/noctaxris-az` (`1.4.2`, `1.4`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).

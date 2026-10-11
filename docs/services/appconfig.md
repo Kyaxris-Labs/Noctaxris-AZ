@@ -17,7 +17,7 @@ ARM configuration store CRUD plus data-plane key-values under `/appconfig/{store
 | `PUT`/`GET` | `/appconfig/{store}/snapshots/{name}` |
 | `GET` | `/appconfig/{store}/snapshots` |
 
-Optional `?label=` on KV get/put and on snapshot read. Response fields: `key`, `label`, `value`, `etag`, `locked`. Snapshot GET also returns `items` (the captured rows) plus `status` and `createdAt`.
+Optional `?label=` on KV get/put and on snapshot read. Single KV responses use `Content-Type: application/vnd.microsoft.appconfig.kv+json` with fields `key`, `label`, `value`, `content_type`, `etag`, `last_modified`, `locked`, `tags`. List responses use `application/vnd.microsoft.appconfig.kvset+json` with `{ "items": [...] }`. Snapshot GET also returns `items` (the captured rows) plus `status` and `createdAt`.
 
 ## Authz
 

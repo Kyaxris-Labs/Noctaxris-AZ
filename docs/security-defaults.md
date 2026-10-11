@@ -45,7 +45,8 @@ Noctaxris-AZ fails closed. Defaults favor a loopback lab on a single laptop.
 | Cosmos DB data plane | `x-ms-cosmos-account-key`, or Bearer with Cosmos/ARM `aud` plus Cosmos data roles |
 
 - Root token comes from `NOCTAXRIS_AZ_ROOT_ACCESS_TOKEN` and maps to `NOCTAXRIS_AZ_ROOT_CLIENT_ID`.
-- Other tokens are SHA-256 hashed and looked up in `access_tokens`.
+- Other access/refresh tokens are SHA-256 hashed and looked up in `access_tokens` / refresh tables.
+- Directory user passwords and Graph `addPassword` client secrets are stored as bcrypt. Legacy unsalted SHA-256 hex still verifies for older seeds and challenge SQL injects.
 - Missing or invalid Bearer credentials return Azure ARM `AuthenticationFailed` (HTTP 401).
 - Storage SAS that fails HMAC, expiry, or `sp` checks returns HTTP 403 `AuthenticationFailed`. Shared Key with a missing account stays HTTP 404 `AccountNotFound`.
 - Global Bearer middleware skips `/blob/`, `/queue/`, and `/table/` when the request already carries `Authorization: SharedKey …` or a SAS query so handlers can verify HMAC. That skip is intentional; do not force Bearer-only on those prefixes.

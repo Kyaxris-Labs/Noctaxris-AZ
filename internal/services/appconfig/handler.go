@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
@@ -247,7 +248,7 @@ func (h *Handler) putKV(w http.ResponseWriter, r *http.Request, p authn.Principa
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, kvResource(storeName, key, label, body.Value))
+	writeKVJSON(w, http.StatusOK, kvResource(storeName, key, label, body.Value))
 }
 
 func (h *Handler) getKV(w http.ResponseWriter, r *http.Request, p authn.Principal) {
@@ -267,7 +268,7 @@ func (h *Handler) getKV(w http.ResponseWriter, r *http.Request, p authn.Principa
 		azerrors.NotFound(w, "key not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, kvResource(row.Store, row.Key, row.Label, row.Value))
+	writeKVJSON(w, http.StatusOK, kvResource(row.Store, row.Key, row.Label, row.Value))
 }
 
 func (h *Handler) listKV(w http.ResponseWriter, r *http.Request, p authn.Principal) {
@@ -290,7 +291,7 @@ func (h *Handler) listKV(w http.ResponseWriter, r *http.Request, p authn.Princip
 			azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"items": snapshotItems(rows)})
+		writeKVSetJSON(w, http.StatusOK, snapshotItems(rows))
 		return
 	}
 	rows, err := h.Store.ListAppConfigKV(storeName, keyFilter)
@@ -302,7 +303,7 @@ func (h *Handler) listKV(w http.ResponseWriter, r *http.Request, p authn.Princip
 	for _, row := range rows {
 		items = append(items, kvResource(row.Store, row.Key, row.Label, row.Value))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+	writeKVSetJSON(w, http.StatusOK, items)
 }
 
 func snapshotItems(rows []store.AppConfigKV) []any {
@@ -314,13 +315,33 @@ func snapshotItems(rows []store.AppConfigKV) []any {
 }
 
 func kvResource(storeName, key, label, value string) map[string]any {
+	_ = storeName
 	etag := strings.TrimSpace(key) + "|" + label
 	return map[string]any{
-		"key":          key,
-		"label":        label,
-		"value":        value,
-		"content_type": "",
-		"etag":         etag,
-		"locked":       false,
+		"etag":          etag,
+		"key":           key,
+		"label":         label,
+		"content_type":  "",
+		"value":         value,
+		"last_modified": time.Now().UTC().Format(time.RFC3339),
+		"locked":        false,
+		"tags":          map[string]string{},
 	}
+}
+
+func writeKVJSON(w http.ResponseWriter, code int, v any) {
+	w.Header().Set("Content-Type", "application/vnd.microsoft.appconfig.kv+json; charset=utf-8")
+	if m, ok := v.(map[string]any); ok {
+		if etag, _ := m["etag"].(string); etag != "" {
+			w.Header().Set("ETag", `"`+etag+`"`)
+		}
+	}
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func writeKVSetJSON(w http.ResponseWriter, code int, items []any) {
+	w.Header().Set("Content-Type", "application/vnd.microsoft.appconfig.kvset+json; charset=utf-8")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(map[string]any{"items": items})
 }

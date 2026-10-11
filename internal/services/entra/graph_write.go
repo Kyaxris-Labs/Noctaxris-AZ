@@ -192,7 +192,7 @@ func (s *Service) handleAddPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	secret := store.RandomToken(20)
-	id, err := s.Store.AddPassword(resourceID, resourceType, display, authn.HashToken(secret), store.HintFromSecret(secret))
+	id, err := s.Store.AddPassword(resourceID, resourceType, display, store.HashUserPassword(secret), store.HintFromSecret(secret))
 	if err != nil {
 		azerrors.WriteGraph(w, http.StatusInternalServerError, "InternalServerError", err.Error())
 		return

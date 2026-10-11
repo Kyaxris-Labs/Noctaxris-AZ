@@ -68,4 +68,20 @@ func TestListBlobsJSONDefaultAndXMLWhenAsked(t *testing.T) {
 	if !strings.Contains(string(xmlBody), "EnumerationResults") || !strings.Contains(string(xmlBody), "terraform.tfstate") {
 		t.Fatalf("xml body=%s", xmlBody)
 	}
+
+	msReq, err := http.NewRequest(http.MethodGet, srv.URL+"/blob/acct1/c1?comp=list", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msReq.Header.Set("x-ms-version", "2020-10-02")
+	signSharedKey(msReq, "acct1", key)
+	msRes, err := http.DefaultClient.Do(msReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer msRes.Body.Close()
+	msBody, _ := io.ReadAll(msRes.Body)
+	if msRes.StatusCode != http.StatusOK || !strings.Contains(string(msBody), "EnumerationResults") {
+		t.Fatalf("x-ms-version list status=%d body=%s", msRes.StatusCode, msBody)
+	}
 }

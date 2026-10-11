@@ -44,6 +44,10 @@ func TestGraphODataPagingAppOwnersAndPrivateKeyJWT(t *testing.T) {
 	if pageBody["@odata.nextLink"] == nil {
 		t.Fatalf("expected nextLink %#v", pageBody)
 	}
+	ctx, _ := pageBody["@odata.context"].(string)
+	if !strings.Contains(ctx, "$metadata#") {
+		t.Fatalf("expected @odata.context %#v", pageBody)
+	}
 	item, _ := vals[0].(map[string]any)
 	if item["userPrincipalName"] != nil {
 		t.Fatalf("$select leaked upn %#v", item)

@@ -17,7 +17,7 @@ Blob, queue, and table endpoints with Shared Key / SAS on the shared HTTP listen
 
 Auth: ARM account CRUD uses Bearer. Blob/queue/table use `Authorization: SharedKey ...`, SAS query HMAC, or Entra Bearer with Storage data roles. Well-known Azurite `devstoreaccount1` key refused on non-loopback listen.
 
-Container and blob list default to JSON (`{"containers":[...]}` / `{"blobs":[...]}`). Azure `EnumerationResults` XML is returned when the request has `restype=container` or `restype=service` with `comp=list`, or `Accept: application/xml` / `text/xml`. Content type does not skip auth: Shared Key, SAS, or Entra Storage data roles still apply before the body is written.
+Container and blob list default to JSON (`{"containers":[...]}` / `{"blobs":[...]}`) for lab curl parsers. Azure `EnumerationResults` XML is returned when the request has `restype=container` or `restype=service` with `comp=list`, `Accept: application/xml` / `text/xml`, or an `x-ms-version` header with `comp=list` / those restypes (stock `az storage` / SDKs). Content type does not skip auth: Shared Key, SAS, or Entra Storage data roles still apply before the body is written.
 
 ## Authz / authn
 

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
@@ -82,11 +83,14 @@ func TestAppConfigStoreAndKV(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("get kv status=%d body=%s", rec.Code, rec.Body.String())
 	}
+	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "application/vnd.microsoft.appconfig.kv+json") {
+		t.Fatalf("kv content-type=%q", ct)
+	}
 	var kv map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &kv); err != nil {
 		t.Fatal(err)
 	}
-	if kv["value"] != "v1" || kv["key"] != "my.key" {
+	if kv["value"] != "v1" || kv["key"] != "my.key" || kv["last_modified"] == nil {
 		t.Fatalf("kv=%#v", kv)
 	}
 
@@ -95,6 +99,9 @@ func TestAppConfigStoreAndKV(t *testing.T) {
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("list kv status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "application/vnd.microsoft.appconfig.kvset+json") {
+		t.Fatalf("kvset content-type=%q", ct)
 	}
 }
 

@@ -2,7 +2,6 @@ package store
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
@@ -19,16 +18,6 @@ var ErrServicePrincipalExists = errors.New("service principal already exists")
 
 // SeededManagementGroupID is the Tenant Root Group inserted by SeedDirectory.
 const SeededManagementGroupID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-
-func opaqueHash(s string) string {
-	sum := sha256.Sum256([]byte(s))
-	return hex.EncodeToString(sum[:])
-}
-
-// HashUserPassword returns the SHA-256 hex digest stored in entra_users.password_hash.
-func HashUserPassword(password string) string {
-	return opaqueHash(password)
-}
 
 // DirectoryUser is a Graph user row.
 type DirectoryUser struct {
@@ -217,10 +206,10 @@ func (s *Store) SetUserPasswordHash(idOrUPN, passwordHash string) error {
 	return nil
 }
 
-// UserPasswordMatches reports whether passwordHash matches the stored hash for id or UPN.
-// Users with an empty password_hash never match.
-func (s *Store) UserPasswordMatches(idOrUPN, passwordHash string) (bool, error) {
-	if passwordHash == "" {
+// UserPasswordMatches reports whether password (plaintext) matches the stored hash for id or UPN.
+// Users with an empty password_hash never match. Accepts bcrypt and legacy SHA-256 hex.
+func (s *Store) UserPasswordMatches(idOrUPN, password string) (bool, error) {
+	if password == "" {
 		return false, nil
 	}
 	var stored string
@@ -231,7 +220,7 @@ func (s *Store) UserPasswordMatches(idOrUPN, passwordHash string) (bool, error) 
 	if err != nil {
 		return false, err
 	}
-	return stored != "" && stored == passwordHash, nil
+	return MatchPasswordHash(stored, password), nil
 }
 
 func (s *Store) ListDirectoryGroups(tenantID string) ([]DirectoryGroup, error) {
@@ -605,7 +594,8 @@ func (s *Store) AddPassword(resourceID, resourceType, displayName, secretHash, h
 	return id, err
 }
 
-// PasswordHashExists reports whether secretHash is stored on any of the given application or service principal ids.
+// PasswordHashExists reports whether secretHash exactly equals a stored hash for any resource id.
+// Prefer PasswordSecretMatches for plaintext client_secret checks (bcrypt-safe).
 func (s *Store) PasswordHashExists(resourceIDs []string, secretHash string) (bool, error) {
 	if secretHash == "" {
 		return false, nil
@@ -638,6 +628,48 @@ func (s *Store) PasswordHashExists(resourceIDs []string, secretHash string) (boo
 		return false, err
 	}
 	return true, nil
+}
+
+// PasswordSecretMatches reports whether plaintext secret matches any stored credential hash
+// for the given application or service principal ids (bcrypt or legacy SHA-256 hex).
+func (s *Store) PasswordSecretMatches(resourceIDs []string, secret string) (bool, error) {
+	if secret == "" {
+		return false, nil
+	}
+	seen := map[string]struct{}{}
+	var placeholders []string
+	var args []any
+	for _, id := range resourceIDs {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		placeholders = append(placeholders, "?")
+		args = append(args, id)
+	}
+	if len(placeholders) == 0 {
+		return false, nil
+	}
+	q := `SELECT secret_hash FROM entra_passwords WHERE resource_id IN (` + strings.Join(placeholders, ",") + `)`
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var hash string
+		if err := rows.Scan(&hash); err != nil {
+			return false, err
+		}
+		if MatchPasswordHash(hash, secret) {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
 }
 
 func (s *Store) CountKeyCredentials(resourceID string) (int, error) {
