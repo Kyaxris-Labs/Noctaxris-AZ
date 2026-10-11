@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.4.2
+
+Patch after 1.4.1: Go 1.27.2 for stdlib net/http govulncheck clear. Docker Hub: `kyaxris/noctaxris-az` (`1.4.2`, `1.4`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
+
+- Toolchain: Go 1.27.2. Digest-pinned `golang:1.27.2-bookworm` (GO-2026-6603 through GO-2026-6613 / GO-2026-6617 and related net/http findings fixed in the patch toolchain).
+
 ## 1.4.1
 
 Patch after 1.4.0: instance discovery, storage list XML when clients ask for it, Host-header service rewrite with authn/authz on the rewritten path. Docker Hub: `kyaxris/noctaxris-az` (`1.4.1`, `1.4`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
