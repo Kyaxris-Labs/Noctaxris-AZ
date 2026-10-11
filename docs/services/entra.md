@@ -14,6 +14,7 @@ Lab Entra OIDC / OAuth2 and Microsoft Graph theatre on the shared HTTP listener 
 | `GET` | `/{tenant}/.well-known/openid-configuration` |
 | `GET` | `/{tenant}/discovery/v2.0/keys` |
 | `GET` | `/{tenant}/discovery/keys` |
+| `GET` | `/{tenant}/discovery/instance` |
 | `POST` | `/{tenant}/oauth2/v2.0/token` |
 | `POST` | `/{tenant}/oauth2/token` |
 | `POST` | `/{tenant}/oauth2/v2.0/devicecode` |
@@ -35,7 +36,7 @@ Form body: `grant_type=client_credentials` or `password` (ROPC) or `refresh_toke
 
 ## Authz
 
-Public: discovery, JWKS, token, device code, `POST /device` (device-code approval), lab OIDC issuer (including `POST /_noctaxris-az/oidc-lab/token`). Graph, AAD Graph, SOAP `POST /provisioningwebservice.svc`, and `/api/Users` require a Bearer principal. SOAP is directory read: the token `aud` must be Microsoft Graph (`https://graph.microsoft.com`) or Azure AD Graph (`https://graph.windows.net`), not ARM and not the token `iss`. Graph handlers reject ARM and issuer audiences (HTTP 403 `InvalidAuthenticationToken`). ARM control-plane handlers reject Graph audiences (HTTP 403 `InvalidAuthenticationTokenAudience`). Key Vault data plane requires vault `aud` (`https://vault.azure.net`). Storage Shared Key/SAS, table/blob, and Event Hubs HTTP data plane do not require ARM `aud`. Hash lookup of a lab JWT still reads `aud` from the compact token; it does not skip claims. Root Bearer skips audience. Token errors use the OAuth JSON envelope (`error` / `error_description`). Graph errors use the Graph envelope.
+Public: discovery, JWKS, instance discovery (`GET /{tenant}/discovery/instance`), token, device code, `POST /device` (device-code approval), lab OIDC issuer (including `POST /_noctaxris-az/oidc-lab/token`). Graph, AAD Graph, SOAP `POST /provisioningwebservice.svc`, and `/api/Users` require a Bearer principal. SOAP is directory read: the token `aud` must be Microsoft Graph (`https://graph.microsoft.com`) or Azure AD Graph (`https://graph.windows.net`), not ARM and not the token `iss`. Graph handlers reject ARM and issuer audiences (HTTP 403 `InvalidAuthenticationToken`). ARM control-plane handlers reject Graph audiences (HTTP 403 `InvalidAuthenticationTokenAudience`). Key Vault data plane requires vault `aud` (`https://vault.azure.net`). Storage Shared Key/SAS, table/blob, and Event Hubs HTTP data plane do not require ARM `aud`. Hash lookup of a lab JWT still reads `aud` from the compact token; it does not skip claims. Root Bearer skips audience. Token errors use the OAuth JSON envelope (`error` / `error_description`). Graph errors use the Graph envelope.
 
 Device code: `POST .../devicecode` returns `device_code` and `user_code`. Token exchange with that `device_code` returns `authorization_pending` until `POST /device` (`user_code`, `username`, `password`) approves a directory user. Exchange then mints for the approving principal.
 

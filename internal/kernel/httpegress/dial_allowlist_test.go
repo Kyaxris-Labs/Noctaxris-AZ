@@ -3,6 +3,7 @@ package httpegress_test
 import (
 	"context"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,9 +29,14 @@ func TestPinnedDialRejectsPrivateAndMetadataAddresses(t *testing.T) {
 	}
 
 	// Public literal should leave the private/metadata filter and attempt dial.
-	_, err := httpegress.PinnedDialContext(ctx, "tcp", "8.8.8.8:1")
-	if err == nil {
-		t.Fatal("expected dial failure on closed port")
+	// Dial may succeed or fail depending on host network (some stacks answer :1).
+	conn, err := httpegress.PinnedDialContext(ctx, "tcp", "8.8.8.8:1")
+	if err != nil {
+		if strings.Contains(err.Error(), "private/metadata") {
+			t.Fatalf("public literal denied by filter: %v", err)
+		}
+	} else {
+		_ = conn.Close()
 	}
 
 	c := httpegress.Client(250 * time.Millisecond)

@@ -185,6 +185,7 @@ func (s *Service) Mount(mux *http.ServeMux) {
 		mux.HandleFunc("GET /"+t+"/.well-known/openid-configuration", s.handleOIDCDiscovery)
 		mux.HandleFunc("GET /"+t+"/discovery/v2.0/keys", s.handleJWKS)
 		mux.HandleFunc("GET /"+t+"/discovery/keys", s.handleJWKS)
+		mux.HandleFunc("GET /"+t+"/discovery/instance", s.handleInstanceDiscovery)
 		mux.HandleFunc("POST /"+t+"/oauth2/v2.0/token", s.handleToken)
 		mux.HandleFunc("POST /"+t+"/oauth2/token", s.handleToken)
 		mux.HandleFunc("POST /"+t+"/oauth2/v2.0/devicecode", s.handleDeviceCode)

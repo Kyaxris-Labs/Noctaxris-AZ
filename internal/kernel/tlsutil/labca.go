@@ -40,6 +40,11 @@ func DefaultCloudHostSANs() []string {
 		"provisioningapi.microsoftonline.com",
 		"main.iam.ad.ext.azure.com",
 		"adminwebservice.microsoftonline.com",
+		"*.vault.azure.net",
+		"*.blob.core.windows.net",
+		"*.queue.core.windows.net",
+		"*.table.core.windows.net",
+		"*.azconfig.io",
 		"localhost",
 	}
 }
@@ -50,12 +55,22 @@ func AllowedCloudHost(host string) bool {
 	if err == nil {
 		host = h
 	}
+	host = strings.ToLower(strings.TrimSpace(host))
 	if host == "127.0.0.1" || host == "::1" {
 		return true
 	}
 	for _, san := range DefaultCloudHostSANs() {
-		if host == san {
+		if san == host {
 			return true
+		}
+		if strings.HasPrefix(san, "*.") {
+			suffix := strings.TrimPrefix(san, "*")
+			if strings.HasSuffix(host, suffix) && host != strings.TrimPrefix(suffix, ".") {
+				label := strings.TrimSuffix(host, suffix)
+				if label != "" && !strings.Contains(label, ".") {
+					return true
+				}
+			}
 		}
 	}
 	return false

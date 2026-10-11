@@ -39,6 +39,7 @@ var oauthTokenPath = regexp.MustCompile(`(?i)^/[^/]+/oauth2/(v2\.0/)?token$`)
 var oauthDeviceCodePath = regexp.MustCompile(`(?i)^/[^/]+/oauth2/(v2\.0/)?devicecode$`)
 var oidcDiscoveryPath = regexp.MustCompile(`(?i)^/[^/]+(/v2\.0)?/\.well-known/openid-configuration$`)
 var jwksPath = regexp.MustCompile(`(?i)^/[^/]+/discovery(/v2\.0)?/keys$`)
+var instanceDiscoveryPath = regexp.MustCompile(`(?i)^/[^/]+/discovery/instance$`)
 
 // AuthenticateRequest extracts and validates the Bearer token from r.
 func (a *Authenticator) AuthenticateRequest(r *http.Request) (Principal, error) {
@@ -80,7 +81,8 @@ func IsPublicPath(path string) bool {
 		return oauthTokenPath.MatchString(path) ||
 			oauthDeviceCodePath.MatchString(path) ||
 			oidcDiscoveryPath.MatchString(path) ||
-			jwksPath.MatchString(path)
+			jwksPath.MatchString(path) ||
+			instanceDiscoveryPath.MatchString(path)
 	}
 }
 

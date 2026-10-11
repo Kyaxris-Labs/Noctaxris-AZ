@@ -21,6 +21,7 @@ import (
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/audit"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authz"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/hostroute"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/tlsutil"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/store"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/version"
@@ -210,6 +211,7 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 		w.Header().Set(requestIDHeader, reqID)
 		ctx := context.WithValue(r.Context(), ctxRequestID, reqID)
 		r = r.WithContext(ctx)
+		hostroute.Apply(r)
 		if p := canonicalizeARMPath(r.URL.Path); p != r.URL.Path {
 			u := *r.URL
 			u.Path = p

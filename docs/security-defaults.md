@@ -53,13 +53,14 @@ Noctaxris-AZ fails closed. Defaults favor a loopback lab on a single laptop.
 - Public paths: `/_noctaxris-az/health`, `/_noctaxris-az/ready`, `/_noctaxris-az/version`, `/_noctaxris-az/ca.pem`
   (or `/_lab/health|ready|version|ca.pem` only when `NOCTAXRIS_AZ_STRIP_PRODUCT=1`; the inactive ops prefix is not registered for probes),
   anonymous `GET /metadata/endpoints`,
-  Entra token/OIDC discovery/JWKS, `POST /device`,
+  Entra token/OIDC discovery/JWKS/instance discovery, `POST /device`,
   `/_noctaxris-az/oidc-lab/*` (intentional public WIF lab IdP, including unauthenticated
   `POST …/oidc-lab/token` assertion mint for federated credential theatre),
   and IMDS `/metadata/identity/oauth2/token`
   (IMDS still requires Metadata, a known identity, and a loopback/link-local peer;
   RFC1918 peers are denied even when Host is the metadata address).
 - Azure CLI and azure-core based SDKs require HTTPS for Bearer. Cleartext HTTP on `:4599` is not a supported client path when those tools must work.
+- Host rewrite (`*.vault.azure.net`, `*.blob.core.windows.net`, `*.azconfig.io`, …) only remaps the path. Authn/authz still apply on the rewritten path (Shared Key account must match, SAS HMAC, or Bearer audience plus data-plane RBAC). The Host label wins over a conflicting lab path prefix so Host spoofing cannot switch vault/account. Loopback Host is never rewritten.
 - ACR Registry `/v2/` and `/oauth2/token` skip the ARM Bearer envelope so handlers
   can return Docker `WWW-Authenticate`; registry auth + RBAC still apply.
 - Nested image pulls fail closed unless allowlisted (`NOCTAXRIS_AZ_IMAGE_PULL_ALLOWLIST`).

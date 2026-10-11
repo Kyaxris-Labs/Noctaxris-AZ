@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 1.4.1
+
+Patch after 1.4.0: instance discovery, storage list XML when clients ask for it, Host-header service rewrite with authn/authz on the rewritten path. Docker Hub: `kyaxris/noctaxris-az` (`1.4.1`, `1.4`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
+
+- Anonymous `GET /{tenant}/discovery/instance` (MSAL / Azure CLI instance discovery) returns `tenant_discovery_endpoint` and preferred network aliases from `NOCTAXRIS_AZ_PUBLIC_URL`.
+- Storage blob/container list stays JSON by default (`{"blobs":[...]}` / `{"containers":[...]}`) for lab curl parsers. Azure `EnumerationResults` XML when `restype=container|service` with `comp=list`, or `Accept: application/xml` / `text/xml`.
+- Host-header rewrite maps `{vault}.vault.azure.net`, `{account}.blob|queue|table.core.windows.net`, and `{store}.azconfig.io` onto lab path prefixes (`/keyvault/...`, `/blob/...`, `/appconfig/...`). The Host label wins over a conflicting lab path prefix. Loopback Host is unchanged. Authn/authz still run on the rewritten path. Cloud-hosts TLS allowlist and SANs include those wildcards.
+- httpegress pinned-dial unit test treats a successful dial to a public literal as filter pass (some host stacks answer closed ports).
+
 ## 1.4.0
 
 Minor after 1.3.2: TLS and public URL so Azure CLI / SDK Bearer clients work against the main listener, anonymous cloud metadata and lab CA, RBAC-filtered subscription list, built-in role definitions, Activity Log `appid`. Docker Hub: `kyaxris/noctaxris-az` (`1.4.0`, `1.4`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).

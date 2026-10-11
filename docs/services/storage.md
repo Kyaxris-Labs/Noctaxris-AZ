@@ -11,11 +11,13 @@ Blob, queue, and table endpoints with Shared Key / SAS on the shared HTTP listen
 | Surface | Path prefix |
 |---------|-------------|
 | ARM account | `/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Storage/storageAccounts/{name}` |
-| Blob | `/blob/{account}/...` |
+| Blob | `/blob/{account}/...` (Host `{account}.blob.core.windows.net` rewrites onto this prefix) |
 | Queue | `/queue/{account}/...` |
 | Table | `/table/{account}/...` (see [table.md](table.md)) |
 
 Auth: ARM account CRUD uses Bearer. Blob/queue/table use `Authorization: SharedKey ...`, SAS query HMAC, or Entra Bearer with Storage data roles. Well-known Azurite `devstoreaccount1` key refused on non-loopback listen.
+
+Container and blob list default to JSON (`{"containers":[...]}` / `{"blobs":[...]}`). Azure `EnumerationResults` XML is returned when the request has `restype=container` or `restype=service` with `comp=list`, or `Accept: application/xml` / `text/xml`. Content type does not skip auth: Shared Key, SAS, or Entra Storage data roles still apply before the body is written.
 
 ## Authz / authn
 
@@ -41,7 +43,7 @@ Auth: ARM account CRUD uses Bearer. Blob/queue/table use `Authorization: SharedK
 
 ## Emulator limits
 
-- Single HTTP port path prefixes (not separate blob/queue hosts by default)
+- Single HTTP port path prefixes by default; optional Host rewrite for `*.blob.core.windows.net` (and queue/table siblings) onto those prefixes
 - No host `docker.sock`
 
 ## Deferred depth

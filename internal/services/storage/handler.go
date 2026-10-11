@@ -124,6 +124,10 @@ func (h *Handler) listContainers(w http.ResponseWriter, r *http.Request) {
 		azerrors.StorageError(w, http.StatusInternalServerError, "InternalError", err.Error())
 		return
 	}
+	if wantsAzureListXML(r) {
+		writeContainerEnumerationXML(w, serviceEndpoint(r), account, names)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"containers": names})
 }
 
@@ -151,6 +155,11 @@ func (h *Handler) listBlobs(w http.ResponseWriter, r *http.Request) {
 	names, err := h.Store.ListBlobs(account, container)
 	if err != nil {
 		azerrors.StorageError(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	}
+	// Default JSON keeps challenge / curl list parsers; XML when Azure CLI/SDK asks.
+	if wantsAzureListXML(r) {
+		writeBlobEnumerationXML(w, serviceEndpoint(r), container, names)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"blobs": names})

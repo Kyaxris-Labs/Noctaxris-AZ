@@ -77,6 +77,8 @@ func TestAuthenticateRootTokenAndPublicPaths(t *testing.T) {
 		"/tenant/v2.0/.well-known/openid-configuration",
 		"/tenant/.well-known/openid-configuration",
 		"/tenant/discovery/v2.0/keys",
+		"/common/discovery/instance",
+		"/tenant/discovery/instance",
 		"/_noctaxris-az/oidc-lab/.well-known/openid-configuration",
 		"/_noctaxris-az/oidc-lab/keys",
 		"/_noctaxris-az/oidc-lab/token",

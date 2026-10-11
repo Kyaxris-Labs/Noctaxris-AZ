@@ -34,6 +34,8 @@ Discovery, JWKS, token, device code, `POST /device`, lab OIDC discovery/JWKS/tok
 
 Azure CLI and azure-core based SDKs refuse Bearer tokens over cleartext HTTP. Prefer `NOCTAXRIS_AZ_TLS_AUTO=1` (or explicit `NOCTAXRIS_AZ_TLS_CERT` / `NOCTAXRIS_AZ_TLS_KEY`), set `NOCTAXRIS_AZ_PUBLIC_URL` to the HTTPS origin clients use, download the lab CA from `GET …/ca.pem`, and trust it before `az cloud register` / `az login`.
 
+Anonymous `GET /metadata/endpoints` and `GET /{tenant}/discovery/instance` support `az cloud register` / MSAL instance discovery against the public URL. Host headers such as `{vault}.vault.azure.net` or `{account}.blob.core.windows.net` rewrite to lab path prefixes; loopback Host keeps path-style `/blob/...` and `/keyvault/...` unchanged.
+
 ## Compose
 
 When `docker/compose.yaml` is present it typically sets:

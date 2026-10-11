@@ -25,6 +25,9 @@ func TestDefaultCloudHostSANsIncludeAzureCloud(t *testing.T) {
 	if !AllowedCloudHost("graph.microsoft.com") || !AllowedCloudHost("127.0.0.1:443") {
 		t.Fatal("allowed host")
 	}
+	if !AllowedCloudHost("myvault.vault.azure.net") || !AllowedCloudHost("acct.blob.core.windows.net") {
+		t.Fatal("wildcard data-plane hosts")
+	}
 	if AllowedCloudHost("evil.example") {
 		t.Fatal("unexpected host")
 	}
