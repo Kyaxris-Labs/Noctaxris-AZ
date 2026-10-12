@@ -66,7 +66,7 @@ func (h *Handler) require(p authn.Principal, action, scope string) error {
 
 func (h *Handler) requireDataPlane(p authn.Principal, action, scope string) error {
 	if !p.AllowsAppConfig() {
-		return errAudience
+		return errAudienceAppConfig
 	}
 	return h.requireAction(p, action, scope)
 }
@@ -107,6 +107,7 @@ func (h *Handler) requireAction(p authn.Principal, action, scope string) error {
 
 var errDenied = fmt.Errorf("permission denied")
 var errAudience = fmt.Errorf("invalid authentication token audience")
+var errAudienceAppConfig = fmt.Errorf("invalid authentication token audience for app configuration")
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -115,6 +116,10 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 }
 
 func writeAuthz(w http.ResponseWriter, err error) {
+	if err == errAudienceAppConfig {
+		azerrors.AppConfigInvalidAudience(w, "", "")
+		return
+	}
 	if err == errAudience {
 		azerrors.InvalidAuthenticationTokenAudience(w, "")
 		return

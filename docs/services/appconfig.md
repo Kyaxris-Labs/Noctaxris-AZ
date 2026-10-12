@@ -23,7 +23,7 @@ Optional `?label=` on KV get/put and on snapshot read. Single KV responses use `
 
 - ARM store CRUD: token `aud` must be `https://management.azure.com` or `https://management.core.windows.net` (Graph `aud` is HTTP 403 `InvalidAuthenticationTokenAudience`). Root Bearer skips audience.
 - `Microsoft.AppConfiguration/configurationStores/read|write|delete`
-- Data plane KV / feature flags / snapshots: `aud` `https://azconfig.io` plus App Configuration Data Reader / Data Owner (`keyValues/read|write`). Classic Reader is denied. Graph `aud` is denied.
+- Data plane KV / feature flags / snapshots: `aud` `https://azconfig.io` plus App Configuration Data Reader / Data Owner (`keyValues/read|write`). Classic Reader is denied. Wrong `aud` (including Graph or ARM) is HTTP 401 `InvalidAuthenticationTokenAudience` with `WWW-Authenticate` naming `resource="https://azconfig.io"` and a body that names `https://azconfig.io` (not ARM management hosts).
 
 ## Detailed actions
 

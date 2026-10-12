@@ -59,6 +59,20 @@ func InvalidAuthenticationTokenAudience(w http.ResponseWriter, message string) {
 	WriteARM(w, http.StatusForbidden, "InvalidAuthenticationTokenAudience", message)
 }
 
+// AppConfigInvalidAudience writes 401 with WWW-Authenticate for App Configuration data plane.
+// authorization and resource default to the lab listen URL and https://azconfig.io.
+func AppConfigInvalidAudience(w http.ResponseWriter, authorization, resource string) {
+	if authorization == "" {
+		authorization = "http://127.0.0.1:4599"
+	}
+	if resource == "" {
+		resource = "https://azconfig.io"
+	}
+	w.Header().Set("WWW-Authenticate", `Bearer authorization="`+authorization+`", resource="`+resource+`"`)
+	WriteARM(w, http.StatusUnauthorized, "InvalidAuthenticationTokenAudience",
+		"The access token has been obtained from wrong audience or resource. It should match https://azconfig.io.")
+}
+
 // NotFound writes HTTP 404.
 func NotFound(w http.ResponseWriter, message string) {
 	WriteARM(w, http.StatusNotFound, "ResourceNotFound", message)

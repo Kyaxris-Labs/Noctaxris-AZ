@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
@@ -82,8 +83,16 @@ func TestAppConfigDataPlaneAudienceAndReaderDeny(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+graphTok)
 	rec = httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
-	if rec.Code != http.StatusForbidden {
+	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("Graph data reader %d %s", rec.Code, rec.Body.String())
+	}
+	wa := rec.Header().Get("WWW-Authenticate")
+	if wa == "" || !strings.Contains(wa, `resource="https://azconfig.io"`) {
+		t.Fatalf("WWW-Authenticate %q", wa)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "https://azconfig.io") || strings.Contains(body, "management.azure.com") {
+		t.Fatalf("body must name azconfig.io only: %s", body)
 	}
 
 	cfgTok, _, err := es.MintAccessToken("sp-data", authn.AudienceAppConfig)

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.4.5
+
+Patch after 1.4.4: App Configuration data-plane wrong-audience challenge names `azconfig.io`. Docker Hub: `kyaxris/noctaxris-az` (`1.4.5`, `1.4`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
+
+- App Configuration data-plane wrong-audience responses return HTTP 401 with `WWW-Authenticate` naming `resource="https://azconfig.io"` and an error body that names `https://azconfig.io` (not ARM `management.azure.com` / `management.core.windows.net`). ARM control-plane wrong-audience responses stay unchanged.
+
 ## 1.4.4
 
 Patch after 1.4.3: lab OIDC issuer follows strip-product. Docker Hub: `kyaxris/noctaxris-az` (`1.4.4`, `1.4`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).

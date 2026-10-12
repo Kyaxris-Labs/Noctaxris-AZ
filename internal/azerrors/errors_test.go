@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
@@ -55,6 +56,26 @@ func TestWriteHelpers(t *testing.T) {
 	azerrors.KeyVaultUnauthenticated(rec2, "http://auth", "https://vault.azure.net")
 	if rec2.Code != 401 {
 		t.Fatal(rec2.Code)
+	}
+
+	recCfg := httptest.NewRecorder()
+	azerrors.AppConfigInvalidAudience(recCfg, "", "")
+	if recCfg.Code != 401 {
+		t.Fatal(recCfg.Code)
+	}
+	waCfg := recCfg.Header().Get("WWW-Authenticate")
+	if waCfg == "" || !strings.Contains(waCfg, `resource="https://azconfig.io"`) {
+		t.Fatalf("WWW-Authenticate %q", waCfg)
+	}
+	var cfgEnv azerrors.ARMError
+	if err := json.NewDecoder(recCfg.Body).Decode(&cfgEnv); err != nil {
+		t.Fatal(err)
+	}
+	if cfgEnv.Error.Code != "InvalidAuthenticationTokenAudience" || !strings.Contains(cfgEnv.Error.Message, "https://azconfig.io") {
+		t.Fatalf("%+v", cfgEnv.Error)
+	}
+	if strings.Contains(cfgEnv.Error.Message, "management.azure.com") {
+		t.Fatalf("App Config audience error must not name ARM: %q", cfgEnv.Error.Message)
 	}
 
 	rec3 := httptest.NewRecorder()
