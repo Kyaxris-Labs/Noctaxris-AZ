@@ -153,6 +153,21 @@ func (c Config) OpsPathPrefix() string {
 	return productOpsPathPrefix
 }
 
+// OIDCLabPathPrefix returns the preferred lab OIDC issuer path under the active ops prefix.
+func OIDCLabPathPrefix() string {
+	return OpsPathPrefix() + "/oidc-lab"
+}
+
+// OIDCLabPathPrefix returns the preferred lab OIDC issuer path for this config.
+func (c Config) OIDCLabPathPrefix() string {
+	return c.OpsPathPrefix() + "/oidc-lab"
+}
+
+// OIDCLabPathPrefixes returns both lab OIDC path prefixes (product and strip) for dual mount/verify.
+func OIDCLabPathPrefixes() []string {
+	return []string{productOpsPathPrefix + "/oidc-lab", labOpsPathPrefix + "/oidc-lab"}
+}
+
 // ReadyPath is the readiness probe path for the process environment.
 func ReadyPath() string {
 	return OpsPathPrefix() + "/ready"

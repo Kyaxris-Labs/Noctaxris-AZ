@@ -55,8 +55,8 @@ Noctaxris-AZ fails closed. Defaults favor a loopback lab on a single laptop.
   (or `/_lab/health|ready|version|ca.pem` only when `NOCTAXRIS_AZ_STRIP_PRODUCT=1`; the inactive ops prefix is not registered for probes),
   anonymous `GET /metadata/endpoints`,
   Entra token/OIDC discovery/JWKS/instance discovery, `POST /device`,
-  `/_noctaxris-az/oidc-lab/*` (intentional public WIF lab IdP, including unauthenticated
-  `POST …/oidc-lab/token` assertion mint for federated credential theatre),
+  `/_noctaxris-az/oidc-lab/*` and `/_lab/oidc-lab/*` (intentional public WIF lab IdP, including unauthenticated
+  `POST …/oidc-lab/token` assertion mint; preferred `issuer` is `/_lab/oidc-lab` when strip-product is on),
   and IMDS `/metadata/identity/oauth2/token`
   (IMDS still requires Metadata, a known identity, and a loopback/link-local peer;
   RFC1918 peers are denied even when Host is the metadata address).

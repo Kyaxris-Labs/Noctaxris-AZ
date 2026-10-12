@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 )
 
@@ -16,7 +17,21 @@ func (s *Service) entraIssuer() string {
 }
 
 func (s *Service) labOIDCIssuer() string {
-	return s.base() + "/_noctaxris-az/oidc-lab"
+	pref := "/_noctaxris-az/oidc-lab"
+	if s.StripProduct {
+		pref = "/_lab/oidc-lab"
+	}
+	return s.base() + pref
+}
+
+func (s *Service) isLabOIDCIssuer(iss string) bool {
+	for _, pref := range config.OIDCLabPathPrefixes() {
+		want := s.base() + pref
+		if iss == want || strings.HasPrefix(iss, want) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) verifyClientAssertion(w http.ResponseWriter, r *http.Request, clientID, assertion string) (string, bool) {
@@ -33,7 +48,7 @@ func (s *Service) verifyClientAssertion(w http.ResponseWriter, r *http.Request, 
 		return "", false
 	}
 
-	if iss == s.labOIDCIssuer() || strings.HasPrefix(iss, s.labOIDCIssuer()) {
+	if s.isLabOIDCIssuer(iss) {
 		return s.verifyFederatedAssertion(w, r, clientID, assertion, iss, aud)
 	}
 	return s.verifyPrivateKeyJWT(w, r, clientID, assertion, iss, sub, aud)

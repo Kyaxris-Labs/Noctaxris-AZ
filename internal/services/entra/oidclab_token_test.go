@@ -87,3 +87,98 @@ func TestLabOIDCTokenMintUsedAsFederatedAssertion(t *testing.T) {
 		t.Fatalf("wif with minted id_token %d %s", got.Code, got.Body.String())
 	}
 }
+
+func TestLabOIDCStripProductIssuerAndDualRoutes(t *testing.T) {
+	st := openStore(t)
+	svc := &entra.Service{
+		Store: st, TenantID: config.DefaultTenantID, PublicBase: "https://127.0.0.1:4599",
+		StripProduct: true,
+	}
+	mux := http.NewServeMux()
+	svc.Mount(mux)
+
+	for _, pref := range []string{"/_lab/oidc-lab", "/_noctaxris-az/oidc-lab"} {
+		disc := httptest.NewRecorder()
+		mux.ServeHTTP(disc, httptest.NewRequest(http.MethodGet, pref+"/.well-known/openid-configuration", nil))
+		if disc.Code != http.StatusOK {
+			t.Fatalf("%s discovery %d %s", pref, disc.Code, disc.Body.String())
+		}
+		var meta map[string]any
+		if err := json.Unmarshal(disc.Body.Bytes(), &meta); err != nil {
+			t.Fatal(err)
+		}
+		iss, _ := meta["issuer"].(string)
+		if iss != "https://127.0.0.1:4599/_lab/oidc-lab" {
+			t.Fatalf("%s issuer=%q want /_lab/oidc-lab", pref, iss)
+		}
+		if !strings.HasSuffix(meta["token_endpoint"].(string), "/_lab/oidc-lab/token") {
+			t.Fatalf("%s token_endpoint=%v", pref, meta["token_endpoint"])
+		}
+	}
+
+	sub := "repo:org/strip-app"
+	aud := "api://AzureADTokenExchange"
+	form := url.Values{
+		"grant_type": {"client_credentials"},
+		"subject":    {sub},
+		"audience":   {aud},
+	}.Encode()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/_lab/oidc-lab/token", strings.NewReader(form))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("strip oidc token %d %s", rec.Code, rec.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	idToken, _ := body["id_token"].(string)
+	_, claims, err := authn.DecodeJWTUnverified(idToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if authn.ClaimString(claims, "iss") != "https://127.0.0.1:4599/_lab/oidc-lab" {
+		t.Fatalf("minted iss=%v", claims["iss"])
+	}
+
+	// EnsureRoot seeds application object/app ids 5555… / 6666….
+	appObj := "55555555-5555-5555-5555-555555555555"
+	appID := "66666666-6666-6666-6666-666666666666"
+	if _, err := st.CreateFIC(appObj, "lab-oidc-strip", "https://127.0.0.1:4599/_lab/oidc-lab", sub, []string{aud}, ""); err != nil {
+		t.Fatal(err)
+	}
+	wif := url.Values{
+		"grant_type":            {"client_credentials"},
+		"client_id":             {appID},
+		"client_assertion_type": {"urn:ietf:params:oauth:client-assertion-type:jwt-bearer"},
+		"client_assertion":      {idToken},
+		"scope":                 {"https://graph.microsoft.com/.default"},
+	}.Encode()
+	got := tokenPOST(t, mux, "/"+config.DefaultTenantID+"/oauth2/v2.0/token", wif)
+	if got.Code != http.StatusOK {
+		t.Fatalf("wif strip issuer %d %s", got.Code, got.Body.String())
+	}
+
+	// Product-path minted assertion (legacy iss) still verifies when strip is on.
+	legacySvc := &entra.Service{Store: st, TenantID: config.DefaultTenantID, PublicBase: "https://127.0.0.1:4599"}
+	legacyTok, err := legacySvc.MintLabOIDCAssertion(sub+"-legacy", aud)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.CreateFIC(appObj, "lab-oidc-legacy", "https://127.0.0.1:4599/_noctaxris-az/oidc-lab", sub+"-legacy", []string{aud}, ""); err != nil {
+		t.Fatal(err)
+	}
+	wifLegacy := url.Values{
+		"grant_type":            {"client_credentials"},
+		"client_id":             {appID},
+		"client_assertion_type": {"urn:ietf:params:oauth:client-assertion-type:jwt-bearer"},
+		"client_assertion":      {legacyTok},
+		"scope":                 {"https://graph.microsoft.com/.default"},
+	}.Encode()
+	gotLegacy := tokenPOST(t, mux, "/"+config.DefaultTenantID+"/oauth2/v2.0/token", wifLegacy)
+	if gotLegacy.Code != http.StatusOK {
+		t.Fatalf("wif legacy product issuer under strip service %d %s", gotLegacy.Code, gotLegacy.Body.String())
+	}
+}

@@ -9,10 +9,11 @@ import (
 
 func (s *Server) registerIdentity() {
 	es := &entra.Service{
-		Store:      s.store,
-		TenantID:   s.cfg.TenantID,
-		PublicBase: s.cfg.IssuerBase(),
-		AuditNow:   s.effectiveNow,
+		Store:        s.store,
+		TenantID:     s.cfg.TenantID,
+		PublicBase:   s.cfg.IssuerBase(),
+		StripProduct: s.cfg.StripProduct,
+		AuditNow:     s.effectiveNow,
 	}
 	s.authn.JWT = es
 	es.Mount(s.mux)

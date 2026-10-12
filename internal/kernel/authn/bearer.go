@@ -75,7 +75,8 @@ func IsPublicPath(path string) bool {
 		"/device":
 		return true
 	default:
-		if strings.HasPrefix(strings.ToLower(path), "/_noctaxris-az/oidc-lab") {
+		lower := strings.ToLower(path)
+		if strings.HasPrefix(lower, "/_noctaxris-az/oidc-lab") || strings.HasPrefix(lower, "/_lab/oidc-lab") {
 			return true
 		}
 		return oauthTokenPath.MatchString(path) ||

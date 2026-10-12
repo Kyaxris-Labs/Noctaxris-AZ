@@ -37,7 +37,7 @@ Default subscription: `00000000-0000-0000-0000-000000000002` (`NOCTAXRIS_AZ_SUBS
 
 Per-service deferred depth lives on each page. Shared gaps:
 
-- Bearer required on ARM and Graph (health/ready/version, Entra token/discovery/JWKS, `POST /device`, lab OIDC `/_noctaxris-az/oidc-lab`, and IMDS token skip Bearer). IMDS still gates on Metadata, known identity, and peer address. SOAP `/provisioningwebservice.svc` is not public. ARM control-plane `aud` must be `https://management.azure.com` or `https://management.core.windows.net`. Key Vault data plane needs vault `aud` plus data RBAC. Storage Shared Key/SAS, table/blob, Event Hubs HTTP data plane, and ACR Registry V2 (`/v2/`, `/oauth2/token`) do not require that ARM `aud` (V2 still accepts an ARM directory Bearer).
+- Bearer required on ARM and Graph (health/ready/version, Entra token/discovery/JWKS, `POST /device`, lab OIDC `/_noctaxris-az/oidc-lab` and `/_lab/oidc-lab`, and IMDS token skip Bearer). IMDS still gates on Metadata, known identity, and peer address. SOAP `/provisioningwebservice.svc` is not public. ARM control-plane `aud` must be `https://management.azure.com` or `https://management.core.windows.net`. Key Vault data plane needs vault `aud` plus data RBAC. Storage Shared Key/SAS, table/blob, Event Hubs HTTP data plane, and ACR Registry V2 (`/v2/`, `/oauth2/token`) do not require that ARM `aud` (V2 still accepts an ARM directory Bearer).
 - Root principal bypasses RBAC evaluation (lab operator)
 - No host `docker.sock`; nested DinD opt-in via `compose.engine.yaml`
 - AMQP is Service Bus queue send/receive lite (not full broker parity)

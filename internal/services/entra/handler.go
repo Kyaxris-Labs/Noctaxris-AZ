@@ -19,11 +19,12 @@ const defaultExpiresIn = 3600
 
 // Service serves Microsoft Entra ID OAuth2 / OIDC theatre.
 type Service struct {
-	Store      *store.Store
-	TenantID   string
-	PublicBase string // e.g. http://127.0.0.1:4599
-	Now        func() time.Time
-	AuditNow   func() time.Time
+	Store        *store.Store
+	TenantID     string
+	PublicBase   string // e.g. http://127.0.0.1:4599
+	StripProduct bool   // prefer /_lab/oidc-lab issuer when true
+	Now          func() time.Time
+	AuditNow     func() time.Time
 
 	mu   sync.Mutex
 	kid  string
@@ -194,9 +195,11 @@ func (s *Service) Mount(mux *http.ServeMux) {
 		mux.HandleFunc("GET /"+t+"/users", s.handleAADUsers)
 		mux.HandleFunc("GET /"+t+"/directoryRoles", s.handleAADDirectoryRoles)
 	}
-	mux.HandleFunc("GET /_noctaxris-az/oidc-lab/.well-known/openid-configuration", s.handleLabOIDCDiscovery)
-	mux.HandleFunc("GET /_noctaxris-az/oidc-lab/keys", s.handleLabJWKS)
-	mux.HandleFunc("POST /_noctaxris-az/oidc-lab/token", s.handleLabOIDCToken)
+	for _, pref := range []string{"/_noctaxris-az/oidc-lab", "/_lab/oidc-lab"} {
+		mux.HandleFunc("GET "+pref+"/.well-known/openid-configuration", s.handleLabOIDCDiscovery)
+		mux.HandleFunc("GET "+pref+"/keys", s.handleLabJWKS)
+		mux.HandleFunc("POST "+pref+"/token", s.handleLabOIDCToken)
+	}
 	mux.HandleFunc("POST /device", s.handleDeviceApprove)
 
 	s.mountGraph(mux)

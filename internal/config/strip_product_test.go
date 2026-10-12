@@ -10,6 +10,9 @@ func TestStripProductHelpersDefaultAndOn(t *testing.T) {
 	if OpsPathPrefix() != productOpsPathPrefix || ReadyPath() != productOpsPathPrefix+"/ready" {
 		t.Fatalf("default ops paths: %s %s", OpsPathPrefix(), ReadyPath())
 	}
+	if OIDCLabPathPrefix() != productOpsPathPrefix+"/oidc-lab" {
+		t.Fatalf("default oidc-lab %s", OIDCLabPathPrefix())
+	}
 	if LabDisplayName() != productLabDisplay {
 		t.Fatalf("display %q", LabDisplayName())
 	}
@@ -28,6 +31,12 @@ func TestStripProductHelpersDefaultAndOn(t *testing.T) {
 	if OpsPathPrefix() != labOpsPathPrefix || ReadyPath() != labOpsPathPrefix+"/ready" {
 		t.Fatalf("strip ops paths: %s %s", OpsPathPrefix(), ReadyPath())
 	}
+	if OIDCLabPathPrefix() != labOpsPathPrefix+"/oidc-lab" {
+		t.Fatalf("strip oidc-lab %s", OIDCLabPathPrefix())
+	}
+	if got := OIDCLabPathPrefixes(); len(got) != 2 || got[0] != productOpsPathPrefix+"/oidc-lab" || got[1] != labOpsPathPrefix+"/oidc-lab" {
+		t.Fatalf("both prefixes %v", got)
+	}
 	if LabDisplayName() != stripLabDisplay {
 		t.Fatalf("strip display %q", LabDisplayName())
 	}
@@ -38,8 +47,9 @@ func TestStripProductHelpersDefaultAndOn(t *testing.T) {
 	if cfg.HealthPath() != labOpsPathPrefix+"/health" ||
 		cfg.ReadyPath() != labOpsPathPrefix+"/ready" ||
 		cfg.VersionPath() != labOpsPathPrefix+"/version" ||
+		cfg.OIDCLabPathPrefix() != labOpsPathPrefix+"/oidc-lab" ||
 		cfg.LabDisplayName() != stripLabDisplay {
-		t.Fatalf("cfg strip %+v paths %s %s %s", cfg, cfg.HealthPath(), cfg.ReadyPath(), cfg.VersionPath())
+		t.Fatalf("cfg strip %+v paths %s %s %s %s", cfg, cfg.HealthPath(), cfg.ReadyPath(), cfg.VersionPath(), cfg.OIDCLabPathPrefix())
 	}
 
 	t.Setenv(EnvStripProduct, "true")

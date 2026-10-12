@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
@@ -64,6 +65,26 @@ func TestStripProductHealthPaths(t *testing.T) {
 		res.Body.Close()
 		if res.StatusCode != http.StatusNotFound {
 			t.Fatalf("product path %s should 404, got %d", path, res.StatusCode)
+		}
+	}
+
+	for _, pref := range []string{"/_lab/oidc-lab", "/_noctaxris-az/oidc-lab"} {
+		res, err := http.Get(hs.URL + pref + "/.well-known/openid-configuration")
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("%s discovery %d", pref, res.StatusCode)
+		}
+		var meta map[string]any
+		if err := json.Unmarshal(body, &meta); err != nil {
+			t.Fatal(err)
+		}
+		iss, _ := meta["issuer"].(string)
+		if !strings.HasSuffix(iss, "/_lab/oidc-lab") {
+			t.Fatalf("%s issuer=%q", pref, iss)
 		}
 	}
 }

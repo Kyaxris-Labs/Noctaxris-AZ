@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 1.4.4
+
+Patch after 1.4.3: lab OIDC issuer follows strip-product. Docker Hub: `kyaxris/noctaxris-az` (`1.4.4`, `1.4`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
+
+- When `NOCTAXRIS_AZ_STRIP_PRODUCT=1`, lab OIDC discovery and minted assertions print issuer `/_lab/oidc-lab` (not `/_noctaxris-az/oidc-lab`).
+- Both `/_lab/oidc-lab` and `/_noctaxris-az/oidc-lab` routes stay registered and public; jwt-bearer federated verify accepts either issuer for back-compat.
+
 ## 1.4.3
 
 Patch after 1.4.2: salted directory/app secrets, storage list XML for `x-ms-version`, Graph/App Config response polish. Docker Hub: `kyaxris/noctaxris-az` (`1.4.3`, `1.4`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
