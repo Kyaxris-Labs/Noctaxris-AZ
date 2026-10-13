@@ -208,8 +208,13 @@ func (s *Service) listResourceGroups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	subID := r.PathValue("subscriptionId")
-	scope := "/subscriptions/" + subID
-	if _, ok := s.require(w, r, "Microsoft.Resources/subscriptions/resourceGroups/read", scope); !ok {
+	p, ok := s.principal(r.Context())
+	if !ok {
+		azerrors.Unauthenticated(w, "")
+		return
+	}
+	if !p.AllowsARM() {
+		azerrors.InvalidAuthenticationTokenAudience(w, "")
 		return
 	}
 	list, err := s.Store.ListResourceGroups(subID)
@@ -217,8 +222,21 @@ func (s *Service) listResourceGroups(w http.ResponseWriter, r *http.Request) {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
 		return
 	}
+	// Azure returns only the resource groups the caller can read. A
+	// subscription-scope read grant surfaces every group (scopeChain walks up
+	// from each group to the subscription); a group-scoped Reader surfaces just
+	// that group. No read grant anywhere yields an empty list, not 403.
+	const rgReadAction = "Microsoft.Resources/subscriptions/resourceGroups/read"
 	value := make([]map[string]any, 0, len(list))
 	for _, rg := range list {
+		allowed, err := s.Authz.Evaluate(p.ID, p.IsRoot, rgReadAction, "/subscriptions/"+subID+"/resourceGroups/"+rg.Name)
+		if err != nil {
+			azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+			return
+		}
+		if !allowed {
+			continue
+		}
 		value = append(value, resourceGroupJSON(subID, rg.Name, rg.Location))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"value": value})

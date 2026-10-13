@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.4.6
+
+Patch after 1.4.5: resource group list is RBAC-filtered. Docker Hub: `kyaxris/noctaxris-az` (`1.4.6`, `1.4`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
+
+- `GET .../resourceGroups` returns only groups the caller can read (`Microsoft.Resources/subscriptions/resourceGroups/read` evaluated per group). Subscription-scope grants still surface every group; a group-scoped Reader sees that group alone; no grant yields HTTP 200 with an empty `value` (not 403).
+
 ## 1.4.5
 
 Patch after 1.4.4: App Configuration data-plane wrong-audience challenge names `azconfig.io`. Docker Hub: `kyaxris/noctaxris-az` (`1.4.5`, `1.4`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).

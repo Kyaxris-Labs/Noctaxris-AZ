@@ -44,6 +44,7 @@ ARG `POST /providers/Microsoft.ResourceGraph/resources` evaluates `Microsoft.Res
 
 - Bearer required. Token `aud` must be `https://management.azure.com` or `https://management.core.windows.net` (Graph `aud` is HTTP 403 `InvalidAuthenticationTokenAudience`). Root Bearer skips audience.
 - `GET /subscriptions` evaluates `Microsoft.Resources/subscriptions/read` per row and returns HTTP 200 with only visible subscriptions (possibly empty). No grant is not HTTP 403 on the list route.
+- `GET .../resourceGroups` evaluates `Microsoft.Resources/subscriptions/resourceGroups/read` per group (subscription-scope grants surface every group via scope walk-up; group-scoped Reader sees only that group) and returns HTTP 200 with the filtered list (possibly empty). No grant is not HTTP 403 on the list route.
 - `Microsoft.Resources/subscriptions/read` (get and list filter)
 - `Microsoft.Resources/subscriptions/resourceGroups/read|write`
 - `Microsoft.Resources/tenants/read`
@@ -57,7 +58,7 @@ ARG `POST /providers/Microsoft.ResourceGraph/resources` evaluates `Microsoft.Res
 - List tenants (lab tenant from the seeded subscription)
 - List management groups and descendants (direct child groups, plus same-tenant subscriptions under the tenant-root group). Unknown `{id}` returns 404.
 - Upsert and get resource group location
-- List resource groups in a subscription
+- List resource groups in a subscription (RBAC-filtered per group)
 - ARG query over stored `arg_resources` rows (`Resources` and `SecurityResources`; Defender inject writes assessments into `SecurityResources`)
 - Subscription-scope inventory for VMs, Key Vault, Storage, Web sites, ACR, AKS, Logic Apps (role assignment list is [authorization.md](authorization.md))
 
