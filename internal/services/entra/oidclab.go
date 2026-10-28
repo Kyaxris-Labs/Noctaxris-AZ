@@ -17,7 +17,7 @@ func (s *Service) ensureOIDCLabKey() (string, *rsa.PrivateKey, error) {
 }
 
 func (s *Service) handleLabOIDCDiscovery(w http.ResponseWriter, r *http.Request) {
-	iss := s.labOIDCIssuer()
+	iss := s.labOIDCIssuerAt(s.origin(r))
 	writeJSON(w, http.StatusOK, map[string]any{
 		"issuer":                                iss,
 		"jwks_uri":                              iss + "/keys",
@@ -86,7 +86,7 @@ func (s *Service) handleLabOIDCToken(w http.ResponseWriter, r *http.Request) {
 			audience = audience[:i]
 		}
 	}
-	token, err := s.MintLabOIDCAssertion(subject, audience)
+	token, err := s.mintLabOIDCAssertion(s.origin(r), subject, audience, nil)
 	if err != nil {
 		azerrors.WriteOAuth(w, http.StatusInternalServerError, "server_error", err.Error())
 		return
@@ -106,6 +106,10 @@ func (s *Service) MintLabOIDCAssertion(subject, audience string) (string, error)
 
 // MintLabOIDCAssertionClaims issues a lab OIDC JWT and merges extra claims (sub/iss/aud stay as given).
 func (s *Service) MintLabOIDCAssertionClaims(subject, audience string, extra map[string]any) (string, error) {
+	return s.mintLabOIDCAssertion(s.base(), subject, audience, extra)
+}
+
+func (s *Service) mintLabOIDCAssertion(origin, subject, audience string, extra map[string]any) (string, error) {
 	kid, priv, err := s.ensureOIDCLabKey()
 	if err != nil {
 		return "", err
@@ -115,7 +119,7 @@ func (s *Service) MintLabOIDCAssertionClaims(subject, audience string, extra map
 	}
 	now := s.now()
 	claims := map[string]any{
-		"iss": s.labOIDCIssuer(),
+		"iss": s.labOIDCIssuerAt(origin),
 		"sub": subject,
 		"aud": audience,
 		"iat": now.Unix(),

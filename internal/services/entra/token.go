@@ -71,7 +71,7 @@ func (s *Service) writeToken(w http.ResponseWriter, r *http.Request, principalID
 		s.writeConditionalAccessDenied(w)
 		return
 	}
-	token, expiresIn, err := s.MintAccessToken(principalID, audience)
+	token, expiresIn, err := s.mintAccessToken(principalID, audience, s.origin(r))
 	if err != nil {
 		azerrors.WriteOAuth(w, http.StatusInternalServerError, "server_error", err.Error())
 		return

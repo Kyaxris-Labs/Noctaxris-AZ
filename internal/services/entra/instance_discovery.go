@@ -15,7 +15,7 @@ func (s *Service) handleInstanceDiscovery(w http.ResponseWriter, r *http.Request
 		azerrors.BadRequest(w, "method not allowed")
 		return
 	}
-	base := s.base()
+	base := s.origin(r)
 	tenant := s.pathTenant(r)
 	authEndpoint := strings.TrimSpace(r.URL.Query().Get("authorization_endpoint"))
 	if authEndpoint == "" {

@@ -11,7 +11,7 @@ All settings use the `NOCTAXRIS_AZ_*` prefix.
 | `NOCTAXRIS_AZ_TLS_CERT` | empty | Optional TLS certificate PEM (pair with `NOCTAXRIS_AZ_TLS_KEY`) |
 | `NOCTAXRIS_AZ_TLS_KEY` | empty | Optional TLS private key PEM |
 | `NOCTAXRIS_AZ_TLS_AUTO` | unset / false | Mint lab CA + `listen.crt` / `listen.key` under the secrets dir and serve TLS on the main listener. Stock Compose sets `1`. |
-| `NOCTAXRIS_AZ_PUBLIC_URL` | empty | Client-facing origin for OIDC `iss`, `/metadata/endpoints`, and ARM resource-manager URLs (no trailing slash required). Stock Compose sets `https://127.0.0.1:4599`. When unset, wildcard listen hosts rewrite to loopback. |
+| `NOCTAXRIS_AZ_PUBLIC_URL` | empty | Client-facing origin for OIDC `iss`, `/metadata/endpoints`, and ARM resource-manager URLs (no trailing slash required). Stock Compose sets `https://127.0.0.1:4599`. When set, discovery, token endpoints, and the lab OIDC issuer keep this origin even if the request Host differs. When unset, those URLs use the request Host (`http` unless the request is TLS) and fall back to the loopback rewrite when Host is empty. Wildcard binds never appear as `0.0.0.0`. Cloud-hosts mode keeps `https://login.microsoftonline.com`. |
 | `NOCTAXRIS_AZ_ROOT_CLIENT_ID` | required at startup | Root principal / app client id |
 | `NOCTAXRIS_AZ_ROOT_ACCESS_TOKEN` | required at startup | Root Bearer token (held in memory) |
 | `NOCTAXRIS_AZ_TENANT_ID` | `00000000-0000-0000-0000-000000000001` | Lab tenant seeded by EnsureRoot |
@@ -26,7 +26,7 @@ All settings use the `NOCTAXRIS_AZ_*` prefix.
 | `NOCTAXRIS_AZ_ACTIVITY_INJECT` | unset / false | Enable `POST /_noctaxris-az/lab/activityLog:inject` into the same store `az monitor activity-log` lists. Bearer root. Default off returns AccessDenied. |
 | `NOCTAXRIS_AZ_LOGS_INJECT` | unset / false | Enable `POST /_noctaxris-az/lab/logs:inject` and `POST /loganalytics/{workspace}/ingest/{table}`. Bearer root. Default off returns AccessDenied. |
 | `NOCTAXRIS_AZ_DEFENDER_INJECT` | unset / false | Enable `POST /_noctaxris-az/lab/securityAssessments:inject` into ARG `SecurityResources`. Bearer root. Default off returns AccessDenied. |
-| `NOCTAXRIS_AZ_STRIP_PRODUCT` | unset / false | When `1` or `true`, expose only `/_lab/health`, `/_lab/ready`, and `/_lab/version` (product `/_noctaxris-az/health|ready|version` are not registered), print the lab OIDC issuer as `/_lab/oidc-lab` (both `/_lab/oidc-lab` and `/_noctaxris-az/oidc-lab` stay registered for back-compat), use generic `Lab` display names for subscription/tenant/Graph/AAD/SOAP, and mint the lab CA as `Lab CA` / Org `Lab`. Default keeps `/_noctaxris-az/health|ready|version`, lab OIDC issuer `/_noctaxris-az/oidc-lab`, display name `Noctaxris-AZ Lab`, and CA `Noctaxris-AZ Lab CA` / Org `Noctaxris-AZ`. Recreate the data root (or subscription row) to refresh seeded display names. Binary `healthcheck` follows the same ready path. |
+| `NOCTAXRIS_AZ_STRIP_PRODUCT` | unset / false | When `1` or `true`, expose only `/_lab/health`, `/_lab/ready`, and `/_lab/version` (product `/_noctaxris-az/health|ready|version` are not registered), print the lab OIDC issuer as `/_lab/oidc-lab` (both `/_lab/oidc-lab` and `/_noctaxris-az/oidc-lab` stay registered for back-compat), use generic `Lab` display names for subscription/tenant/Graph/AAD/SOAP, and mint the lab CA as `Lab CA` / Org `Lab` unless `NOCTAXRIS_AZ_CA_CN` or `NOCTAXRIS_AZ_CA_ORG` is set. Those two variables override the CA common name and organization whether or not strip mode is on. Default keeps `/_noctaxris-az/health|ready|version`, lab OIDC issuer `/_noctaxris-az/oidc-lab`, display name `Noctaxris-AZ Lab`, and CA `Noctaxris-AZ Lab CA` / Org `Noctaxris-AZ`. Recreate the data root (or subscription row) to refresh seeded display names. Binary `healthcheck` follows the same ready path. |
 
 ## HTTP auth
 
@@ -115,7 +115,8 @@ When TLS auto is on (stock Compose), the process writes PEMs next to `master.key
 | File | Role |
 |------|------|
 | `lab-ca.crt` | Lab CA (also served at `GET /_noctaxris-az/ca.pem`) |
-| `listen.crt` / `listen.key` | Main API server cert (SANs include loopback plus any host from `NOCTAXRIS_AZ_PUBLIC_URL`) |
+| `lab-ca.key` | Lab CA private key. Present when TLS auto generated the CA. Used to reissue the leaf. |
+| `listen.crt` / `listen.key` | Main API server cert. SANs include loopback. An IP address in `NOCTAXRIS_AZ_PUBLIC_URL` is an IP SAN. When that variable is unset, an IP in the request Host is added after that request, so the next handshake to the same IP matches. DNS names from the request Host are not added. |
 
 ## Cloud hosts TLS
 

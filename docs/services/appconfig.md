@@ -27,7 +27,7 @@ Optional `?label=` on KV get/put and on snapshot read. Single KV responses use `
 
 ## Detailed actions
 
-- Upsert store with `location`; endpoint property points at lab data plane
+- Upsert store with `location`. `properties.endpoint` points at the data plane. A loopback endpoint host is rewritten to the request origin on read (`http` unless the request is TLS). `NOCTAXRIS_AZ_PUBLIC_URL`, when set, is that origin instead
 - Set and get key-values (label defaults empty)
 - List key-values for a store
 - Delete store removes KV rows, snapshots, snapshot KVs, and feature flags

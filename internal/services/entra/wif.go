@@ -13,21 +13,51 @@ import (
 )
 
 func (s *Service) entraIssuer() string {
-	return s.base() + "/" + s.appTenant() + "/v2.0"
+	return s.entraIssuerAt(s.base())
+}
+
+func (s *Service) entraIssuerAt(origin string) string {
+	return strings.TrimRight(strings.TrimSpace(origin), "/") + "/" + s.appTenant() + "/v2.0"
 }
 
 func (s *Service) labOIDCIssuer() string {
+	return s.labOIDCIssuerAt(s.base())
+}
+
+func (s *Service) labOIDCIssuerAt(origin string) string {
+	origin = strings.TrimRight(strings.TrimSpace(origin), "/")
+	if origin == "" {
+		origin = s.base()
+	}
 	pref := "/_noctaxris-az/oidc-lab"
 	if s.StripProduct {
 		pref = "/_lab/oidc-lab"
 	}
-	return s.base() + pref
+	return origin + pref
 }
 
 func (s *Service) isLabOIDCIssuer(iss string) bool {
-	for _, pref := range config.OIDCLabPathPrefixes() {
-		want := s.base() + pref
-		if iss == want || strings.HasPrefix(iss, want) {
+	_, ok := config.LabOIDCIssuerPath(iss)
+	return ok
+}
+
+func (s *Service) isEntraIssuedAssertion(iss string, r *http.Request) bool {
+	iss = strings.TrimSpace(iss)
+	if iss == "" {
+		return false
+	}
+	seen := map[string]struct{}{}
+	for _, base := range []string{s.base(), s.origin(r)} {
+		base = strings.TrimRight(strings.TrimSpace(base), "/")
+		if base == "" {
+			continue
+		}
+		if _, ok := seen[base]; ok {
+			continue
+		}
+		seen[base] = struct{}{}
+		prefix := base + "/" + s.appTenant()
+		if iss == prefix+"/v2.0" || strings.HasPrefix(iss, prefix) {
 			return true
 		}
 	}
@@ -43,7 +73,7 @@ func (s *Service) verifyClientAssertion(w http.ResponseWriter, r *http.Request, 
 	iss := authn.ClaimString(claims, "iss")
 	sub := authn.ClaimString(claims, "sub")
 	aud := authn.ClaimString(claims, "aud")
-	if iss == s.entraIssuer() || strings.HasPrefix(iss, s.base()+"/"+s.appTenant()) {
+	if s.isEntraIssuedAssertion(iss, r) {
 		azerrors.WriteOAuth(w, http.StatusUnauthorized, "invalid_client", "Entra-issued tokens cannot be used as federated assertions")
 		return "", false
 	}
@@ -117,6 +147,36 @@ func (s *Service) federatedMatchAppIDs(clientID string) []string {
 	return ids
 }
 
+func (s *Service) assertionAudOK(r *http.Request, aud string) bool {
+	aud = strings.TrimSpace(aud)
+	if aud == "" {
+		return false
+	}
+	seen := map[string]struct{}{}
+	tenant := s.pathTenant(r)
+	for _, base := range []string{s.origin(r), s.base()} {
+		base = strings.TrimRight(strings.TrimSpace(base), "/")
+		if base == "" {
+			continue
+		}
+		if _, ok := seen[base]; ok {
+			continue
+		}
+		seen[base] = struct{}{}
+		candidates := []string{
+			base + "/" + tenant + "/oauth2/v2.0/token",
+			base + "/" + tenant + "/oauth2/token",
+			base + "/" + s.appTenant() + "/oauth2/v2.0/token",
+		}
+		for _, c := range candidates {
+			if aud == c {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (s *Service) verifyPrivateKeyJWT(w http.ResponseWriter, r *http.Request, clientID, assertion, iss, sub, aud string) (string, bool) {
 	if clientID == "" {
 		clientID = iss
@@ -129,9 +189,7 @@ func (s *Service) verifyPrivateKeyJWT(w http.ResponseWriter, r *http.Request, cl
 		azerrors.WriteOAuth(w, http.StatusUnauthorized, "invalid_client", "client_id does not match assertion iss")
 		return "", false
 	}
-	tokenURL := s.base() + "/" + s.pathTenant(r) + "/oauth2/v2.0/token"
-	tokenURLV1 := s.base() + "/" + s.pathTenant(r) + "/oauth2/token"
-	if aud != tokenURL && aud != tokenURLV1 && aud != s.base()+"/"+s.appTenant()+"/oauth2/v2.0/token" {
+	if !s.assertionAudOK(r, aud) {
 		azerrors.WriteOAuth(w, http.StatusUnauthorized, "invalid_client", "assertion aud must be the token endpoint")
 		return "", false
 	}

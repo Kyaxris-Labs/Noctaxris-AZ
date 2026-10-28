@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -44,6 +45,7 @@ type Server struct {
 	authn         *authn.Authenticator
 	authz         *authz.Evaluator
 	mux           *http.ServeMux
+	published     *tlsutil.PublishedCerts
 	clockMu       sync.RWMutex
 	clockOverride *time.Time
 }
@@ -204,6 +206,9 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) withMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.published != nil && !s.cfg.PinPublicOrigin() {
+			s.published.Note(r.Host)
+		}
 		reqID := r.Header.Get(requestIDHeader)
 		if reqID == "" {
 			reqID = newRequestID()
@@ -274,6 +279,9 @@ func (s *Server) ListenAndServeContext(ctx context.Context) error {
 			return fmt.Errorf("tls auto cert: %w", err)
 		}
 		certFile, keyFile = paths.ServerCert, paths.ServerKey
+		if pc, err := tlsutil.OpenPublishedCerts(paths); err == nil {
+			s.published = pc
+		}
 	}
 	useTLS := certFile != "" && keyFile != ""
 	main := &http.Server{
@@ -284,7 +292,17 @@ func (s *Server) ListenAndServeContext(ctx context.Context) error {
 	errCh := make(chan error, 2)
 	go func() {
 		var err error
-		if useTLS {
+		if useTLS && s.published != nil {
+			var ln net.Listener
+			ln, err = net.Listen("tcp", s.cfg.ListenAddr)
+			if err == nil {
+				ln = tls.NewListener(ln, &tls.Config{
+					MinVersion:     tls.VersionTLS12,
+					GetCertificate: s.published.GetCertificate,
+				})
+				err = main.Serve(ln)
+			}
+		} else if useTLS {
 			err = main.ListenAndServeTLS(certFile, keyFile)
 		} else {
 			err = main.ListenAndServe()

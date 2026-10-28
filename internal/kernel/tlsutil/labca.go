@@ -79,6 +79,7 @@ func AllowedCloudHost(host string) bool {
 // Paths holds generated lab CA and server PEMs.
 type Paths struct {
 	CACert     string
+	CAKey      string
 	ServerCert string
 	ServerKey  string
 }
@@ -96,6 +97,7 @@ func DefaultPaths(secretsDir string) Paths {
 func ListenPaths(secretsDir string) Paths {
 	return Paths{
 		CACert:     filepath.Join(secretsDir, "lab-ca.crt"),
+		CAKey:      filepath.Join(secretsDir, "lab-ca.key"),
 		ServerCert: filepath.Join(secretsDir, "listen.crt"),
 		ServerKey:  filepath.Join(secretsDir, "listen.key"),
 	}
@@ -144,7 +146,8 @@ func EnsureListenCert(secretsDir string, notAfter time.Time, extraDNS ...string)
 		return Paths{}, err
 	}
 	dns := []string{"localhost"}
-	seen := map[string]struct{}{"localhost": {}}
+	ips := []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")}
+	seen := map[string]struct{}{"localhost": {}, "127.0.0.1": {}, "::1": {}}
 	for _, h := range extraDNS {
 		h = strings.TrimSpace(h)
 		if h == "" {
@@ -154,6 +157,10 @@ func EnsureListenCert(secretsDir string, notAfter time.Time, extraDNS ...string)
 			continue
 		}
 		seen[h] = struct{}{}
+		if ip := net.ParseIP(h); ip != nil {
+			ips = append(ips, ip)
+			continue
+		}
 		dns = append(dns, h)
 	}
 	srvTpl := &x509.Certificate{
@@ -164,7 +171,7 @@ func EnsureListenCert(secretsDir string, notAfter time.Time, extraDNS ...string)
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		DNSNames:     dns,
-		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")},
+		IPAddresses:  ips,
 	}
 	caCert, err := x509.ParseCertificate(caDER)
 	if err != nil {
@@ -176,6 +183,15 @@ func EnsureListenCert(secretsDir string, notAfter time.Time, extraDNS ...string)
 	}
 	if err := writePEM(p.CACert, "CERTIFICATE", caDER, 0o644); err != nil {
 		return Paths{}, err
+	}
+	if p.CAKey != "" {
+		caKeyDER, err := x509.MarshalECPrivateKey(caKey)
+		if err != nil {
+			return Paths{}, err
+		}
+		if err := writePEM(p.CAKey, "EC PRIVATE KEY", caKeyDER, 0o600); err != nil {
+			return Paths{}, err
+		}
 	}
 	if err := writePEM(p.ServerCert, "CERTIFICATE", srvDER, 0o644); err != nil {
 		return Paths{}, err

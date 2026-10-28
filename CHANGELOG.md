@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 1.4.8
+
+Patch after 1.4.7: discovery, token endpoints, and the TLS leaf follow the host and port the client used. Docker Hub: `kyaxris/noctaxris-az` (`1.4.8`, `1.4`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
+
+- When `NOCTAXRIS_AZ_PUBLIC_URL` is unset, OpenID Connect discovery, token endpoints, and the lab OIDC issuer use the request Host (`http` unless the request is TLS). An empty Host still falls back to the loopback rewrite. A set public URL and cloud-hosts mode stay pinned.
+- Lab OIDC federated credentials match on the lab issuer path (`/_lab/oidc-lab` or `/_noctaxris-az/oidc-lab`). The same path on another host matches. The two paths do not match each other. Any other issuer stays an exact string compare.
+- App Configuration `properties.endpoint` rewrites a loopback origin to the request origin on read.
+- TLS auto keeps loopback names on the server certificate. An IP address in the request Host is added to the leaf for the next handshake. DNS names from that Host are not added.
+- `NOCTAXRIS_AZ_CA_CN` and `NOCTAXRIS_AZ_CA_ORG`, when set, are the lab CA common name and organization. Unset, strip mode still uses `Lab CA` / `Lab`.
+
 ## 1.4.7
 
 Patch after 1.4.6: Go 1.27.3 for stdlib crypto/x509 govulncheck clear, plus Go module refreshes. Docker Hub: `kyaxris/noctaxris-az` (`1.4.7`, `1.4`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).

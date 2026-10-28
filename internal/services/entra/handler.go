@@ -19,12 +19,13 @@ const defaultExpiresIn = 3600
 
 // Service serves Microsoft Entra ID OAuth2 / OIDC theatre.
 type Service struct {
-	Store        *store.Store
-	TenantID     string
-	PublicBase   string // e.g. http://127.0.0.1:4599
-	StripProduct bool   // prefer /_lab/oidc-lab issuer when true
-	Now          func() time.Time
-	AuditNow     func() time.Time
+	Store             *store.Store
+	TenantID          string
+	PublicBase        string // e.g. http://127.0.0.1:4599
+	FollowRequestHost bool   // advertise request Host in discovery and lab iss
+	StripProduct      bool   // prefer /_lab/oidc-lab issuer when true
+	Now               func() time.Time
+	AuditNow          func() time.Time
 
 	mu   sync.Mutex
 	kid  string
@@ -97,13 +98,21 @@ func (s *Service) VerifyAccessTokenClaims(token string, now time.Time) (claims m
 // Empty audience is preserved (not defaulted to ARM). For app/SP principals, oid is the
 // service principal object id when one exists; appid/azp stay the application (client) id.
 func (s *Service) MintAccessToken(principalID, audience string) (token string, expiresIn int, err error) {
+	return s.mintAccessToken(principalID, audience, s.base())
+}
+
+func (s *Service) mintAccessToken(principalID, audience, origin string) (token string, expiresIn int, err error) {
 	kid, priv, err := s.ensureKey()
 	if err != nil {
 		return "", 0, err
 	}
 	now := s.now()
 	exp := now.Add(time.Duration(defaultExpiresIn) * time.Second)
-	iss := s.base() + "/" + s.TenantID + "/v2.0"
+	origin = strings.TrimRight(strings.TrimSpace(origin), "/")
+	if origin == "" {
+		origin = s.base()
+	}
+	iss := origin + "/" + s.TenantID + "/v2.0"
 	oid, appID := s.resolveTokenIdentity(principalID)
 	claims := map[string]any{
 		"iss":   iss,
@@ -223,7 +232,7 @@ func (s *Service) pathTenant(r *http.Request) string {
 
 func (s *Service) handleOIDCDiscovery(w http.ResponseWriter, r *http.Request) {
 	tenant := s.pathTenant(r)
-	base := s.base()
+	base := s.origin(r)
 	v2 := strings.Contains(r.URL.Path, "/v2.0/")
 	issuer := base + "/" + tenant
 	tokenPath := base + "/" + tenant + "/oauth2/token"
@@ -266,7 +275,7 @@ func (s *Service) handleJWKS(w http.ResponseWriter, r *http.Request) {
 		i++
 	}
 	e := base64.RawURLEncoding.EncodeToString(eBytes[i:])
-	issuer := s.base() + "/" + tenant + "/v2.0"
+	issuer := s.origin(r) + "/" + tenant + "/v2.0"
 	writeJSON(w, http.StatusOK, map[string]any{
 		"keys": []map[string]any{{
 			"kty":    "RSA",

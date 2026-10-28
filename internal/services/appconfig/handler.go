@@ -20,6 +20,9 @@ import (
 type Handler struct {
 	Store *store.Store
 	Authz *authz.Evaluator
+	// PublicBase, when set, is the NOCTAXRIS_AZ_PUBLIC_URL origin for properties.endpoint.
+	// Empty means a loopback endpoint host is rewritten to the request origin on the way out.
+	PublicBase string
 }
 
 type principalFunc func(*http.Request) (authn.Principal, bool)
@@ -136,7 +139,7 @@ func storeResourceID(sub, rg, name string) string {
 		sub, rg, name)
 }
 
-func storeResource(row store.AppConfigStore) map[string]any {
+func (h *Handler) storeResource(row store.AppConfigStore, r *http.Request) map[string]any {
 	return map[string]any{
 		"id":       storeResourceID(row.SubscriptionID, row.ResourceGroup, row.Name),
 		"name":     row.Name,
@@ -144,9 +147,17 @@ func storeResource(row store.AppConfigStore) map[string]any {
 		"location": row.Location,
 		"properties": map[string]any{
 			"provisioningState": "Succeeded",
-			"endpoint":          fmt.Sprintf("http://127.0.0.1:4599/appconfig/%s", row.Name),
+			"endpoint":          h.endpointFor(row.Name, r),
 		},
 	}
+}
+
+func (h *Handler) endpointFor(name string, r *http.Request) string {
+	path := "/appconfig/" + name
+	if base := strings.TrimRight(strings.TrimSpace(h.PublicBase), "/"); base != "" {
+		return base + path
+	}
+	return config.RewriteLoopbackOrigin("http://127.0.0.1:4599"+path, r)
 }
 
 func (h *Handler) putStore(w http.ResponseWriter, r *http.Request, p authn.Principal) {
@@ -170,7 +181,7 @@ func (h *Handler) putStore(w http.ResponseWriter, r *http.Request, p authn.Princ
 	}
 	_ = h.Store.AppendActivityLog(p.ID, "Microsoft.AppConfiguration/configurationStores/write", scope, "Succeeded", "")
 	row, _, _ := h.Store.GetAppConfig(sub, rg, name)
-	writeJSON(w, http.StatusOK, storeResource(row))
+	writeJSON(w, http.StatusOK, h.storeResource(row, r))
 }
 
 func (h *Handler) getStore(w http.ResponseWriter, r *http.Request, p authn.Principal) {
@@ -189,7 +200,7 @@ func (h *Handler) getStore(w http.ResponseWriter, r *http.Request, p authn.Princ
 		azerrors.NotFound(w, "configuration store not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, storeResource(row))
+	writeJSON(w, http.StatusOK, h.storeResource(row, r))
 }
 
 func (h *Handler) deleteStore(w http.ResponseWriter, r *http.Request, p authn.Principal) {
@@ -225,7 +236,7 @@ func (h *Handler) listStores(w http.ResponseWriter, r *http.Request, p authn.Pri
 	}
 	value := make([]any, 0, len(rows))
 	for _, row := range rows {
-		value = append(value, storeResource(row))
+		value = append(value, h.storeResource(row, r))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"value": value})
 }

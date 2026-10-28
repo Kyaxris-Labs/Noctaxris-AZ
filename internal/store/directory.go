@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
+
 	"github.com/google/uuid"
 )
 
@@ -508,6 +510,7 @@ func (s *Store) FindFIC(issuer, subject, audience string) (FederatedIdentityCred
 }
 
 // MatchFIC finds a federated credential by issuer, audience, and either exact subject or claimsMatchingExpression.
+// Lab OIDC issuers match by path (/_lab/oidc-lab or /_noctaxris-az/oidc-lab), not by host. Other issuers compare exactly.
 // When appObjectIDs is non-empty, only credentials whose application matches one of those ids are considered.
 func (s *Store) MatchFIC(issuer, audience string, claims map[string]any, appObjectIDs ...string) (FederatedIdentityCredential, bool, error) {
 	sub := claimString(claims, "sub")
@@ -535,7 +538,7 @@ func (s *Store) MatchFIC(issuer, audience string, claims map[string]any, appObje
 				continue
 			}
 		}
-		if f.Issuer != issuer {
+		if !config.LabOIDCIssuersMatch(f.Issuer, issuer) {
 			continue
 		}
 		if audience != "" && !audienceAllowed(f.Audiences, audience) {

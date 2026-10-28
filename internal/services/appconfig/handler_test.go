@@ -23,6 +23,11 @@ const (
 
 func mountAppConfig(t *testing.T, principal func(*http.Request) (authn.Principal, bool)) *http.ServeMux {
 	t.Helper()
+	return mountAppConfigBase(t, principal, "")
+}
+
+func mountAppConfigBase(t *testing.T, principal func(*http.Request) (authn.Principal, bool), publicBase string) *http.ServeMux {
+	t.Helper()
 	dir := t.TempDir()
 	key, err := store.LoadOrCreateMasterKey(filepath.Join(dir, "secrets", "master.key"))
 	if err != nil {
@@ -45,7 +50,7 @@ func mountAppConfig(t *testing.T, principal func(*http.Request) (authn.Principal
 		}
 	}
 	mux := http.NewServeMux()
-	h := &appconfig.Handler{Store: st, Authz: &authz.Evaluator{Assignments: st}}
+	h := &appconfig.Handler{Store: st, Authz: &authz.Evaluator{Assignments: st}, PublicBase: publicBase}
 	h.Mount(mux, principal)
 	return mux
 }

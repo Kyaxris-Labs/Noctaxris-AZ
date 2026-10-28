@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"net"
+	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -206,6 +208,9 @@ func (c Config) LabDisplayName() string {
 
 // LabCACommonName is the lab CA certificate CN for the process environment.
 func LabCACommonName() string {
+	if v := strings.TrimSpace(os.Getenv("NOCTAXRIS_AZ_CA_CN")); v != "" {
+		return v
+	}
 	if StripProductEnabled() {
 		return stripLabCACN
 	}
@@ -214,6 +219,9 @@ func LabCACommonName() string {
 
 // LabCAOrganization is the lab CA Organization for the process environment.
 func LabCAOrganization() string {
+	if v := strings.TrimSpace(os.Getenv("NOCTAXRIS_AZ_CA_ORG")); v != "" {
+		return v
+	}
 	if StripProductEnabled() {
 		return stripLabCAOrg
 	}
@@ -267,6 +275,7 @@ func (c Config) TLSEnabled() bool {
 
 // PublicBase is the client-facing origin for OIDC iss, cloud metadata, and CLI register.
 // Prefer NOCTAXRIS_AZ_PUBLIC_URL. Otherwise rewrite wildcard binds to loopback.
+// RequestOrigin follows the request Host when that override is empty and cloud-hosts mode is off.
 func (c Config) PublicBase() string {
 	if u := strings.TrimSpace(c.PublicURL); u != "" {
 		return strings.TrimRight(u, "/")
@@ -339,6 +348,106 @@ func ValidateCloudHostsListen(c Config) error {
 // IssuerBase is the OIDC issuer origin (iss / discovery). Uses PublicBase.
 func (c Config) IssuerBase() string {
 	return c.PublicBase()
+}
+
+// PinPublicOrigin reports that discovery must keep PublicBase.
+// True when NOCTAXRIS_AZ_PUBLIC_URL is set, or when cloud-hosts mode advertises login.microsoftonline.com.
+func (c Config) PinPublicOrigin() bool {
+	return strings.TrimSpace(c.PublicURL) != "" || c.CloudHosts
+}
+
+// RequestOrigin is the origin discovery and issuer URLs advertise for this request.
+// A pinned public origin wins. Otherwise the request Host is used (http unless r.TLS is set).
+// An empty Host falls back to PublicBase.
+func (c Config) RequestOrigin(r *http.Request) string {
+	if c.PinPublicOrigin() {
+		return c.PublicBase()
+	}
+	if o := OriginFromRequest(r); o != "" {
+		return o
+	}
+	return c.PublicBase()
+}
+
+// OriginFromRequest is scheme://host from r. Scheme is http unless r.TLS is set.
+// An empty or rejected Host returns an empty string.
+func OriginFromRequest(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	host := strings.TrimSpace(r.Host)
+	if !advertisedHostOK(host) {
+		return ""
+	}
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	return scheme + "://" + host
+}
+
+// RewriteLoopbackOrigin replaces scheme and host when raw is an absolute URL whose host is loopback.
+// The replacement is OriginFromRequest. Other URLs, and requests with no usable Host, are unchanged.
+func RewriteLoopbackOrigin(raw string, r *http.Request) string {
+	origin := OriginFromRequest(r)
+	if origin == "" {
+		return raw
+	}
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Scheme == "" || u.Host == "" || !ListenIsLoopback(u.Host) {
+		return raw
+	}
+	o, err := url.Parse(origin)
+	if err != nil || o.Scheme == "" || o.Host == "" {
+		return raw
+	}
+	u.Scheme = o.Scheme
+	u.Host = o.Host
+	return u.String()
+}
+
+// LabOIDCIssuerPath returns the lab OIDC path when raw is an http(s) URL whose path is
+// exactly /_lab/oidc-lab or /_noctaxris-az/oidc-lab. Host is ignored.
+func LabOIDCIssuerPath(raw string) (string, bool) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return "", false
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return "", false
+	}
+	path := strings.TrimRight(u.Path, "/")
+	for _, pref := range OIDCLabPathPrefixes() {
+		if path == pref {
+			return pref, true
+		}
+	}
+	return "", false
+}
+
+// LabOIDCIssuersMatch reports whether two federated issuer strings refer to the same issuer.
+// Equal strings match. Lab OIDC URLs also match when both paths are the same lab path, ignoring host.
+// Unrelated issuers do not match.
+func LabOIDCIssuersMatch(stored, presented string) bool {
+	if stored == presented {
+		return true
+	}
+	sp, sok := LabOIDCIssuerPath(stored)
+	pp, pok := LabOIDCIssuerPath(presented)
+	return sok && pok && sp == pp
+}
+
+func advertisedHostOK(host string) bool {
+	if host == "" || len(host) > 512 {
+		return false
+	}
+	for i := 0; i < len(host); i++ {
+		c := host[i]
+		if c <= ' ' || c == '/' || c == '\\' || c == '@' || c == '?' || c == '#' || c == '%' {
+			return false
+		}
+	}
+	return true
 }
 
 // CAPath returns the ops path that serves the lab CA PEM.
