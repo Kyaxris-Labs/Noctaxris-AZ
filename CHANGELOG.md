@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 1.4.7
+
+Patch after 1.4.6: Go 1.27.3 for stdlib crypto/x509 govulncheck clear, plus Go module refreshes. Docker Hub: `kyaxris/noctaxris-az` (`1.4.7`, `1.4`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
+
+- Dependencies: `go-jose/v4` v4.1.6, `golang.org/x/crypto` v0.58.0, `moby/moby` client v0.6.2 / api v1.56.1, `modernc.org/sqlite` v1.61.0, and related indirects.
+- Toolchain: Go 1.27.3. Digest-pinned `golang:1.27.3-bookworm` (GO-2026-6809).
+
 ## 1.4.6
 
 Patch after 1.4.5: resource group list is RBAC-filtered. Docker Hub: `kyaxris/noctaxris-az` (`1.4.6`, `1.4`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
