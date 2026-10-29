@@ -177,8 +177,12 @@ func (s *Server) handleMetadataEndpoints(w http.ResponseWriter, r *http.Request)
 		azerrors.BadRequest(w, "method not allowed")
 		return
 	}
-	base := s.cfg.PublicBase()
-	rm := s.cfg.ResourceManagerBase()
+	base := s.cfg.RequestOrigin(r)
+	rm := base
+	if s.cfg.PinPublicOrigin() {
+		base = s.cfg.PublicBase()
+		rm = s.cfg.ResourceManagerBase()
+	}
 	login := base + "/"
 	writeJSONMeta(w, http.StatusOK, map[string]any{
 		"galleryEndpoint": rm + "/gallery",

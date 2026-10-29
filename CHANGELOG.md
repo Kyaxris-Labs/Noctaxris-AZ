@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.4.10
+
+Patch after 1.4.9: metadata endpoints follow the request Host. Docker Hub: `kyaxris/noctaxris-az` (`1.4.10`, `1.4`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
+
+- `GET /metadata/endpoints` uses the request Host when `NOCTAXRIS_AZ_PUBLIC_URL` is unset and cloud-hosts mode is off. A set public URL and cloud-hosts mode stay pinned.
+
 ## 1.4.9
 
 Patch after 1.4.8: user-assigned identity create can pin principal and client IDs, and Graph list odata links follow the request Host. Docker Hub: `kyaxris/noctaxris-az` (`1.4.9`, `1.4`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
