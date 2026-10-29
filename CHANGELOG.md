@@ -4,9 +4,10 @@
 
 ## 1.4.9
 
-Patch after 1.4.8: user-assigned identity create can pin principal and client IDs. Docker Hub: `kyaxris/noctaxris-az` (`1.4.9`, `1.4`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
+Patch after 1.4.8: user-assigned identity create can pin principal and client IDs, and Graph list odata links follow the request Host. Docker Hub: `kyaxris/noctaxris-az` (`1.4.9`, `1.4`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
 
 - User-assigned identity create stores `properties.principalId` and `properties.clientId` when both are valid UUIDs. Omitted values are still generated. A later put keeps the stored pair.
+- Graph list `@odata.context` and `@odata.nextLink` use the request Host when `NOCTAXRIS_AZ_PUBLIC_URL` is unset and cloud-hosts mode is off. A set public URL and cloud-hosts mode stay pinned.
 
 ## 1.4.8
 

@@ -129,6 +129,63 @@ func TestFederatedCredentialMatchesLabIssuerAcrossHosts(t *testing.T) {
 	}
 }
 
+func TestGraphODataContextFollowsRequestHost(t *testing.T) {
+	st := openStore(t)
+	svc := &entra.Service{
+		Store:             st,
+		TenantID:          config.DefaultTenantID,
+		PublicBase:        "http://127.0.0.1:4599",
+		FollowRequestHost: true,
+	}
+	body := graphList(t, svc, publishedHost, true)
+	want := "https://" + publishedHost
+	ctx, _ := body["@odata.context"].(string)
+	if ctx != want+"/v1.0/$metadata#Collection(microsoft.graph.directoryObject)" {
+		t.Fatalf("context=%q", ctx)
+	}
+	next, _ := body["@odata.nextLink"].(string)
+	if !strings.HasPrefix(next, want+"/v1.0/users?$skiptoken=") {
+		t.Fatalf("nextLink=%q", next)
+	}
+	if strings.Contains(ctx, "127.0.0.1") || strings.Contains(next, "127.0.0.1") {
+		t.Fatalf("loopback context=%q next=%q", ctx, next)
+	}
+
+	pinned := &entra.Service{
+		Store: st, TenantID: config.DefaultTenantID, PublicBase: "https://lab.example:8443",
+	}
+	kept := graphList(t, pinned, publishedHost, true)
+	keptCtx, _ := kept["@odata.context"].(string)
+	if keptCtx != "https://lab.example:8443/v1.0/$metadata#Collection(microsoft.graph.directoryObject)" {
+		t.Fatalf("pinned context=%q", keptCtx)
+	}
+}
+
+func graphList(t *testing.T, svc *entra.Service, host string, useTLS bool) map[string]any {
+	t.Helper()
+	mux := http.NewServeMux()
+	svc.Mount(mux)
+	wrap := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := authn.WithPrincipal(r.Context(), authn.Principal{ID: "root", IsRoot: true})
+		mux.ServeHTTP(w, r.WithContext(ctx))
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1.0/users?$top=1", nil)
+	req.Host = host
+	if useTLS {
+		req.TLS = &tls.ConnectionState{}
+	}
+	rec := httptest.NewRecorder()
+	wrap.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("graph list %d %s", rec.Code, rec.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	return body
+}
+
 func getJSON(t *testing.T, mux http.Handler, path, host string, useTLS bool) map[string]any {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, path, nil)
