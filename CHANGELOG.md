@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.4.9
+
+Patch after 1.4.8: user-assigned identity create can pin principal and client IDs. Docker Hub: `kyaxris/noctaxris-az` (`1.4.9`, `1.4`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
+
+- User-assigned identity create stores `properties.principalId` and `properties.clientId` when both are valid UUIDs. Omitted values are still generated. A later put keeps the stored pair.
+
 ## 1.4.8
 
 Patch after 1.4.7: discovery, token endpoints, and the TLS leaf follow the host and port the client used. Docker Hub: `kyaxris/noctaxris-az` (`1.4.8`, `1.4`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).

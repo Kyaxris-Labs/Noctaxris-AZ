@@ -32,7 +32,7 @@ Empty `RemoteAddr` fails closed. Other remote addresses receive HTTP 403.
 
 ## Detailed actions
 
-- Create / get / delete / list user-assigned identities
+- Create / get / delete / list user-assigned identities. Create stores `properties.principalId` and `properties.clientId` when both are valid UUIDs. Omitted values are generated. A later put keeps the stored pair.
 - Mint access token for a `resource` audience for a resolved managed identity
 - IMDS mint appends a row to Log Analytics table `AADManagedIdentitySignInLogs` on workspace `default` (no secrets). `TimeGenerated` follows the lab clock when freeze/set is on. `expires_on` / `not_before` stay wall clock.
 

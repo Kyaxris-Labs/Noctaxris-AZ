@@ -1,6 +1,7 @@
 package managedidentity_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -92,5 +93,75 @@ func TestManagedIdentityCRUDAndSystemAssigned(t *testing.T) {
 	mux.ServeHTTP(rec, miss)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("missing %d", rec.Code)
+	}
+}
+
+func TestManagedIdentityCreatePinsIDs(t *testing.T) {
+	dir := t.TempDir()
+	key, err := store.LoadOrCreateMasterKey(filepath.Join(dir, "master.key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := store.Open(filepath.Join(dir, "data"), key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	_ = st.EnsureRoot(config.DefaultTenantID, config.DefaultSubscriptionID, "root")
+	es := &entra.Service{Store: st, TenantID: config.DefaultTenantID, PublicBase: "http://127.0.0.1:4599"}
+	auth := &authn.Authenticator{RootClientID: "root", RootAccessToken: "root-token", Tokens: st, JWT: es}
+	h := &managedidentity.Handler{
+		Store: st, Auth: auth, Authz: &authz.Evaluator{Assignments: st}, Entra: es, TenantID: config.DefaultTenantID,
+	}
+	mux := http.NewServeMux()
+	h.Register(mux)
+	sub := config.DefaultSubscriptionID
+	path := "/subscriptions/" + sub + "/resourceGroups/rg1/providers/Microsoft.ManagedIdentity/userAssignedIdentities/pinned"
+	principal := "3f2a6c18-7b14-4e09-9c3d-1a8e5b6d7042"
+	client := "8d4e1f90-2c6b-4a17-b538-9e0c7a1d2f63"
+	body := `{"location":"eastus","properties":{"principalId":"` + principal + `","clientId":"` + client + `"}}`
+
+	put := httptest.NewRequest(http.MethodPut, path, strings.NewReader(body))
+	put.Header.Set("Authorization", "Bearer root-token")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, put)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("put %d %s", rec.Code, rec.Body.String())
+	}
+	var created map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	props, _ := created["properties"].(map[string]any)
+	if props["clientId"] != client || props["principalId"] != principal {
+		t.Fatalf("pinned ids not stored: %#v", props)
+	}
+
+	again := httptest.NewRequest(http.MethodPut, path, strings.NewReader(
+		`{"location":"eastus","properties":{"principalId":"7c1d9e20-4b8a-4f33-a1e6-5d0b8c2a7e41","clientId":"2a9b4c70-1d5e-4f88-9b03-6e8d1a4c5f72"}}`,
+	))
+	again.Header.Set("Authorization", "Bearer root-token")
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, again)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("second put %d %s", rec.Code, rec.Body.String())
+	}
+	var kept map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &kept); err != nil {
+		t.Fatal(err)
+	}
+	keptProps, _ := kept["properties"].(map[string]any)
+	if keptProps["clientId"] != client || keptProps["principalId"] != principal {
+		t.Fatalf("second put replaced ids: %#v", keptProps)
+	}
+
+	partial := httptest.NewRequest(http.MethodPut, path+"-bad", strings.NewReader(
+		`{"location":"eastus","properties":{"clientId":"`+client+`"}}`,
+	))
+	partial.Header.Set("Authorization", "Bearer root-token")
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, partial)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("partial pin status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }

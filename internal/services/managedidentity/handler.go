@@ -2,6 +2,7 @@ package managedidentity
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -49,7 +50,11 @@ func (h *Handler) putIdentity(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	location := "eastus"
 	var body struct {
-		Location string `json:"location"`
+		Location   string `json:"location"`
+		Properties struct {
+			PrincipalID string `json:"principalId"`
+			ClientID    string `json:"clientId"`
+		} `json:"properties"`
 	}
 	_ = json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body)
 	if body.Location != "" {
@@ -57,6 +62,14 @@ func (h *Handler) putIdentity(w http.ResponseWriter, r *http.Request) {
 	}
 	principalID := uuid.NewString()
 	clientID := uuid.NewString()
+	pinnedPrincipal, pinnedClient, pinErr := pinnedIdentityIDs(body.Properties.PrincipalID, body.Properties.ClientID)
+	if pinErr != nil {
+		azerrors.BadRequest(w, pinErr.Error())
+		return
+	}
+	if pinnedPrincipal != "" {
+		principalID, clientID = pinnedPrincipal, pinnedClient
+	}
 	if existingLoc, p, c, ok, err := h.Store.GetManagedIdentity(sub, rg, name); err == nil && ok {
 		location = existingLoc
 		principalID, clientID = p, c
@@ -384,6 +397,28 @@ func (h *Handler) requireARM(w http.ResponseWriter, r *http.Request, action stri
 		return false
 	}
 	return true
+}
+
+// pinnedIdentityIDs accepts a create-time pair. Both empty means generate.
+// One side set, or a value that is not a UUID, is rejected.
+func pinnedIdentityIDs(principal, client string) (string, string, error) {
+	principal = strings.TrimSpace(principal)
+	client = strings.TrimSpace(client)
+	if principal == "" && client == "" {
+		return "", "", nil
+	}
+	if principal == "" || client == "" {
+		return "", "", errors.New("principalId and clientId must both be set")
+	}
+	parsedPrincipal, err := uuid.Parse(principal)
+	if err != nil {
+		return "", "", errors.New("principalId must be a UUID")
+	}
+	parsedClient, err := uuid.Parse(client)
+	if err != nil {
+		return "", "", errors.New("clientId must be a UUID")
+	}
+	return parsedPrincipal.String(), parsedClient.String(), nil
 }
 
 func identityJSON(sub, rg, name, location, principalID, clientID, tenantID string) map[string]any {
