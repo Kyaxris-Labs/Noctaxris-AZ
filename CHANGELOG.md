@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 1.5.0
+
+Minor after 1.4.10: opt-in standalone subscription. Docker Hub: `kyaxris/noctaxris-az` (`1.5.0`, `1.5`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
+
+- `NOCTAXRIS_AZ_LAB_STANDALONE` defaults off. `POST /_noctaxris-az/lab/subscriptions:seedStandalone` is 404 before authentication when the flag is off, and it is not a public path. When it is on, only the process root token can seed. The user has no directory role. Owner is only on the new subscription, principal type User. The access token audience is `https://management.azure.com`, `oid` is that user, and `IsRoot` is false. The same seed name returns the stored token. A second tenant is not created.
+- `GET /subscriptions` with that token lists only that subscription. The lab subscription and a lab resource group are denied.
+- Owner does not get blob data actions or Key Vault `getSecret`. `listKeys` is `Microsoft.Storage/storageAccounts/listKeys/action` on the full account resource id. Reader is denied. A storage account, key vault, or App Configuration name that already exists in any subscription is 409. A missing storage, table, or App Configuration name is 404 and does not use the default subscription for authorization.
+- Graph user list, directory role list, group members, group owners, application owners, service principal owners, Azure AD Graph user and role lists, and SOAP `ListUsers` require a directory role or the process root token. `GET /users/{id}` allows the caller's own object id.
+- Service Bus connection strings authorize `listKeys` on the namespace resource id and return only that subscription, resource group, and name. A namespace name used by a different subscription or resource group is 409.
+- SDK tests skip when the endpoint is unset or the seed route returns 404. `tests/terraform/run.sh` validates `standalone-subscription` and does not apply it.
+
 ## 1.4.10
 
 Patch after 1.4.9: metadata endpoints follow the request Host. Docker Hub: `kyaxris/noctaxris-az` (`1.4.10`, `1.4`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
@@ -55,7 +66,7 @@ Patch after 1.4.3: lab OIDC issuer follows strip-product. Docker Hub: `kyaxris/n
 
 Patch after 1.4.2: salted directory/app secrets, storage list XML for `x-ms-version`, Graph/App Config response polish. Docker Hub: `kyaxris/noctaxris-az` (`1.4.3`, `1.4`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
 
-- Directory user passwords and Graph `addPassword` client secrets store bcrypt hashes. Verify accepts bcrypt and legacy unsalted SHA-256 hex (challenge seeds that write hex digests keep working).
+- Directory user passwords and Graph `addPassword` client secrets store bcrypt hashes. Verify accepts bcrypt and legacy unsalted SHA-256 hex (existing seeds that write hex digests keep working).
 - Storage container/blob list returns Azure `EnumerationResults` XML when `x-ms-version` is set with `comp=list` (or `restype=container|service`), in addition to explicit restype/Accept triggers. Bare lab curl lists without those markers stay JSON.
 - Graph OData list pages include `@odata.context`. App Configuration KV responses use `application/vnd.microsoft.appconfig.kv+json` / `kvset+json` with `last_modified` and `tags`.
 
@@ -89,7 +100,7 @@ Minor after 1.3.2: TLS and public URL so Azure CLI / SDK Bearer clients work aga
 
 ## 1.3.2
 
-Patch after 1.3.1: opt-in product strip for challenge images. Docker Hub: `kyaxris/noctaxris-az` (`1.3.2`, `1.3`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
+Patch after 1.3.1: opt-in product strip for lab images. Docker Hub: `kyaxris/noctaxris-az` (`1.3.2`, `1.3`, `1`, `latest`). Cut steps: [docs/release.md](docs/release.md).
 
 - Opt-in `NOCTAXRIS_AZ_STRIP_PRODUCT=1`: ops probes move to `/_lab/health|ready|version` only (product `/_noctaxris-az/health|ready|version` not registered), subscription/tenant/Graph/AAD/SOAP display names become `Lab`, and the lab CA uses `Lab CA` / Org `Lab`. Default unset keeps product paths and `Noctaxris-AZ Lab` / `Noctaxris-AZ Lab CA` branding. Binary healthcheck follows the active ready path.
 

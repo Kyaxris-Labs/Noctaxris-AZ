@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
@@ -14,9 +15,10 @@ import (
 
 // Store is the SQLite-backed lab state store.
 type Store struct {
-	db       *sql.DB
-	master   MasterKey
-	dataRoot string
+	db           *sql.DB
+	master       MasterKey
+	dataRoot     string
+	standaloneMu sync.Mutex
 }
 
 // Open opens or creates state.db under dataRoot and runs migrations.
@@ -131,6 +133,15 @@ INSERT INTO access_tokens (token_hash, principal_id, expires_at, created_at)
 VALUES (?, ?, ?, ?)
 ON CONFLICT(token_hash) DO UPDATE SET principal_id=excluded.principal_id, expires_at=excluded.expires_at`,
 		tokenHash, principalID, exp, time.Now().UTC().Format(time.RFC3339))
+	return err
+}
+
+// DeleteAccessToken removes a hashed access token. A missing row is not an error.
+func (s *Store) DeleteAccessToken(tokenHash string) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("delete access token: store is nil")
+	}
+	_, err := s.db.Exec(`DELETE FROM access_tokens WHERE token_hash = ?`, tokenHash)
 	return err
 }
 

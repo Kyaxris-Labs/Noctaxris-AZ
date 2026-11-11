@@ -175,6 +175,43 @@ func (s *Store) ListDirectoryUsers(tenantID string) ([]DirectoryUser, error) {
 	return out, rows.Err()
 }
 
+// InsertDirectoryUser adds one directory user with an empty password hash.
+// Call SetUserPasswordHash before the user can authenticate. This does not
+// assign a directory role and does not call SeedDirectory.
+func (s *Store) InsertDirectoryUser(u DirectoryUser) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("insert directory user: store is nil")
+	}
+	id := strings.TrimSpace(u.ID)
+	tenantID := strings.TrimSpace(u.TenantID)
+	upn := strings.TrimSpace(u.UserPrincipalName)
+	if id == "" || tenantID == "" || upn == "" {
+		return fmt.Errorf("insert directory user: id, tenant, and userPrincipalName are required")
+	}
+	if strings.EqualFold(upn, "lab-admin@lab.local") {
+		return fmt.Errorf("insert directory user: lab-admin is reserved")
+	}
+	display := strings.TrimSpace(u.DisplayName)
+	if display == "" {
+		display = upn
+	}
+	mail := strings.TrimSpace(u.Mail)
+	if mail == "" {
+		mail = upn
+	}
+	created := strings.TrimSpace(u.CreatedAt)
+	if created == "" {
+		created = time.Now().UTC().Format(time.RFC3339)
+	}
+	_, err := s.db.Exec(`INSERT INTO entra_users (id, tenant_id, user_principal_name, display_name, mail, department, job_title, password_hash, created_at)
+VALUES (?,?,?,?,?,?,?,'',?)`,
+		id, tenantID, upn, display, mail, strings.TrimSpace(u.Department), strings.TrimSpace(u.JobTitle), created)
+	if err != nil {
+		return fmt.Errorf("insert directory user: %w", err)
+	}
+	return nil
+}
+
 func (s *Store) GetDirectoryUser(id string) (DirectoryUser, bool, error) {
 	var u DirectoryUser
 	err := s.db.QueryRow(`SELECT id, tenant_id, user_principal_name, display_name, mail, department, job_title, created_at FROM entra_users WHERE id = ? OR user_principal_name = ?`, id, id).

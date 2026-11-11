@@ -14,12 +14,14 @@ import (
 
 // UpsertStorageAccount creates or updates a storage account.
 // On create, generates a random 64-byte account key (base64).
+// An update of the same subscription, resource group, and name keeps that row's key.
+// A new account does not reuse a key looked up by name.
 // Refuses the Azurite well-known account/key pair when listenAddr is non-loopback.
 func (s *Store) UpsertStorageAccount(subID, rg, name, location, listenAddr string) (accountKey string, err error) {
 	if location == "" {
 		location = "eastus"
 	}
-	existing, ok, err := s.GetStorageAccountKey(name)
+	existing, ok, err := s.GetStorageAccountKeyIn(subID, rg, name)
 	if err != nil {
 		return "", err
 	}
@@ -94,35 +96,96 @@ WHERE subscription_id = ? ORDER BY name`, subID)
 	return out, rows.Err()
 }
 
-// GetStorageAccountByName loads subscription/resource group/location by account name.
+// StorageAccountNameTaken reports whether name is already used by a different
+// subscription or resource group. The same account (sub, rg, name) is not taken.
+func (s *Store) StorageAccountNameTaken(subID, rg, name string) (bool, error) {
+	return nameTakenElsewhere(s, `
+SELECT COUNT(1) FROM storage_accounts
+WHERE name = ? AND NOT (subscription_id = ? AND resource_group = ?)`, name, subID, rg)
+}
+
+// GetStorageAccountByName loads the single ARM row for an account name.
+// Missing and ambiguous names (more than one row) are not found.
 func (s *Store) GetStorageAccountByName(accountName string) (subID, rg, location string, ok bool, err error) {
-	err = s.db.QueryRow(`
+	rows, err := s.db.Query(`
 SELECT subscription_id, resource_group, location FROM storage_accounts
-WHERE name = ? LIMIT 1`, accountName).Scan(&subID, &rg, &location)
-	if err == sql.ErrNoRows {
-		return "", "", "", false, nil
-	}
+WHERE name = ?`, accountName)
 	if err != nil {
 		return "", "", "", false, err
 	}
-	return subID, rg, location, true, nil
+	defer rows.Close()
+	var matches []StorageAccountRow
+	for rows.Next() {
+		var row StorageAccountRow
+		if err := rows.Scan(&row.SubscriptionID, &row.ResourceGroup, &row.Location); err != nil {
+			return "", "", "", false, err
+		}
+		matches = append(matches, row)
+	}
+	if err := rows.Err(); err != nil {
+		return "", "", "", false, err
+	}
+	if len(matches) != 1 {
+		return "", "", "", false, nil
+	}
+	row := matches[0]
+	return row.SubscriptionID, row.ResourceGroup, row.Location, true, nil
 }
 
-// GetStorageAccountKey unseals the account key for a storage account name.
+// GetStorageAccountKey unseals the account key when exactly one row has that name.
+// Missing and ambiguous names are not found, so a second subscription's key is not returned.
 func (s *Store) GetStorageAccountKey(accountName string) (string, bool, error) {
+	rows, err := s.db.Query(`SELECT account_key_sealed FROM storage_accounts WHERE name = ?`, accountName)
+	if err != nil {
+		return "", false, err
+	}
+	defer rows.Close()
+	var sealed [][]byte
+	for rows.Next() {
+		var b []byte
+		if err := rows.Scan(&b); err != nil {
+			return "", false, err
+		}
+		sealed = append(sealed, b)
+	}
+	if err := rows.Err(); err != nil {
+		return "", false, err
+	}
+	if len(sealed) != 1 {
+		return "", false, nil
+	}
+	return unsealAccountKey(s.master, sealed[0])
+}
+
+// GetStorageAccountKeyIn unseals the key for one subscription, resource group, and name.
+func (s *Store) GetStorageAccountKeyIn(subID, rg, name string) (string, bool, error) {
 	var sealed []byte
-	err := s.db.QueryRow(`SELECT account_key_sealed FROM storage_accounts WHERE name = ? LIMIT 1`, accountName).Scan(&sealed)
+	err := s.db.QueryRow(`
+SELECT account_key_sealed FROM storage_accounts
+WHERE subscription_id = ? AND resource_group = ? AND name = ?`, subID, rg, name).Scan(&sealed)
 	if err == sql.ErrNoRows {
 		return "", false, nil
 	}
 	if err != nil {
 		return "", false, err
 	}
-	plain, err := Unseal(s.master, sealed)
+	return unsealAccountKey(s.master, sealed)
+}
+
+func unsealAccountKey(master MasterKey, sealed []byte) (string, bool, error) {
+	plain, err := Unseal(master, sealed)
 	if err != nil {
 		return "", false, fmt.Errorf("unseal account key: %w", err)
 	}
 	return string(plain), true, nil
+}
+
+func nameTakenElsewhere(s *Store, query, name, subID, rg string) (bool, error) {
+	var n int
+	if err := s.db.QueryRow(query, name, subID, rg).Scan(&n); err != nil {
+		return false, err
+	}
+	return n > 0, nil
 }
 
 // CreateContainer creates a blob container.
@@ -297,6 +360,13 @@ ORDER BY id ASC LIMIT 1`, account, queue, nowStr).Scan(&id, &body)
 	return body, true, nil
 }
 
+// KeyVaultNameTaken reports whether name is already used by a different subscription or resource group.
+func (s *Store) KeyVaultNameTaken(subID, rg, name string) (bool, error) {
+	return nameTakenElsewhere(s, `
+SELECT COUNT(1) FROM keyvaults
+WHERE name = ? AND NOT (subscription_id = ? AND resource_group = ?)`, name, subID, rg)
+}
+
 // UpsertKeyVault creates or updates a Key Vault resource.
 func (s *Store) UpsertKeyVault(subID, rg, name, location string) error {
 	if location == "" {
@@ -331,17 +401,30 @@ func (s *Store) KeyVaultExists(name string) (bool, error) {
 	return n > 0, err
 }
 
-// LookupKeyVaultScope returns the ARM resource id for a vault name.
+// LookupKeyVaultScope returns the ARM resource id when exactly one vault has that name.
+// Missing and ambiguous names are not found.
 func (s *Store) LookupKeyVaultScope(name string) (scope string, ok bool, err error) {
-	var sub, rg string
-	err = s.db.QueryRow(`SELECT subscription_id, resource_group FROM keyvaults WHERE name = ? LIMIT 1`, name).Scan(&sub, &rg)
-	if err == sql.ErrNoRows {
-		return "", false, nil
-	}
+	rows, err := s.db.Query(`SELECT subscription_id, resource_group FROM keyvaults WHERE name = ?`, name)
 	if err != nil {
 		return "", false, err
 	}
-	return "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.KeyVault/vaults/" + name, true, nil
+	defer rows.Close()
+	var subs, rgs []string
+	for rows.Next() {
+		var sub, rg string
+		if err := rows.Scan(&sub, &rg); err != nil {
+			return "", false, err
+		}
+		subs = append(subs, sub)
+		rgs = append(rgs, rg)
+	}
+	if err := rows.Err(); err != nil {
+		return "", false, err
+	}
+	if len(subs) != 1 {
+		return "", false, nil
+	}
+	return "/subscriptions/" + subs[0] + "/resourceGroups/" + rgs[0] + "/providers/Microsoft.KeyVault/vaults/" + name, true, nil
 }
 
 // PutSecret seals and stores a secret value (new version).
@@ -421,7 +504,14 @@ func (s *Store) UpsertServiceBusNamespace(subID, rg, name, location string) (sas
 	if location == "" {
 		location = "eastus"
 	}
-	existing, ok, err := s.GetSBNamespaceKey(name)
+	taken, err := s.ServiceBusNamespaceNameTaken(subID, rg, name)
+	if err != nil {
+		return "", err
+	}
+	if taken {
+		return "", fmt.Errorf("service bus namespace name already exists")
+	}
+	existing, ok, err := s.GetSBNamespaceKeyIn(subID, rg, name)
 	if err != nil {
 		return "", err
 	}
@@ -479,16 +569,54 @@ SELECT subscription_id, resource_group, location FROM servicebus_namespaces WHER
 	return sub, rg, location, true, nil
 }
 
-// GetSBNamespaceKey unseals the namespace SAS key.
-func (s *Store) GetSBNamespaceKey(namespace string) (string, bool, error) {
+// ServiceBusNamespaceNameTaken reports a name used by a different subscription or resource group.
+func (s *Store) ServiceBusNamespaceNameTaken(subID, rg, name string) (bool, error) {
+	return nameTakenElsewhere(s, `
+SELECT COUNT(1) FROM servicebus_namespaces
+WHERE name = ? AND NOT (subscription_id = ? AND resource_group = ?)`, name, subID, rg)
+}
+
+// GetSBNamespaceKeyIn unseals the SAS key for one subscription, resource group, and name.
+func (s *Store) GetSBNamespaceKeyIn(subID, rg, name string) (string, bool, error) {
 	var sealed []byte
-	err := s.db.QueryRow(`SELECT sas_key_sealed FROM servicebus_namespaces WHERE name = ? LIMIT 1`, namespace).Scan(&sealed)
+	err := s.db.QueryRow(`
+SELECT sas_key_sealed FROM servicebus_namespaces
+WHERE subscription_id = ? AND resource_group = ? AND name = ?`, subID, rg, name).Scan(&sealed)
 	if err == sql.ErrNoRows {
 		return "", false, nil
 	}
 	if err != nil {
 		return "", false, err
 	}
+	return unsealSBKey(s, sealed)
+}
+
+// GetSBNamespaceKey unseals the SAS key when exactly one namespace uses that name.
+// Missing and ambiguous names are not found.
+func (s *Store) GetSBNamespaceKey(namespace string) (string, bool, error) {
+	rows, err := s.db.Query(`SELECT sas_key_sealed FROM servicebus_namespaces WHERE name = ?`, namespace)
+	if err != nil {
+		return "", false, err
+	}
+	defer rows.Close()
+	var sealed [][]byte
+	for rows.Next() {
+		var one []byte
+		if err := rows.Scan(&one); err != nil {
+			return "", false, err
+		}
+		sealed = append(sealed, one)
+	}
+	if err := rows.Err(); err != nil {
+		return "", false, err
+	}
+	if len(sealed) != 1 {
+		return "", false, nil
+	}
+	return unsealSBKey(s, sealed[0])
+}
+
+func unsealSBKey(s *Store, sealed []byte) (string, bool, error) {
 	plain, err := Unseal(s.master, sealed)
 	if err != nil {
 		return "", false, fmt.Errorf("unseal sas key: %w", err)

@@ -62,16 +62,24 @@ ARG `POST /providers/Microsoft.ResourceGraph/resources` evaluates `Microsoft.Res
 - ARG query over stored `arg_resources` rows (`Resources` and `SecurityResources`; Defender inject writes assessments into `SecurityResources`)
 - Subscription-scope inventory for VMs, Key Vault, Storage, Web sites, ACR, AKS, Logic Apps (role assignment list is [authorization.md](authorization.md))
 
+## Standalone subscription
+
+`NOCTAXRIS_AZ_LAB_STANDALONE` defaults off. `POST /_noctaxris-az/lab/subscriptions:seedStandalone` is then HTTP 404 before authentication and is not a public route. With the flag on, the route runs after bearer authentication and accepts only the root token.
+
+The body is `{"name":"<seed>"}`. An empty name uses `default`. The same name returns the same access token and subscription id. A different name creates another subscription.
+
+The seed stays in the configured tenant. It adds one directory user (not the seeded lab admin) and one Owner assignment at `/subscriptions/{newId}` only. Principal type is User. There is no directory role and the root client is not the assignee. The access token audience is `https://management.azure.com`, `tid` is the configured tenant, and `oid` is the new user, so the token is not root. `GET /subscriptions` with that token lists only that subscription. Reading the lab subscription, or a resource group in it, is denied. Blob data-plane calls and Key Vault `getSecret` stay on their existing handlers and are denied for this token. Directory reads are not part of this route. Those rules are in [entra.md](entra.md).
+
 ## Not implemented
 
-- Subscription create/delete / move
+- ARM subscription create/delete / move (the standalone route above is an ops seed, not `PUT /subscriptions/{id}`)
 - Full provider registration / feature registration catalogue
 - ARG KQL engine beyond table name, `type ==`, and `limit`
 
 ## Emulator limits
 
 - Default subscription id: `NOCTAXRIS_AZ_SUBSCRIPTION_ID`
-- Single-tenant lab seed only
+- Standalone subscriptions use the same configured tenant. A second directory tenant is not issued.
 - Empty `value` arrays for types with no stored rows (not HTTP 500)
 
 ## Deferred depth

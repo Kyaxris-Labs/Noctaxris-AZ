@@ -74,7 +74,7 @@ func TestHostRewriteStillRequiresAuth(t *testing.T) {
 		t.Fatalf("unauthenticated host-style vault get must fail, got %d", kvRec.Code)
 	}
 
-	// Path-style JSON list without credentials still fails (challenge path stays fail-closed).
+	// Path-style JSON list without credentials still fails.
 	pathRec := httptest.NewRecorder()
 	h.ServeHTTP(pathRec, httptest.NewRequest(http.MethodGet, "/blob/acct1/c1", nil))
 	if pathRec.Code == http.StatusOK {

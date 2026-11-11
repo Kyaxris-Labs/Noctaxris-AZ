@@ -25,6 +25,9 @@ func (s *Service) handleProvisioningSOAP(w http.ResponseWriter, r *http.Request)
 	}
 	raw := string(body)
 	if strings.Contains(raw, "ListUsers") || strings.Contains(strings.ToLower(raw), "listusers") {
+		if !s.requireGraphDirectoryRead(w, r) {
+			return
+		}
 		s.writeSOAPListUsers(w)
 		return
 	}

@@ -36,6 +36,7 @@ Nested compute (when the engine overlay is wired) uses `github.com/moby/moby/cli
 | Case | Behavior |
 |------|----------|
 | `NOCTAXRIS_AZ_ENDPOINT` unset inside an SDK/TF test | Soft-skip that test |
+| Standalone subscription seed route returns HTTP 404 | Soft-skip that SDK test (Go, Node.js, and Python) |
 | API not ready when running `tests/run-all.sh` | Hard-fail (exit 1) |
 | Root token unset when running `tests/run-all.sh` | Hard-fail (exit 1) |
 | `az` / `pwsh` missing | Soft-skip official client recipe help tests |
@@ -58,6 +59,8 @@ cd tests/sdk/nodejs && npm install && npm test
 
 cd tests/sdk/python && pip install -r requirements.txt && pytest
 ```
+
+`bash tests/terraform/run.sh` runs init and validate for each stack, including `standalone-subscription`. The script does not apply, and it exits 0 when `NOCTAXRIS_AZ_ENDPOINT` is unset.
 
 ## Related
 

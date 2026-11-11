@@ -44,9 +44,10 @@ Noctaxris-AZ fails closed. Defaults favor a loopback lab on a single laptop.
 | Key Vault data plane | Bearer with vault `aud` plus Key Vault data RBAC |
 | Cosmos DB data plane | `x-ms-cosmos-account-key`, or Bearer with Cosmos/ARM `aud` plus Cosmos data roles |
 
-- Root token comes from `NOCTAXRIS_AZ_ROOT_ACCESS_TOKEN` and maps to `NOCTAXRIS_AZ_ROOT_CLIENT_ID`.
+- Root token comes from `NOCTAXRIS_AZ_ROOT_ACCESS_TOKEN` and maps to `NOCTAXRIS_AZ_ROOT_CLIENT_ID`. `IsRoot` is that exact bearer match.
+- `POST /_noctaxris-az/lab/subscriptions:seedStandalone` is off unless `NOCTAXRIS_AZ_LAB_STANDALONE=1`. Off is HTTP 404 before authentication, and the path is not on the public list. On, the handler runs after the normal bearer check and allows only the root token. It inserts one directory user in the configured tenant (not a second tenant), sets a password hash, and assigns Owner (`8e3af657-a8ff-443c-a75c-2fe8c4bcb635`) at `/subscriptions/{newId}` with principal type User. It does not assign a directory role and does not assign the root client. The minted token uses audience `https://management.azure.com`, `tid` of the configured tenant, and `oid` of that user, so `IsRoot` is false. A repeat call with the same seed name returns the stored token and subscription id. Owner on that subscription does not grant blob data actions or Key Vault `getSecret`. Directory lists require a directory role or the process root token ([services/entra.md](services/entra.md)).
 - Other access/refresh tokens are SHA-256 hashed and looked up in `access_tokens` / refresh tables.
-- Directory user passwords and Graph `addPassword` client secrets are stored as bcrypt. Legacy unsalted SHA-256 hex still verifies for older seeds and challenge SQL injects.
+- Directory user passwords and Graph `addPassword` client secrets are stored as bcrypt. Legacy unsalted SHA-256 hex still verifies for older seeds.
 - Missing or invalid Bearer credentials return Azure ARM `AuthenticationFailed` (HTTP 401).
 - Storage SAS that fails HMAC, expiry, or `sp` checks returns HTTP 403 `AuthenticationFailed`. Shared Key with a missing account stays HTTP 404 `AccountNotFound`.
 - Global Bearer middleware skips `/blob/`, `/queue/`, and `/table/` when the request already carries `Authorization: SharedKey …` or a SAS query so handlers can verify HMAC. That skip is intentional; do not force Bearer-only on those prefixes.

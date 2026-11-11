@@ -11,7 +11,7 @@ func (s *Service) mountIAMPortal(mux *http.ServeMux) {
 }
 
 func (s *Service) handleIAMUsers(w http.ResponseWriter, r *http.Request) {
-	if !s.requireGraph(w, r) {
+	if !s.requireGraphDirectoryRead(w, r) {
 		return
 	}
 	users, err := s.Store.ListDirectoryUsers(s.appTenant())

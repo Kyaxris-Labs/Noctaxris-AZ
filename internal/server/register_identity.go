@@ -16,11 +16,13 @@ func (s *Server) registerIdentity() {
 		StripProduct:      s.cfg.StripProduct,
 		AuditNow:          s.effectiveNow,
 	}
+	s.entra = es
 	s.authn.JWT = es
 	es.Mount(s.mux)
 
 	(&subscriptions.Service{
 		Store:          s.store,
+		Auth:           s.authn,
 		Authz:          s.authz,
 		SubscriptionID: s.cfg.SubscriptionID,
 		TenantID:       s.cfg.TenantID,

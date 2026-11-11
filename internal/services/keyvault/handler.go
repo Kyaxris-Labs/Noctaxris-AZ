@@ -59,6 +59,15 @@ func (h *Handler) putVault(w http.ResponseWriter, r *http.Request) {
 	if body.Location != "" {
 		location = body.Location
 	}
+	taken, err := h.Store.KeyVaultNameTaken(sub, rg, name)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	}
+	if taken {
+		azerrors.Conflict(w, "key vault name already exists")
+		return
+	}
 	if err := h.Store.UpsertKeyVault(sub, rg, name, location); err != nil {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
 		return

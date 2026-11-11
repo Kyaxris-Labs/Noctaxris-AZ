@@ -35,7 +35,7 @@ func (s *Service) handleAADTenantDetails(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Service) handleAADUsers(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAADGraph(w, r) {
+	if !s.requireAADGraph(w, r) || !s.requireGraphDirectoryRead(w, r) {
 		return
 	}
 	users, err := s.Store.ListDirectoryUsers(s.appTenant())
@@ -58,7 +58,7 @@ func (s *Service) handleAADUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleAADDirectoryRoles(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAADGraph(w, r) {
+	if !s.requireAADGraph(w, r) || !s.requireGraphDirectoryRead(w, r) {
 		return
 	}
 	roles, err := s.Store.ListDirectoryRoles(s.appTenant())

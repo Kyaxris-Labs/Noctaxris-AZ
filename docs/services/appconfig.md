@@ -22,6 +22,7 @@ Optional `?label=` on KV get/put and on snapshot read. Single KV responses use `
 ## Authz
 
 - ARM store CRUD: token `aud` must be `https://management.azure.com` or `https://management.core.windows.net` (Graph `aud` is HTTP 403 `InvalidAuthenticationTokenAudience`). Root Bearer skips audience.
+- Store names are unique across subscriptions. Creating a store whose name is already stored is HTTP 409. Putting the same store again updates it. Data-plane lookup by name is HTTP 404 when the name is missing or stored more than once, and that 404 does not use the default subscription as an RBAC scope.
 - `Microsoft.AppConfiguration/configurationStores/read|write|delete`
 - Data plane KV / feature flags / snapshots: `aud` `https://azconfig.io` plus App Configuration Data Reader / Data Owner (`keyValues/read|write`). Classic Reader is denied. Wrong `aud` (including Graph or ARM) is HTTP 401 `InvalidAuthenticationTokenAudience` with `WWW-Authenticate` naming `resource="https://azconfig.io"` and a body that names `https://azconfig.io` (not ARM management hosts).
 

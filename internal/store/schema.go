@@ -37,6 +37,16 @@ CREATE TABLE IF NOT EXISTS role_assignments (
   principal_type TEXT NOT NULL DEFAULT 'ServicePrincipal'
 );
 
+CREATE TABLE IF NOT EXISTS standalone_subscriptions (
+  seed_name TEXT PRIMARY KEY,
+  subscription_id TEXT NOT NULL UNIQUE,
+  tenant_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  user_principal_name TEXT NOT NULL,
+  access_token TEXT NOT NULL,
+  role_assignment_id TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS storage_accounts (
   subscription_id TEXT NOT NULL,
   resource_group TEXT NOT NULL,

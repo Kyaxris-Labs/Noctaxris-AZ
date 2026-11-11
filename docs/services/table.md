@@ -4,7 +4,7 @@ Azure Table Storage lab data plane under `/table/{account}/...` with Shared Key 
 
 ## Status
 
-**lab** — Table create/delete/list; entity insert/get/update/merge/delete; OData `$filter`/`$top` equality lite; ETag.
+**lab.** Table create/delete/list; entity insert/get/update/merge/delete; OData `$filter`/`$top` equality lite; ETag.
 
 ## Wire protocol
 
@@ -16,7 +16,7 @@ Azure Table Storage lab data plane under `/table/{account}/...` with Shared Key 
 | Insert entity | `POST /table/{account}/{table}` (JSON with PartitionKey/RowKey) |
 | Entity by key | `GET` / `PUT` / `MERGE` / `DELETE /table/{account}/{table}/{pk}/{rk}` |
 
-Auth: Shared Key HMAC, SAS query HMAC (`sig` over `sp`/`st`/`se`/path, `se` expiry, `sp` permissions), or root Bearer. Garbage `sig`, expired or unparseable `se`, unknown account, and missing `sp` for the verb are HTTP 403. Create Table (`PUT` at table depth) requires Create (`c`); Add (`a`) alone cannot create tables. Table endpoint is also advertised on storage account `primaryEndpoints.table`.
+Auth: Shared Key HMAC, SAS query HMAC (`sig` over `sp`/`st`/`se`/path, `se` expiry, `sp` permissions), or root Bearer. Garbage `sig`, expired or unparseable `se`, unknown account, and missing `sp` for the verb are HTTP 403. Create Table (`PUT` at table depth) requires Create (`c`); Add (`a`) alone cannot create tables. Table endpoint is also advertised on storage account `primaryEndpoints.table`. Bearer lookup of a missing or ambiguous account name is HTTP 404 and does not use the default subscription as an RBAC scope. Shared Key for one account name does not read a different account name.
 
 ## Detailed actions
 

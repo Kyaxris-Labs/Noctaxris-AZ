@@ -101,6 +101,24 @@ func (s *Service) requireGraphDirectoryWrite(w http.ResponseWriter, r *http.Requ
 	return false
 }
 
+// requireGraphDirectoryRead allows the process root token or membership in any
+// directory role. Subscription RBAC, including Owner, is not a directory role.
+func (s *Service) requireGraphDirectoryRead(w http.ResponseWriter, r *http.Request) bool {
+	if !s.requireGraph(w, r) {
+		return false
+	}
+	p, ok := authn.PrincipalFromContext(r.Context())
+	if !ok {
+		azerrors.WriteGraph(w, http.StatusUnauthorized, "InvalidAuthenticationToken", "Access token is empty or invalid.")
+		return false
+	}
+	if p.IsRoot || s.principalHasAnyDirectoryRole(p.ID) {
+		return true
+	}
+	azerrors.WriteGraph(w, http.StatusForbidden, "Authorization_RequestDenied", "Insufficient privileges to complete the operation.")
+	return false
+}
+
 func (s *Service) principalHasDirectoryRole(principalID string, roleNames ...string) bool {
 	if principalID == "" || len(roleNames) == 0 {
 		return false
@@ -118,6 +136,32 @@ func (s *Service) principalHasDirectoryRole(principalID string, roleNames ...str
 		if !directoryRoleNameMatches(role, want) {
 			continue
 		}
+		members, err := s.Store.ListDirectoryRoleMembers(role.ID)
+		if err != nil {
+			continue
+		}
+		for _, mid := range members {
+			for _, cid := range candidates {
+				if mid == cid {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func (s *Service) principalHasAnyDirectoryRole(principalID string) bool {
+	principalID = strings.TrimSpace(principalID)
+	if principalID == "" {
+		return false
+	}
+	roles, err := s.Store.ListDirectoryRoles(s.appTenant())
+	if err != nil {
+		return false
+	}
+	candidates := s.directoryPrincipalIDs(principalID)
+	for _, role := range roles {
 		members, err := s.Store.ListDirectoryRoleMembers(role.ID)
 		if err != nil {
 			continue
@@ -418,6 +462,17 @@ func looksLikeGUID(s string) bool {
 	return s[8] == '-' && s[13] == '-' && s[18] == '-' && s[23] == '-'
 }
 
+// principalOwnsObjectID is true when pathID is the caller's own object id.
+// Both values must be GUID-shaped. A user principal name is not an object id.
+func principalOwnsObjectID(principalID, pathID string) bool {
+	principalID = strings.TrimSpace(principalID)
+	pathID = strings.TrimSpace(pathID)
+	if !looksLikeGUID(principalID) || !looksLikeGUID(pathID) {
+		return false
+	}
+	return strings.EqualFold(principalID, pathID)
+}
+
 func (s *Service) handleGraphOrganization(w http.ResponseWriter, r *http.Request) {
 	if !s.requireGraph(w, r) {
 		return
@@ -431,7 +486,7 @@ func (s *Service) handleGraphOrganization(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Service) handleGraphUsers(w http.ResponseWriter, r *http.Request) {
-	if !s.requireGraph(w, r) {
+	if !s.requireGraphDirectoryRead(w, r) {
 		return
 	}
 	users, err := s.Store.ListDirectoryUsers(s.appTenant())
@@ -450,7 +505,21 @@ func (s *Service) handleGraphUser(w http.ResponseWriter, r *http.Request) {
 	if !s.requireGraph(w, r) {
 		return
 	}
-	u, ok, err := s.Store.GetDirectoryUser(r.PathValue("id"))
+	p, ok := authn.PrincipalFromContext(r.Context())
+	if !ok {
+		azerrors.WriteGraph(w, http.StatusUnauthorized, "InvalidAuthenticationToken", "Access token is empty or invalid.")
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	if !(p.IsRoot || s.principalHasAnyDirectoryRole(p.ID) || principalOwnsObjectID(p.ID, id)) {
+		if !looksLikeGUID(id) {
+			azerrors.WriteGraph(w, http.StatusBadRequest, "Request_BadRequest", "User id must be an object id.")
+			return
+		}
+		azerrors.WriteGraph(w, http.StatusForbidden, "Authorization_RequestDenied", "Insufficient privileges to complete the operation.")
+		return
+	}
+	u, ok, err := s.Store.GetDirectoryUser(id)
 	if err != nil {
 		azerrors.WriteGraph(w, http.StatusInternalServerError, "InternalServerError", err.Error())
 		return
@@ -491,7 +560,7 @@ func (s *Service) handleGraphGroup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleGraphGroupMembers(w http.ResponseWriter, r *http.Request) {
-	if !s.requireGraph(w, r) {
+	if !s.requireGraphDirectoryRead(w, r) {
 		return
 	}
 	ids, types, err := s.Store.ListGroupMembers(r.PathValue("id"))
@@ -511,7 +580,7 @@ func (s *Service) handleGraphGroupMembers(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Service) handleGraphOwners(w http.ResponseWriter, r *http.Request) {
-	if !s.requireGraph(w, r) {
+	if !s.requireGraphDirectoryRead(w, r) {
 		return
 	}
 	id, ok := s.ownerTarget(r)
@@ -608,7 +677,7 @@ func (s *Service) handleGraphDevice(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleGraphDirectoryRoles(w http.ResponseWriter, r *http.Request) {
-	if !s.requireGraph(w, r) {
+	if !s.requireGraphDirectoryRead(w, r) {
 		return
 	}
 	roles, err := s.Store.ListDirectoryRoles(s.appTenant())
@@ -626,7 +695,7 @@ func (s *Service) handleGraphDirectoryRoles(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *Service) handleGraphRoleMembers(w http.ResponseWriter, r *http.Request) {
-	if !s.requireGraph(w, r) {
+	if !s.requireGraphDirectoryRead(w, r) {
 		return
 	}
 	ids, err := s.Store.ListDirectoryRoleMembers(r.PathValue("id"))
@@ -646,7 +715,7 @@ func (s *Service) handleGraphRoleDefinitions(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *Service) handleGraphRoleAssignments(w http.ResponseWriter, r *http.Request) {
-	if !s.requireGraph(w, r) {
+	if !s.requireGraphDirectoryRead(w, r) {
 		return
 	}
 	rows, err := s.Store.ListUnifiedRoleAssignments()

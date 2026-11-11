@@ -4,7 +4,7 @@ User-assigned Managed Identity ARM lite plus IMDS token theatre on the lab liste
 
 ## Status
 
-**lab** — User-assigned identity CRUD/list; `GET /metadata/identity/oauth2/token` mints lab JWTs via Entra signing material.
+**lab.** User-assigned identity CRUD/list; `GET /metadata/identity/oauth2/token` mints lab JWTs via Entra signing material.
 
 ## Wire protocol
 

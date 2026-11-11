@@ -26,6 +26,7 @@ Azure RBAC role assignments lite on ARM scopes.
 - Bearer required. Token `aud` must be `https://management.azure.com` or `https://management.core.windows.net` (Graph `aud` is HTTP 403 `InvalidAuthenticationTokenAudience`). Root Bearer skips audience.
 - Role assignment writes and deletes require Owner (or root bypass). Contributor cannot mutate role assignments.
 - A user in a group that holds Reader on a resource group is authorized as that member. A principal that is not a member is HTTP 403.
+- `POST /_noctaxris-az/lab/subscriptions:seedStandalone` (flag `NOCTAXRIS_AZ_LAB_STANDALONE`, root bearer) writes one Owner assignment (`8e3af657-a8ff-443c-a75c-2fe8c4bcb635`) at `/subscriptions/{newId}` with principal type User. That grant does not extend to another subscription. Owner still does not grant blob data actions or Key Vault `getSecret`. The user has no directory role.
 
 ## Detailed actions
 

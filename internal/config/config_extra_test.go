@@ -20,6 +20,15 @@ func TestLoadFromEnvAndTLSAMQP(t *testing.T) {
 	if cfg.RootClientID != "cid" || cfg.RootAccessToken != "tok" {
 		t.Fatalf("%+v", cfg)
 	}
+	if cfg.LabStandalone {
+		t.Fatal("standalone seed flag defaults on")
+	}
+	t.Setenv(EnvLabStandalone, "1")
+	cfg, err = LoadFromEnv()
+	if err != nil || !cfg.LabStandalone {
+		t.Fatalf("standalone flag %+v %v", cfg.LabStandalone, err)
+	}
+	t.Setenv(EnvLabStandalone, "")
 	if cfg.TLSEnabled() {
 		t.Fatal("tls off")
 	}

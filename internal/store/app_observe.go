@@ -32,6 +32,13 @@ type FunctionApp struct {
 	MockResponse   string
 }
 
+// AppConfigNameTaken reports whether name is already used by a different subscription or resource group.
+func (s *Store) AppConfigNameTaken(subID, rg, name string) (bool, error) {
+	return nameTakenElsewhere(s, `
+SELECT COUNT(1) FROM appconfig_stores
+WHERE name = ? AND NOT (subscription_id = ? AND resource_group = ?)`, name, subID, rg)
+}
+
 // UpsertAppConfig creates or updates an App Configuration store.
 func (s *Store) UpsertAppConfig(subID, rg, name, location string) error {
 	if location == "" {
@@ -61,19 +68,30 @@ WHERE subscription_id = ? AND resource_group = ? AND name = ?`, subID, rg, name)
 	return row, true, nil
 }
 
-// GetAppConfigByName loads a store by name (any subscription/RG).
+// GetAppConfigByName loads a store when exactly one row has that name.
+// Missing and ambiguous names are not found.
 func (s *Store) GetAppConfigByName(name string) (AppConfigStore, bool, error) {
-	var row AppConfigStore
-	err := s.db.QueryRow(`
-SELECT subscription_id, resource_group, name, location FROM appconfig_stores WHERE name = ? LIMIT 1`, name).
-		Scan(&row.SubscriptionID, &row.ResourceGroup, &row.Name, &row.Location)
-	if err == sql.ErrNoRows {
-		return AppConfigStore{}, false, nil
-	}
+	rows, err := s.db.Query(`
+SELECT subscription_id, resource_group, name, location FROM appconfig_stores WHERE name = ?`, name)
 	if err != nil {
 		return AppConfigStore{}, false, err
 	}
-	return row, true, nil
+	defer rows.Close()
+	var found []AppConfigStore
+	for rows.Next() {
+		var row AppConfigStore
+		if err := rows.Scan(&row.SubscriptionID, &row.ResourceGroup, &row.Name, &row.Location); err != nil {
+			return AppConfigStore{}, false, err
+		}
+		found = append(found, row)
+	}
+	if err := rows.Err(); err != nil {
+		return AppConfigStore{}, false, err
+	}
+	if len(found) != 1 {
+		return AppConfigStore{}, false, nil
+	}
+	return found[0], true, nil
 }
 
 // ListAppConfigs lists stores in a resource group.

@@ -46,6 +46,15 @@ func (h *Handler) putNamespace(w http.ResponseWriter, r *http.Request) {
 	sub := r.PathValue("sub")
 	rg := r.PathValue("rg")
 	name := r.PathValue("name")
+	taken, err := h.Store.ServiceBusNamespaceNameTaken(sub, rg, name)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	}
+	if taken {
+		azerrors.Conflict(w, "service bus namespace name already exists")
+		return
+	}
 	location := "eastus"
 	var body struct {
 		Location string `json:"location"`
@@ -152,11 +161,14 @@ func (h *Handler) getQueue(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) connectionString(w http.ResponseWriter, r *http.Request) {
-	if !h.requireBearerARM(w, r, "Microsoft.ServiceBus/namespaces/authorizationRules/listKeys/action", armScope(r)) {
+	sub := r.PathValue("sub")
+	rg := r.PathValue("rg")
+	name := r.PathValue("name")
+	scope := "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.ServiceBus/namespaces/" + name
+	if !h.requireBearerARM(w, r, "Microsoft.ServiceBus/namespaces/authorizationRules/listKeys/action", scope) {
 		return
 	}
-	name := r.PathValue("name")
-	key, ok, err := h.Store.GetSBNamespaceKey(name)
+	key, ok, err := h.Store.GetSBNamespaceKeyIn(sub, rg, name)
 	if err != nil {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
 		return

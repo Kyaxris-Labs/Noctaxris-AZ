@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
@@ -44,21 +45,25 @@ func TestGraphRejectsARMAndIssuerAudience(t *testing.T) {
 		return rec
 	}
 
-	if rec := call(armTok); rec.Code != http.StatusForbidden {
+	if rec := call(armTok); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "InvalidAuthenticationToken") {
 		t.Fatalf("ARM aud on Graph %d body=%s", rec.Code, rec.Body.String())
 	}
-	if rec := call(issTok); rec.Code != http.StatusForbidden {
+	if rec := call(issTok); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "InvalidAuthenticationToken") {
 		t.Fatalf("issuer aud on Graph %d body=%s", rec.Code, rec.Body.String())
 	}
-	ok := call(graphTok)
-	if ok.Code != http.StatusOK {
-		t.Fatalf("Graph aud %d body=%s", ok.Code, ok.Body.String())
+	graph := call(graphTok)
+	if graph.Code != http.StatusForbidden {
+		t.Fatalf("Graph aud without directory role %d body=%s", graph.Code, graph.Body.String())
 	}
-	var body map[string]any
-	if err := json.Unmarshal(ok.Body.Bytes(), &body); err != nil {
+	var denied map[string]any
+	if err := json.Unmarshal(graph.Body.Bytes(), &denied); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := body["value"].([]any); !ok {
-		t.Fatalf("users %#v", body)
+	errObj, _ := denied["error"].(map[string]any)
+	if errObj["code"] != "Authorization_RequestDenied" {
+		t.Fatalf("Graph audience passed the audience check and must fail the directory read, got %#v", denied)
+	}
+	if denied["value"] != nil || strings.Contains(graph.Body.String(), "lab-admin") {
+		t.Fatalf("directory listed %#v", denied)
 	}
 }

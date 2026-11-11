@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
-	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authz"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/azauth"
@@ -28,6 +27,7 @@ type Handler struct {
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Storage/storageAccounts/{name}", h.putAccount)
 	mux.HandleFunc("GET /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Storage/storageAccounts/{name}", h.getAccount)
+	mux.HandleFunc("POST /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Storage/storageAccounts/{name}/listKeys", h.listKeys)
 
 	mux.HandleFunc("GET /blob/{account}", h.listContainers)
 	mux.HandleFunc("PUT /blob/{account}/{container}", h.putContainer)
@@ -58,6 +58,15 @@ func (h *Handler) putAccount(w http.ResponseWriter, r *http.Request) {
 	if body.Location != "" {
 		location = body.Location
 	}
+	taken, err := h.Store.StorageAccountNameTaken(sub, rg, name)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	}
+	if taken {
+		azerrors.Conflict(w, "storage account name already exists")
+		return
+	}
 	key, err := h.Store.UpsertStorageAccount(sub, rg, name, location, h.ListenAddr)
 	if err != nil {
 		azerrors.BadRequest(w, err.Error())
@@ -77,6 +86,31 @@ func (h *Handler) putAccount(w http.ResponseWriter, r *http.Request) {
 				"queue": "/queue/" + name,
 				"table": "/table/" + name,
 			},
+		},
+	})
+}
+
+func (h *Handler) listKeys(w http.ResponseWriter, r *http.Request) {
+	sub := r.PathValue("sub")
+	rg := r.PathValue("rg")
+	name := r.PathValue("name")
+	// Authorize on the account resource id. A resource-group scope would ignore an assignment on the account.
+	if !h.requireBearerARM(w, r, "Microsoft.Storage/storageAccounts/listKeys/action", storageAccountScope(sub, rg, name)) {
+		return
+	}
+	key, ok, err := h.Store.GetStorageAccountKeyIn(sub, rg, name)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalError", err.Error())
+		return
+	}
+	if !ok {
+		azerrors.NotFound(w, "storage account not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"keys": []map[string]string{
+			{"keyName": "key1", "value": key, "permissions": "FULL"},
+			{"keyName": "key2", "value": key, "permissions": "FULL"},
 		},
 	})
 }
@@ -157,7 +191,7 @@ func (h *Handler) listBlobs(w http.ResponseWriter, r *http.Request) {
 		azerrors.StorageError(w, http.StatusInternalServerError, "InternalError", err.Error())
 		return
 	}
-	// Default JSON keeps challenge / curl list parsers; XML when Azure CLI/SDK asks.
+	// Default JSON is the path list body. XML when Azure CLI or the SDK asks.
 	if wantsAzureListXML(r) {
 		writeBlobEnumerationXML(w, serviceEndpoint(r), container, names)
 		return
@@ -351,19 +385,39 @@ func (h *Handler) authorizeDataPlane(w http.ResponseWriter, r *http.Request, acc
 		azerrors.StorageError(w, http.StatusInternalServerError, "InternalError", err.Error())
 		return false
 	}
-	scope := "/subscriptions/" + config.DefaultSubscriptionID
-	if exists {
-		scope = "/subscriptions/" + sub + "/resourceGroups/" + rg +
-			"/providers/Microsoft.Storage/storageAccounts/" + account
+	if !exists {
+		// Missing and ambiguous names are 404. Do not build an RBAC scope on the default subscription.
+		h.rejectUnresolvedStorageAccount(w, r)
+		return false
 	}
+	scope := storageAccountScope(sub, rg, account)
 	if _, ok := azauth.RequireDataPlaneBearer(w, r, h.Auth, h.Authz, authn.Principal.AllowsStorage, action, scope); !ok {
 		return false
 	}
-	if !exists {
-		azerrors.StorageError(w, http.StatusNotFound, "AccountNotFound", "storage account not found")
-		return false
-	}
 	return true
+}
+
+// rejectUnresolvedStorageAccount authenticates the caller, then returns 404.
+// It does not evaluate RBAC, so a data role on some other subscription cannot unlock a name that does not resolve.
+func (h *Handler) rejectUnresolvedStorageAccount(w http.ResponseWriter, r *http.Request) {
+	if h.Auth == nil {
+		azerrors.Unauthenticated(w, "")
+		return
+	}
+	p, err := h.Auth.AuthenticateRequest(r)
+	if err != nil {
+		azerrors.Unauthenticated(w, "")
+		return
+	}
+	if !p.AllowsStorage() {
+		azerrors.InvalidAuthenticationTokenAudience(w, "")
+		return
+	}
+	azerrors.StorageError(w, http.StatusNotFound, "AccountNotFound", "storage account not found")
+}
+
+func storageAccountScope(sub, rg, name string) string {
+	return "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.Storage/storageAccounts/" + name
 }
 
 func storageDataAction(r *http.Request) string {

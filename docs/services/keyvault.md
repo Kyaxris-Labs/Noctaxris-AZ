@@ -19,6 +19,7 @@ Bearer required on data plane (WWW-Authenticate on 401). Data plane resource / t
 ## Authz
 
 - ARM vault CRUD: token `aud` must be `https://management.azure.com` or `https://management.core.windows.net` (Graph `aud` is HTTP 403 `InvalidAuthenticationTokenAudience`). Root Bearer skips audience.
+- Vault names are unique across subscriptions. Creating a vault whose name is already stored is HTTP 409. Putting the same vault again updates it. A data-plane name that matches more than one vault is HTTP 404.
 - `Microsoft.KeyVault/vaults/read|write`
 - Data plane: vault `aud` plus Azure RBAC on the vault scope. Key Vault Secrets User can get secrets; Secrets Officer covers secret set/delete/recover; keys and certificates require Key Vault Administrator (or root). Control-plane Owner / Contributor / Reader alone do not grant data-plane secret access. Root Bearer still succeeds.
 

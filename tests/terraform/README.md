@@ -17,6 +17,7 @@ On Windows without bash, soft-skip is the default when the endpoint is unset.
 |-----|--------|
 | `storage-account` | `azurerm_storage_account` + table against lab endpoint |
 | `managed-identity` | `azurerm_user_assigned_identity` against lab endpoint |
+| `standalone-subscription` | resource group and storage account in `var.subscription_id` |
 
 Providers may require HTTPS metadata discovery; optional lab TLS via
 `NOCTAXRIS_AZ_TLS_CERT` / `NOCTAXRIS_AZ_TLS_KEY` (see [ops.md](../../docs/ops.md)).

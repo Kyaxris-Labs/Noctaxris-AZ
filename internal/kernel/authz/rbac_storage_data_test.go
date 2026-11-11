@@ -11,6 +11,7 @@ func TestStorageDataRolesAndOwnerDenied(t *testing.T) {
 	store := memStore{byScope: map[string][]authz.Assignment{
 		scope: {
 			{PrincipalID: "owner", RoleDefinitionID: authz.RoleOwner, Scope: scope},
+			{PrincipalID: "reader", RoleDefinitionID: authz.RoleReader, Scope: scope},
 			{PrincipalID: "blob", RoleDefinitionID: authz.RoleStorageBlobDataContributor, Scope: scope},
 			{PrincipalID: "bread", RoleDefinitionID: authz.RoleStorageBlobDataReader, Scope: scope},
 			{PrincipalID: "table", RoleDefinitionID: authz.RoleStorageTableDataContributor, Scope: scope},
@@ -23,9 +24,23 @@ func TestStorageDataRolesAndOwnerDenied(t *testing.T) {
 	tableRead := "Microsoft.Storage/storageAccounts/tableServices/tables/entities/read"
 	tableWrite := "Microsoft.Storage/storageAccounts/tableServices/tables/entities/write"
 	acctRead := "Microsoft.Storage/storageAccounts/read"
+	listKeys := "Microsoft.Storage/storageAccounts/listKeys/action"
+	kvGet := "Microsoft.KeyVault/vaults/secrets/getSecret/action"
 
 	if ok, err := ev.Evaluate("owner", false, blobRead, scope); err != nil || ok {
 		t.Fatal("Owner must not get blob data read")
+	}
+	if ok, err := ev.Evaluate("owner", false, kvGet, scope); err != nil || ok {
+		t.Fatal("Owner must not get key vault secrets")
+	}
+	if ok, err := ev.Evaluate("owner", false, listKeys, scope); err != nil || !ok {
+		t.Fatal("Owner must list storage account keys")
+	}
+	if ok, err := ev.Evaluate("reader", false, listKeys, scope); err != nil || ok {
+		t.Fatal("Reader must not list storage account keys")
+	}
+	if ok, err := ev.Evaluate("reader", false, acctRead, scope); err != nil || !ok {
+		t.Fatal("Reader must keep account read")
 	}
 	if ok, err := ev.Evaluate("owner", false, acctRead, scope); err != nil || !ok {
 		t.Fatal("Owner must keep account read")

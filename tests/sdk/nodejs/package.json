@@ -6,6 +6,6 @@
     "node": ">=24"
   },
   "scripts": {
-    "test": "node --test smoke.test.mjs"
+    "test": "node --test smoke.test.mjs standalone_subscription.test.mjs"
   }
 }

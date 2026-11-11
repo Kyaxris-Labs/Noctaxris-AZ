@@ -4,7 +4,7 @@ ARM Function App (`Microsoft.Web/sites` kind `functionapp`) CRUD lite plus in-pr
 
 ## Status
 
-**lab** — Create/get/list/delete Function App; `POST /functions/{name}/invoke` returns configured `labMockResponse`.
+**lab.** Create/get/list/delete Function App; `POST /functions/{name}/invoke` returns configured `labMockResponse`.
 
 ## Wire protocol
 

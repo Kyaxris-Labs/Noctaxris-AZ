@@ -3,6 +3,7 @@ package subscriptions
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -12,12 +13,14 @@ import (
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authz"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/azauth"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/store"
 )
 
 // Service serves ARM subscription and resource group APIs.
 type Service struct {
 	Store          *store.Store
+	Auth           *authn.Authenticator
 	Authz          *authz.Evaluator
 	PrincipalFrom  func(context.Context) (authn.Principal, bool)
 	SubscriptionID string
@@ -97,6 +100,12 @@ func (s *Service) require(w http.ResponseWriter, r *http.Request, action, scope 
 		azerrors.InvalidAuthenticationTokenAudience(w, "")
 		return authn.Principal{}, false
 	}
+	if !azauth.RequireAuthzEvaluator(w, p.IsRoot, s.Authz) {
+		return authn.Principal{}, false
+	}
+	if p.IsRoot {
+		return p, true
+	}
 	allowed, err := s.Authz.Evaluate(p.ID, p.IsRoot, action, scope)
 	if err != nil {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
@@ -109,13 +118,74 @@ func (s *Service) require(w http.ResponseWriter, r *http.Request, action, scope 
 	return p, true
 }
 
+// subscriptionListCaller authenticates a subscription list.
+// A nil evaluator is rejected with RequireARMBearer (or RequireAuthzEvaluator
+// when the handler has no authenticator) before any Evaluate call, so a
+// non-root caller gets 403. A configured evaluator is not applied to the
+// parent /subscriptions scope here: that scope does not cover an Owner grant
+// on one child subscription, and a deny would hide the rows the caller can read.
+func (s *Service) subscriptionListCaller(w http.ResponseWriter, r *http.Request) (authn.Principal, bool) {
+	const action = "Microsoft.Resources/subscriptions/read"
+	if s.Auth != nil && s.Authz == nil {
+		return azauth.RequireARMBearer(w, r, s.Auth, nil, action, "/subscriptions")
+	}
+	if s.Auth != nil {
+		p, err := s.Auth.AuthenticateRequest(r)
+		if err != nil {
+			azerrors.Unauthenticated(w, "")
+			return authn.Principal{}, false
+		}
+		if !p.AllowsARM() {
+			azerrors.InvalidAuthenticationTokenAudience(w, "")
+			return authn.Principal{}, false
+		}
+		return p, true
+	}
+	p, ok := s.principal(r.Context())
+	if !ok {
+		azerrors.Unauthenticated(w, "")
+		return authn.Principal{}, false
+	}
+	if !p.AllowsARM() {
+		azerrors.InvalidAuthenticationTokenAudience(w, "")
+		return authn.Principal{}, false
+	}
+	if !azauth.RequireAuthzEvaluator(w, p.IsRoot, s.Authz) {
+		return authn.Principal{}, false
+	}
+	return p, true
+}
+
+func (s *Service) subscriptionVisible(w http.ResponseWriter, p authn.Principal, scope string) (bool, error) {
+	if p.IsRoot {
+		return true, nil
+	}
+	if s.Authz == nil {
+		azerrors.Forbidden(w, "")
+		return false, errNilAuthorizer
+	}
+	allowed, err := s.Authz.Evaluate(p.ID, false, "Microsoft.Resources/subscriptions/read", scope)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+		return false, err
+	}
+	return allowed, nil
+}
+
+var errNilAuthorizer = errors.New("nil authorizer")
+
 func (s *Service) getSubscription(w http.ResponseWriter, r *http.Request) {
 	if !requireAPIVersion(w, r) {
 		return
 	}
 	subID := r.PathValue("subscriptionId")
 	scope := "/subscriptions/" + subID
-	if _, ok := s.require(w, r, "Microsoft.Resources/subscriptions/read", scope); !ok {
+	const action = "Microsoft.Resources/subscriptions/read"
+	if s.Auth != nil {
+		if _, ok := azauth.RequireARMBearer(w, r, s.Auth, s.Authz, action, scope); !ok {
+			return
+		}
+	} else if _, ok := s.require(w, r, action, scope); !ok {
 		return
 	}
 	displayName, state, tenantID, ok, err := s.Store.GetSubscription(subID)

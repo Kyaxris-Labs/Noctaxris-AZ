@@ -74,24 +74,24 @@ func (h *Handler) requireDataPlane(p authn.Principal, action, scope string) erro
 	return h.requireAction(p, action, scope)
 }
 
-// authorizeStoreDataPlane evaluates data-plane RBAC before revealing whether the store exists.
+// authorizeStoreDataPlane evaluates data-plane RBAC on the store that owns the name.
+// Missing and ambiguous names are 404 and do not use the default subscription as an RBAC scope.
 func (h *Handler) authorizeStoreDataPlane(w http.ResponseWriter, p authn.Principal, storeName, action string) (store.AppConfigStore, bool) {
 	st, exists, err := h.Store.GetAppConfigByName(storeName)
 	if err != nil {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
 		return store.AppConfigStore{}, false
 	}
-	scope := fmt.Sprintf("/subscriptions/%s/providers/Microsoft.AppConfiguration/configurationStores/%s",
-		config.DefaultSubscriptionID, storeName)
-	if exists {
-		scope = storeResourceID(st.SubscriptionID, st.ResourceGroup, st.Name)
-	}
-	if err := h.requireDataPlane(p, action, scope); err != nil {
-		writeAuthz(w, err)
+	if !exists {
+		if !p.AllowsAppConfig() {
+			writeAuthz(w, errAudienceAppConfig)
+			return store.AppConfigStore{}, false
+		}
+		azerrors.NotFound(w, "configuration store not found")
 		return store.AppConfigStore{}, false
 	}
-	if !exists {
-		azerrors.NotFound(w, "configuration store not found")
+	if err := h.requireDataPlane(p, action, storeResourceID(st.SubscriptionID, st.ResourceGroup, st.Name)); err != nil {
+		writeAuthz(w, err)
 		return store.AppConfigStore{}, false
 	}
 	return st, true
@@ -174,6 +174,15 @@ func (h *Handler) putStore(w http.ResponseWriter, r *http.Request, p authn.Princ
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	if body.Location == "" {
 		body.Location = "eastus"
+	}
+	taken, err := h.Store.AppConfigNameTaken(sub, rg, name)
+	if err != nil {
+		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
+		return
+	}
+	if taken {
+		azerrors.Conflict(w, "configuration store name already exists")
+		return
 	}
 	if err := h.Store.UpsertAppConfig(sub, rg, name, body.Location); err != nil {
 		azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())

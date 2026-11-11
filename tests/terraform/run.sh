@@ -18,7 +18,7 @@ if [[ "$ready_code" != "200" ]]; then
   echo "API not ready at ${NOCTAXRIS_AZ_ENDPOINT} — soft-skip"
   exit 0
 fi
-for stack in storage-account managed-identity; do
+for stack in storage-account managed-identity standalone-subscription; do
   echo "== terraform soft-check $stack =="
   (cd "$ROOT/$stack" && terraform init -backend=false -input=false >/dev/null && terraform validate)
 done

@@ -9,7 +9,7 @@ import (
 )
 
 // RewritePath maps Host-virtual Azure endpoints onto Noctaxris-AZ path prefixes.
-// Path-style Hosts (loopback, empty) are unchanged so challenge curl flows stay intact.
+// Path-style Hosts (loopback, empty) are unchanged so path-prefix requests stay intact.
 // When an AzureCloud Host is present, the Host label always wins over a conflicting
 // lab path prefix (no cross-account / cross-vault Host spoof).
 func RewritePath(host, rawPath string) string {

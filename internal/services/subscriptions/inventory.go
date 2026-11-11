@@ -16,13 +16,8 @@ func (s *Service) listSubscriptions(w http.ResponseWriter, r *http.Request) {
 	if !requireAPIVersion(w, r) {
 		return
 	}
-	p, ok := s.principal(r.Context())
+	p, ok := s.subscriptionListCaller(w, r)
 	if !ok {
-		azerrors.Unauthenticated(w, "")
-		return
-	}
-	if !p.AllowsARM() {
-		azerrors.InvalidAuthenticationTokenAudience(w, "")
 		return
 	}
 	list, err := s.Store.ListSubscriptions()
@@ -34,9 +29,8 @@ func (s *Service) listSubscriptions(w http.ResponseWriter, r *http.Request) {
 	for _, row := range list {
 		id := row["id"]
 		scope := "/subscriptions/" + id
-		allowed, err := s.Authz.Evaluate(p.ID, p.IsRoot, "Microsoft.Resources/subscriptions/read", scope)
+		allowed, err := s.subscriptionVisible(w, p, scope)
 		if err != nil {
-			azerrors.WriteARM(w, http.StatusInternalServerError, "InternalServerError", err.Error())
 			return
 		}
 		if !allowed {

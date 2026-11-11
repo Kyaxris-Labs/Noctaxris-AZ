@@ -15,6 +15,7 @@ const (
 	EnvAllowNonLoopbackListen = "NOCTAXRIS_AZ_ALLOW_NONLOOPBACK_LISTEN"
 	EnvCloudHosts             = "NOCTAXRIS_AZ_CLOUD_HOSTS"
 	EnvLabForensics           = "NOCTAXRIS_AZ_LAB_FORENSICS"
+	EnvLabStandalone          = "NOCTAXRIS_AZ_LAB_STANDALONE"
 	EnvActivityInject         = "NOCTAXRIS_AZ_ACTIVITY_INJECT"
 	EnvLogsInject             = "NOCTAXRIS_AZ_LOGS_INJECT"
 	EnvDefenderInject         = "NOCTAXRIS_AZ_DEFENDER_INJECT"
@@ -68,6 +69,8 @@ type Config struct {
 	DockerTLSCertPath      string
 	// LabForensics enables /_noctaxris-az/lab clock and BulkSeed (default off).
 	LabForensics bool
+	// LabStandalone enables POST /_noctaxris-az/lab/subscriptions:seedStandalone (default off).
+	LabStandalone bool
 	// ActivityInject enables Activity Log inject (default off).
 	ActivityInject bool
 	// LogsInject enables named Log Analytics table inject and POST /loganalytics/{workspace}/ingest/{table} (default off).
@@ -99,6 +102,7 @@ func LoadFromEnv() (Config, error) {
 		DockerHost:             getenv("NOCTAXRIS_AZ_DOCKER_HOST", ""),
 		DockerTLSCertPath:      getenv("NOCTAXRIS_AZ_DOCKER_CERT_PATH", ""),
 		LabForensics:           envTruthy(EnvLabForensics),
+		LabStandalone:          envTruthy(EnvLabStandalone),
 		ActivityInject:         envTruthy(EnvActivityInject),
 		LogsInject:             envTruthy(EnvLogsInject),
 		DefenderInject:         envTruthy(EnvDefenderInject),

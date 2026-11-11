@@ -24,6 +24,7 @@ import (
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authz"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/hostroute"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/tlsutil"
+	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/services/entra"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/store"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/version"
 )
@@ -44,6 +45,7 @@ type Server struct {
 	audit         *audit.Writer
 	authn         *authn.Authenticator
 	authz         *authz.Evaluator
+	entra         *entra.Service
 	mux           *http.ServeMux
 	published     *tlsutil.PublishedCerts
 	clockMu       sync.RWMutex
@@ -72,6 +74,7 @@ func New(cfg config.Config, st *store.Store, aud *audit.Writer) *Server {
 	s.registerEdge()
 	s.registerObserve()
 	s.registerLabForensics()
+	s.registerLabStandalone()
 	return s
 }
 
@@ -227,6 +230,11 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 			u.RawPath = ""
 			r = r.Clone(ctx)
 			r.URL = &u
+		}
+
+		if r.URL.Path == standaloneSubscriptionSeedPath && !s.cfg.LabStandalone {
+			http.NotFound(w, r)
+			return
 		}
 
 		if authn.IsPublicPath(r.URL.Path) || authn.IsRegistryDataPath(r.URL.Path) {

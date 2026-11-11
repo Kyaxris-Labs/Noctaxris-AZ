@@ -4,7 +4,7 @@ ARM namespace / queue lite plus AMQP 1.0 send/receive for `azservicebus` clients
 
 ## Status
 
-**lab** — Namespace and queue CRUD; AMQP lite on `127.0.0.1:5672` with signed SAS. Stock Compose always publishes `127.0.0.1:5672:5672` alongside HTTP `:4599`.
+**lab.** Namespace and queue CRUD; AMQP lite on `127.0.0.1:5672` with signed SAS. Stock Compose always publishes `127.0.0.1:5672:5672` alongside HTTP `:4599`.
 
 ## Wire protocol
 
@@ -18,7 +18,7 @@ ARM namespace / queue lite plus AMQP 1.0 send/receive for `azservicebus` clients
 ## Authz / authn
 
 - ARM Bearer + RBAC
-- `GET .../namespaces/{name}/connectionString` requires `Microsoft.ServiceBus/namespaces/authorizationRules/listKeys/action` (not namespace `read`). Reader is denied; Owner / Contributor / root succeed.
+- `GET .../namespaces/{name}/connectionString` requires `Microsoft.ServiceBus/namespaces/authorizationRules/listKeys/action` on that namespace resource id, not the resource group. The key is the row for the subscription, resource group, and name in the URL. A name already used by a different subscription or resource group is HTTP 409 on create. Putting the same subscription, resource group, and name again updates that namespace. Reader is denied; Owner / Contributor / root succeed for a namespace in their scope.
 - AMQP (`:5672`) and HTTP message paths use different authn mechanisms by design:
   - AMQP attach requires a signed `SharedAccessSignature` token (HMAC over `sr`/`se` with the namespace key). Bare `SharedAccessKey` property equality is rejected. A connection string may supply key material that the lite client uses to mint a short-lived SAS for attach; verification always uses the sealed namespace key from the store.
   - HTTP `/servicebus/.../messages` requires Service Bus `aud` (`https://servicebus.azure.net`) plus Service Bus data roles (Data Owner / Sender / Receiver) or root. Graph or any-Bearer alone is denied. Owner/Contributor do not grant HTTP send/receive.

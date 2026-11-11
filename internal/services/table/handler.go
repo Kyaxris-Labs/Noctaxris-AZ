@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/azerrors"
-	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/config"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authn"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/authz"
 	"github.com/Kyaxris-Labs/Noctaxris-AZ/internal/kernel/azauth"
@@ -262,19 +261,36 @@ func (h *Handler) authorize(w http.ResponseWriter, r *http.Request, account stri
 		azerrors.StorageError(w, http.StatusInternalServerError, "InternalError", err.Error())
 		return false
 	}
-	scope := "/subscriptions/" + config.DefaultSubscriptionID
-	if exists {
-		scope = "/subscriptions/" + sub + "/resourceGroups/" + rg +
-			"/providers/Microsoft.Storage/storageAccounts/" + account
+	if !exists {
+		// Missing and ambiguous names are 404. Do not build an RBAC scope on the default subscription.
+		h.rejectUnresolvedAccount(w, r)
+		return false
 	}
+	scope := "/subscriptions/" + sub + "/resourceGroups/" + rg +
+		"/providers/Microsoft.Storage/storageAccounts/" + account
 	if _, ok := azauth.RequireDataPlaneBearer(w, r, h.Auth, h.Authz, authn.Principal.AllowsStorage, action, scope); !ok {
 		return false
 	}
-	if !exists {
-		azerrors.StorageError(w, http.StatusNotFound, "AccountNotFound", "storage account not found")
-		return false
-	}
 	return true
+}
+
+// rejectUnresolvedAccount authenticates the caller, then returns 404.
+// It does not evaluate RBAC, so a data role on some other subscription cannot unlock a name that does not resolve.
+func (h *Handler) rejectUnresolvedAccount(w http.ResponseWriter, r *http.Request) {
+	if h.Auth == nil {
+		azerrors.Unauthenticated(w, "")
+		return
+	}
+	p, err := h.Auth.AuthenticateRequest(r)
+	if err != nil {
+		azerrors.Unauthenticated(w, "")
+		return
+	}
+	if !p.AllowsStorage() {
+		azerrors.InvalidAuthenticationTokenAudience(w, "")
+		return
+	}
+	azerrors.StorageError(w, http.StatusNotFound, "AccountNotFound", "storage account not found")
 }
 
 func tableDataAction(r *http.Request) string {

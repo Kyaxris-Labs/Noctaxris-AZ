@@ -7,7 +7,7 @@ import (
 )
 
 // wantsAzureListXML reports Azure CLI / SDK list shapes.
-// Bare path/list without Azure markers keeps JSON for lab curl / challenge parsers.
+// Bare path/list without Azure markers stays JSON.
 func wantsAzureListXML(r *http.Request) bool {
 	if r == nil {
 		return false
